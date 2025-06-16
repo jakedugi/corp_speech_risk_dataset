@@ -1,0 +1,53 @@
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[project]
+name = "corp-speech-risk"
+version = "0.1.0"
+description = "Pipeline to collect and structure corporate speech legal risk examples."
+authors = [
+  { name = "Jake Dugan", email = "jake.dugan@ed.ac.uk" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "playwright",
+    "beautifulsoup4",
+    "polars",
+    "typer",
+    "loguru",
+    "tomli",
+    "tomli-w",
+    "joblib",
+    "tqdm",
+    "rich",
+    "mypy",
+    "types-requests",
+    "types-beautifulsoup4",
+    "types-toml",
+    "pre-commit",
+    "ipykernel",
+    "pydantic"
+]
+
+[project.optional-dependencies]
+dev = [
+  "black>=23.0.0",
+  "isort>=5.0.0",
+  "mypy>=1.0.0",
+  "pytest-cov>=4.0.0"
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
+ignore_missing_imports = true 

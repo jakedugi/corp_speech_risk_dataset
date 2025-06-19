@@ -25,20 +25,6 @@ class CourtListenerConfig(BaseSettings):
         description="Rate limit in seconds between requests"
     )
     
-    # Search settings
-    default_pages: int = Field(
-        default=3,
-        description="Default number of pages to fetch per statute"
-    )
-    default_page_size: int = Field(
-        default=100,
-        description="Default results per page"
-    )
-    default_date_min: str = Field(
-        default="2019-01-01",
-        description="Default minimum filing date"
-    )
-    
     # Output settings
     output_dir: Path = Field(
         default=Path("data/raw/courtlistener"),

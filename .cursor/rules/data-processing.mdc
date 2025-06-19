@@ -1,0 +1,16 @@
+---
+description: 
+globs: src/**/*.py
+alwaysApply: false
+---
+---
+description: "Specifies data formats, processing library, and async strategy"
+globs: ["src/**/*.py"]
+alwaysApply: false
+---
+# Data Processing
+
+- **Raw Format**: JSON  
+- **Processed Format**: JSON  
+- **Library**: Polars  
+- **Async**: Use Joblib for parallel tasks  

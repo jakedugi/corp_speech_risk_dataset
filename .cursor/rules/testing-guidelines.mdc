@@ -1,0 +1,16 @@
+---
+description: 
+globs: tests/**/*.py
+alwaysApply: false
+---
+---
+description: "Defines testing framework, coverage, and mocking conventions"
+globs: ["tests/**/*.py"]
+alwaysApply: false
+---
+# Testing
+
+- **Framework**: pytest  
+- **Coverage**: pytest-cov  
+- **Async Support**: Enabled  
+- **Mocks**: Use pytest-mock or unittest.mock  

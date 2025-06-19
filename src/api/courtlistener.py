@@ -27,6 +27,28 @@ BASE_CLUSTERS_URL = "https://www.courtlistener.com/api/rest/v4/clusters/"
 BASE_OPINIONS_URL = "https://www.courtlistener.com/api/rest/v4/opinions/"
 BASE_DOCKET_ENTRIES_URL = "https://www.courtlistener.com/api/rest/v4/docket-entries/"
 BASE_RECAP_DOCS_URL = "https://www.courtlistener.com/api/rest/v4/recap-documents/"
+BASE_RECAP_URL = "https://www.courtlistener.com/api/rest/v4/recap/"
+
+# API endpoint configurations
+API_ENDPOINTS = {
+    "standard": {
+        "base_url": "https://www.courtlistener.com/api/rest/v4",
+        "dockets": BASE_DOCKETS_URL,
+        "clusters": BASE_CLUSTERS_URL,
+        "opinions": BASE_OPINIONS_URL,
+        "docket_entries": BASE_DOCKET_ENTRIES_URL,
+        "recap_docs": BASE_RECAP_DOCS_URL,
+    },
+    "recap": {
+        "base_url": "https://www.courtlistener.com/api/rest/v4",
+        "dockets": BASE_DOCKETS_URL,
+        "clusters": BASE_CLUSTERS_URL,
+        "opinions": BASE_OPINIONS_URL,
+        "docket_entries": BASE_DOCKET_ENTRIES_URL,
+        "recap_docs": BASE_RECAP_DOCS_URL,
+        "recap": BASE_RECAP_URL,
+    }
+}
 
 # Statute queries
 STATUTE_QUERIES: Dict[str, str] = {
@@ -69,10 +91,17 @@ class CourtListenerClient(BaseAPIClient):
     BASE_URL = "https://www.courtlistener.com/api/rest/v4"
     BASE_OPINIONS_URL = f"{BASE_URL}/opinions/"
 
-    def __init__(self, config: APIConfig):
-        """Initialize the client with API configuration."""
+    def __init__(self, config: APIConfig, api_mode: str = "standard"):
+        """Initialize the client with API configuration.
+        
+        Args:
+            config: API configuration containing token and settings
+            api_mode: API mode to use ("standard" or "recap")
+        """
         super().__init__(config)
         self.logger = logger.bind(client="courtlistener")
+        self.api_mode = api_mode
+        self.endpoints = API_ENDPOINTS.get(api_mode, API_ENDPOINTS["standard"])
         self._session = httpx.Client(
             headers=self._build_headers(),
             follow_redirects=True,
@@ -84,7 +113,7 @@ class CourtListenerClient(BaseAPIClient):
         """Build headers for API requests."""
         return {
             "Accept": "application/json",
-            "Authorization": f"Token {self.config.api_token}"
+            "Authorization": f"Token {getattr(self.config, 'api_token', getattr(self.config, 'api_key', None))}"
         }
 
     def _get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -97,113 +126,40 @@ class CourtListenerClient(BaseAPIClient):
         time.sleep(self._sleep)  # Rate limiting
         return response.json()
 
-    def fetch_dockets(
-        self,
-        query: str,
-        pages: int = 2,
-        page_size: int = 100,
-        jurisdiction: str = "F",
-        date_filed_min: str = "2019-01-01"
-    ) -> List[Dict[str, Any]]:
-        """Fetch dockets matching the search query."""
-        params = {
-            "free_text": query,
-            "court__jurisdiction": jurisdiction,
-            "date_filed_min": date_filed_min,
-            "page_size": page_size
-        }
-        
-        url = BASE_DOCKETS_URL
-        all_results: List[Dict[str, Any]] = []
-        
-        for _ in range(pages):
+    def fetch_resource(self, resource_type: str, params: dict = None, limit: int = None) -> list[dict]:
+        """Fetch any resource from CourtListener by type, with optional result limit."""
+        endpoint = self.endpoints.get(resource_type)
+        if not endpoint:
+            raise ValueError(f"Unknown resource type: {resource_type}")
+        url = endpoint
+        results = []
+        while url:
             data = self._get(url, params)
-            all_results.extend(data.get("results", []))
-            
-            if not data.get("next"):
+            batch = data.get("results", [])
+            if limit is not None and len(results) + len(batch) > limit:
+                results.extend(batch[:limit - len(results)])
                 break
-            url, params = data["next"], None
-            
-        return all_results
-        
-    def fetch_opinions(
-        self,
-        query: str,
-        pages: int = 2,
-        page_size: int = 100,
-        jurisdiction: str = "F",
-        date_filed_min: str = "2019-01-01"
-    ) -> List[Dict[str, Any]]:
-        """Fetch opinions matching the search query.
-        
-        Args:
-            query: Search query string
-            pages: Number of pages to fetch
-            page_size: Results per page
-            jurisdiction: Court jurisdiction (default: Federal)
-            date_filed_min: Minimum filing date (YYYY-MM-DD)
-        """
-        url = self.BASE_OPINIONS_URL
-        params = {
-            "search": query,
-            "court__jurisdiction": jurisdiction,
-            "date_filed_min": date_filed_min,
-            "page_size": page_size,
-            "ordering": "-date_filed",  # Newest first
-            "highlight": "off",  # Enable highlighting
-            "fields": "id,caseName,dateFiled,snippet,plain_text,html,html_lawbox,cluster,citations,court,judges,type,absolute_url"  # Include all relevant fields
-        }
-        
-        all_opinions = []
-        for _ in range(pages):
-            data = self._get(url, params)
-            opinions = data.get("results", [])
-            all_opinions.extend(opinions)
-            
-            if not data.get("next"):
+            results.extend(batch)
+            if limit is not None and len(results) >= limit:
                 break
-                
-            url = data["next"]
-            params = None  # Next URL already includes params
-            
-        return all_opinions
+            url = data.get("next")
+            params = None  # Only use params on first request
+        return results
 
-    def fetch_all_docket_entries(
-        self, docket_id: int, page_size: int = 1000
-    ) -> list[dict]:
-        """
-        Fetch *every* docket entry for a docket, including nested recap_documents
-        (each of which has plain_text).
-        """
-        url = BASE_DOCKET_ENTRIES_URL
-        params = {"docket": docket_id, "page_size": page_size}
-        all_entries: list[dict] = []
-
-        while True:
-            data = self._get(url, params)
-            all_entries.extend(data.get("results", []))
-            nxt = data.get("next")
-            if not nxt:
-                break
-            url, params = nxt, None
-
-        return all_entries
-
-    def fetch_all_recap_documents(self, docket_id: int, page_size: int = 1000) -> list[dict]:
-        """Fetch all RECAP documents for a docket, including their plain text."""
-        url = BASE_RECAP_DOCS_URL
-        params = {"docket_entry__docket": docket_id, "page_size": page_size}
-        docs: list[dict] = []
-        
-        while True:
-            data = self._get(url, params)
-            docs.extend(data.get("results", []))
-            nxt = data.get("next")
-            if not nxt:
-                break
-            url, params = nxt, None
-            
-        return docs
+def process_and_save(
+    client: CourtListenerClient,
+    resource_type: str,
+    params: dict,
+    output_dir: Path,
+    limit: int = 10
+):
+    """Fetch resource and save results to output_dir."""
+    results = client.fetch_resource(resource_type, params, limit=limit)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for i, item in enumerate(results):
+        with open(output_dir / f"{resource_type}_{i}.json", "w") as f:
+            json.dump(item, f, indent=2)
+    logger.info(f"Saved {len(results)} {resource_type} to {output_dir}")
 
 def process_statutes(
     statutes: List[str],
@@ -212,6 +168,7 @@ def process_statutes(
     page_size: int = 50,
     date_min: Optional[str] = None,
     output_dir: Optional[str] = None,
+    api_mode: str = "standard",
 ) -> None:
     """Process a list of statutes and save the results.
     
@@ -222,19 +179,18 @@ def process_statutes(
         page_size: Number of results per page
         date_min: Minimum date to fetch from (YYYY-MM-DD)
         output_dir: Directory to save results to
+        api_mode: API mode to use ("standard" or "recap")
     """
-    client = CourtListenerClient(config)
+    client = CourtListenerClient(config, api_mode=api_mode)
     
     for statute in statutes:
         logger.info(f"Searching {statute}: {STATUTE_QUERIES[statute]}")
         
         # Fetch opinions using the new method
-        opinions = client.fetch_opinions(
-            query=STATUTE_QUERIES[statute],
-            pages=pages,
-            page_size=page_size,
-            date_filed_min=date_min
-        )
+        opinions = client.fetch_resource("opinions", {
+            "search": STATUTE_QUERIES[statute],
+            "date_filed_min": date_min
+        })
         
         logger.info(f"Retrieved {len(opinions)} opinions")
         
@@ -259,4 +215,274 @@ def process_statutes(
                 with open(text_path, "w") as f:
                     f.write(opinion["plain_text"])
         
-        logger.info(f"Saved {len(opinions)} opinions to {output_dir}") 
+        logger.info(f"Saved {len(opinions)} opinions to {output_dir}")
+
+def process_recap_data(
+    config: APIConfig,
+    query: str = None,
+    docket_id: int = None,
+    pages: int = 1,
+    page_size: int = 50,
+    output_dir: Optional[str] = None,
+) -> None:
+    """Process RECAP data and save the results.
+    
+    Args:
+        config: API configuration containing token and settings
+        query: Optional search query string
+        docket_id: Optional specific docket ID to fetch
+        pages: Number of pages to fetch
+        page_size: Number of results per page
+        output_dir: Directory to save results to
+    """
+    client = CourtListenerClient(config, api_mode="recap")
+    
+    logger.info(f"Fetching RECAP data with query: {query or 'all'}")
+    
+    # Fetch RECAP data
+    recap_data = client.fetch_resource("recap", {
+        "page_size": page_size
+    })
+    
+    logger.info(f"Retrieved {len(recap_data)} RECAP records")
+    
+    # Create output directory
+    if output_dir is None:
+        output_dir = Path("data") / "raw" / "courtlistener" / "recap"
+    else:
+        output_dir = Path(output_dir) / "recap"
+        
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save RECAP data
+    for i, record in enumerate(recap_data):
+        # Save metadata
+        metadata_path = output_dir / f"recap_{i}_metadata.json"
+        with open(metadata_path, "w") as f:
+            json.dump(record, f, indent=2)
+    
+    logger.info(f"Saved {len(recap_data)} RECAP records to {output_dir}")
+
+def process_docket_entries(
+    config: APIConfig,
+    docket_id: int = None,
+    query: str = None,
+    order_by: str = "-date_filed",
+    pages: int = 1,
+    page_size: int = 20,
+    output_dir: Optional[str] = None,
+    api_mode: str = "standard"
+) -> None:
+    """Process docket entries and save the results.
+    
+    Args:
+        config: API configuration containing token and settings
+        docket_id: Specific docket ID to fetch entries for
+        query: Optional search query string
+        order_by: Field to order by
+        pages: Number of pages to fetch
+        page_size: Number of results per page
+        output_dir: Directory to save results to
+        api_mode: API mode to use
+    """
+    client = CourtListenerClient(config, api_mode=api_mode)
+    
+    logger.info(f"Fetching docket entries with docket_id: {docket_id}, query: {query or 'all'}")
+    
+    # Fetch docket entries
+    entries = client.fetch_resource("docket_entries", {
+        "docket": docket_id,
+        "order_by": order_by,
+        "page_size": page_size
+    })
+    
+    logger.info(f"Retrieved {len(entries)} docket entries")
+    
+    # Create output directory
+    if output_dir is None:
+        if docket_id:
+            output_dir = Path("data") / "raw" / "courtlistener" / "docket_entries" / f"docket_{docket_id}"
+        else:
+            output_dir = Path("data") / "raw" / "courtlistener" / "docket_entries" / "search"
+    else:
+        output_dir = Path(output_dir)
+        
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save docket entries
+    for i, entry in enumerate(entries):
+        # Save entry metadata
+        entry_path = output_dir / f"entry_{entry.get('id', i)}_metadata.json"
+        with open(entry_path, "w") as f:
+            json.dump(entry, f, indent=2)
+        
+        # Save nested RECAP documents if present
+        if entry.get("recap_documents"):
+            docs_dir = output_dir / f"entry_{entry.get('id', i)}_documents"
+            docs_dir.mkdir(exist_ok=True)
+            
+            for j, doc in enumerate(entry["recap_documents"]):
+                # Save document metadata
+                doc_meta_path = docs_dir / f"doc_{doc.get('id', j)}_metadata.json"
+                with open(doc_meta_path, "w") as f:
+                    json.dump(doc, f, indent=2)
+                
+                # Save plain text if available
+                if doc.get("plain_text"):
+                    doc_text_path = docs_dir / f"doc_{doc.get('id', j)}_text.txt"
+                    with open(doc_text_path, "w") as f:
+                        f.write(doc["plain_text"])
+    
+    logger.info(f"Saved {len(entries)} docket entries to {output_dir}")
+
+def process_recap_documents(
+    config: APIConfig,
+    docket_id: int = None,
+    docket_entry_id: int = None,
+    query: str = None,
+    order_by: str = "-date_created",
+    pages: int = 1,
+    page_size: int = 100,
+    include_plain_text: bool = True,
+    output_dir: Optional[str] = None,
+    api_mode: str = "standard"
+) -> None:
+    """Process RECAP documents with full text content and save the results.
+    
+    Args:
+        config: API configuration containing token and settings
+        docket_id: Docket ID to fetch all documents for
+        docket_entry_id: Specific docket entry ID to fetch documents for
+        query: Optional search query string
+        order_by: Field to order by
+        pages: Number of pages to fetch
+        page_size: Number of results per page
+        include_plain_text: Whether to include plain text content
+        output_dir: Directory to save results to
+        api_mode: API mode to use
+    """
+    client = CourtListenerClient(config, api_mode=api_mode)
+    
+    logger.info(f"Fetching RECAP documents with docket_id: {docket_id}, entry_id: {docket_entry_id}, query: {query or 'all'}")
+    
+    # Fetch RECAP documents
+    documents = client.fetch_resource("recap_docs", {
+        "docket_entry": docket_entry_id,
+        "docket_entry__docket": docket_id,
+        "search": query,
+        "order_by": order_by,
+        "page_size": page_size
+    })
+    
+    logger.info(f"Retrieved {len(documents)} RECAP documents")
+    
+    # Create output directory
+    if output_dir is None:
+        if docket_id:
+            output_dir = Path("data") / "raw" / "courtlistener" / "recap_documents" / f"docket_{docket_id}"
+        elif docket_entry_id:
+            output_dir = Path("data") / "raw" / "courtlistener" / "recap_documents" / f"entry_{docket_entry_id}"
+        else:
+            output_dir = Path("data") / "raw" / "courtlistener" / "recap_documents" / "search"
+    else:
+        output_dir = Path(output_dir)
+        
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save documents
+    for i, doc in enumerate(documents):
+        # Save document metadata
+        doc_meta_path = output_dir / f"doc_{doc.get('id', i)}_metadata.json"
+        with open(doc_meta_path, "w") as f:
+            json.dump(doc, f, indent=2)
+        
+        # Save plain text if available and requested
+        if include_plain_text and doc.get("plain_text"):
+            doc_text_path = output_dir / f"doc_{doc.get('id', i)}_text.txt"
+            with open(doc_text_path, "w") as f:
+                f.write(doc["plain_text"])
+    
+    logger.info(f"Saved {len(documents)} RECAP documents to {output_dir}")
+
+def process_full_docket(
+    config: APIConfig,
+    docket_id: int,
+    include_documents: bool = True,
+    order_by: str = "-date_filed",
+    output_dir: Optional[str] = None,
+    api_mode: str = "standard"
+) -> None:
+    """Process a complete docket with all entries and documents.
+    
+    Args:
+        config: API configuration containing token and settings
+        docket_id: The docket ID to fetch
+        include_documents: Whether to include full document text
+        order_by: How to order docket entries
+        output_dir: Directory to save results to
+        api_mode: API mode to use
+    """
+    client = CourtListenerClient(config, api_mode=api_mode)
+    
+    logger.info(f"Fetching complete docket {docket_id} with documents: {include_documents}")
+    
+    # Fetch complete docket
+    docket_data = client.fetch_resource("dockets", {
+        "docket": docket_id
+    })
+    
+    logger.info(f"Retrieved docket with {len(docket_data)} entries and {len(docket_data[0].get('documents', []))} documents")
+    
+    # Create output directory
+    if output_dir is None:
+        output_dir = Path("data") / "raw" / "courtlistener" / "full_dockets" / f"docket_{docket_id}"
+    else:
+        output_dir = Path(output_dir) / f"docket_{docket_id}"
+        
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save docket info
+    docket_path = output_dir / "docket_info.json"
+    with open(docket_path, "w") as f:
+        json.dump(docket_data[0], f, indent=2)
+    
+    # Save entries
+    entries_dir = output_dir / "entries"
+    entries_dir.mkdir(exist_ok=True)
+    
+    for entry in docket_data:
+        entry_path = entries_dir / f"entry_{entry.get('id')}_metadata.json"
+        with open(entry_path, "w") as f:
+            json.dump(entry, f, indent=2)
+    
+    # Save documents if included
+    if include_documents and docket_data[0].get("documents"):
+        docs_dir = output_dir / "documents"
+        docs_dir.mkdir(exist_ok=True)
+        
+        for doc in docket_data[0]["documents"]:
+            # Save document metadata
+            doc_meta_path = docs_dir / f"doc_{doc.get('id')}_metadata.json"
+            with open(doc_meta_path, "w") as f:
+                json.dump(doc, f, indent=2)
+            
+            # Save plain text if available
+            if doc.get("plain_text"):
+                doc_text_path = docs_dir / f"doc_{doc.get('id')}_text.txt"
+                with open(doc_text_path, "w") as f:
+                    f.write(doc["plain_text"])
+    
+    # Save summary
+    summary = {
+        "docket_id": docket_id,
+        "entry_count": len(docket_data),
+        "document_count": len(docket_data[0].get("documents", [])),
+        "include_documents": include_documents,
+        "order_by": order_by
+    }
+    
+    summary_path = output_dir / "summary.json"
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    
+    logger.info(f"Saved complete docket {docket_id} to {output_dir}") 

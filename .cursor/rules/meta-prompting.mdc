@@ -1,0 +1,16 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: "Specifies meta-prompting style and agent review preferences"
+alwaysApply: true
+---
+
+# Meta-Prompting & Agent Style
+- **Tone**: Technical and precise  
+- **Prefer Docstrings**: Yes  
+- **Prefer File Comments**: Yes  
+- **Design Review Mode**: Enabled  
+- **Comment Instructions**: Always include explanatory comments  

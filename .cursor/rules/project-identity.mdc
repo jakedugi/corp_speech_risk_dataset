@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+---
+description: "Defines project name, description, and author for AI context"
+alwaysApply: true
+---
+# Project Identity
+
+- **Name**: Corporate Speech Risk Dataset  
+- **Description**: Pipeline to collect and structure corporate speech legal risk examples  
+- **Author**: Jake Dugan <jake.dugan@ed.ac.uk>  

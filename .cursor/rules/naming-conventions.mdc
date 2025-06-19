@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: "Specifies naming and quoting style conventions"
+alwaysApply: false
+---
+# Naming & Style Conventions
+
+- **Filename Case**: snake_case  
+- **Class Case**: PascalCase  
+- **Function Case**: snake_case  
+- **Constant Prefix**: CONST_  
+- **Docstring Style**: Google  
+- **Quote Style**: Double quotes  

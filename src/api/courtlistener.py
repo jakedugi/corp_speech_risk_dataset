@@ -485,4 +485,90 @@ def process_full_docket(
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
     
-    logger.info(f"Saved complete docket {docket_id} to {output_dir}") 
+    logger.info(f"Saved complete docket {docket_id} to {output_dir}")
+
+def process_search_api(
+    config,
+    params,
+    output_dir=None,
+    limit=None,
+    show_url=False,
+    token=None
+):
+    """Process a direct search API query and print or save results."""
+    import json
+    import httpx
+    from urllib.parse import urlencode
+    from pathlib import Path
+
+    base_url = "https://www.courtlistener.com/api/rest/v4/search/"
+    url = base_url + ("?" + urlencode(params) if params else "")
+
+    # Use token from config if not provided
+    if not token:
+        token = getattr(config, "api_token", None)
+    headers = {"Authorization": f"Token {token}"} if token else {}
+
+    if show_url:
+        print(f"API URL: {url}")
+        return
+
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
+
+    # Optionally limit results
+    if limit is not None and "results" in data:
+        data["results"] = data["results"][:limit]
+
+    # Print or save
+    if output_dir:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        outpath = Path(output_dir) / "search_api_results.json"
+        with open(outpath, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"Saved results to {outpath}")
+    else:
+        print(json.dumps(data, indent=2))
+
+def process_recap_fetch(
+    config,
+    post_data,
+    show_url=False,
+    token=None
+):
+    """POST to /api/rest/v4/recap-fetch/ to trigger a PACER fetch. Allows safe, credentialed, free attachment fetch (type=3)."""
+    import json
+    import httpx
+    base_url = "https://www.courtlistener.com/api/rest/v4/recap-fetch/"
+    url = base_url
+    # Use token from config if not provided
+    if not token:
+        token = getattr(config, "api_token", None)
+    headers = {"Authorization": f"Token {token}"} if token else {}
+    if show_url:
+        print(f"POST URL: {url}")
+        print(f"POST data: {post_data}")
+        return
+    # Only allow real PACER credentials for request_type=3 (free attachment pages)
+    if str(post_data.get("request_type")) != "3" and (
+        "pacer_username" in post_data or "pacer_password" in post_data
+    ):
+        print("[TEST MODE] Not sending real PACER credentials or purchase request except for request_type=3 (free attachment pages).")
+        return
+    if str(post_data.get("request_type")) == "3" and ("pacer_username" in post_data and "pacer_password" in post_data):
+        print("[WARNING] You are sending PACER credentials to fetch free attachment pages. This will NOT purchase anything, but your credentials are required for authentication. They are not stored by CourtListener. Proceeding...")
+    try:
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(url, data=post_data, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        print(f"Error: {e}")
+        raise
+    print(json.dumps(data, indent=2)) 

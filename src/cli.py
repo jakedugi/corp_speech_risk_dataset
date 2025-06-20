@@ -10,7 +10,7 @@ import typer
 from loguru import logger
 import httpx
 
-from src.api.courtlistener import STATUTE_QUERIES, process_statutes, process_recap_data, process_docket_entries, process_recap_documents, process_full_docket
+from src.api.courtlistener import STATUTE_QUERIES, process_statutes, process_recap_data, process_docket_entries, process_recap_documents, process_full_docket, process_search_api, process_recap_fetch
 from src.config import load_config
 
 app = typer.Typer(help="CourtListener batch search CLI")
@@ -394,6 +394,51 @@ def fetch(
         with open(outdir / f"{resource_type}_{i}.json", "w") as f:
             json.dump(item, f, indent=2)
     print(f"Saved {len(results)} {resource_type} to {outdir}")
+
+@app.command()
+def search_api(
+    param: List[str] = typer.Option(None, help="Query params as key=value, e.g. q=foo type=o order_by=dateFiled"),
+    output_dir: Path = typer.Option(None, help="Optional output directory to save results as JSON"),
+    limit: int = typer.Option(None, help="Limit number of results (client-side, not API param)"),
+    show_url: bool = typer.Option(False, help="Print the full API URL used and exit"),
+    token: Optional[str] = typer.Option(None, help="CourtListener API token (overrides config if set)")
+):
+    """Directly query the /api/rest/v4/search/ endpoint with arbitrary parameters."""
+    # Load configuration
+    config = load_config()
+    params = dict(p.split("=", 1) for p in param) if param else {}
+    try:
+        process_search_api(
+            config=config,
+            params=params,
+            output_dir=output_dir,
+            limit=limit,
+            show_url=show_url,
+            token=token
+        )
+    except Exception as e:
+        logger.exception("Error during search API processing")
+        raise typer.Exit(1)
+
+@app.command()
+def recap_fetch(
+    post_param: List[str] = typer.Option(None, help="POST params as key=value, e.g. request_type=1 docket_number=5:16-cv-00432 court=okwd"),
+    show_url: bool = typer.Option(False, help="Print the POST URL and data, do not send request"),
+    token: Optional[str] = typer.Option(None, help="CourtListener API token (overrides config if set)")
+):
+    """[TEST/FALLBACK] POST to /api/rest/v4/recap-fetch/ to trigger a PACER fetch. Will not actually purchase anything."""
+    config = load_config()
+    post_data = dict(p.split("=", 1) for p in post_param) if post_param else {}
+    try:
+        process_recap_fetch(
+            config=config,
+            post_data=post_data,
+            show_url=show_url,
+            token=token
+        )
+    except Exception as e:
+        logger.exception("Error during recap-fetch POST")
+        raise typer.Exit(1)
 
 def main() -> None:
     """Main entry point for the CLI."""

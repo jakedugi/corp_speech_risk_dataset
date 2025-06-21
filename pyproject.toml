@@ -3,7 +3,7 @@ requires = ["uv_build"]
 build-backend = "uv_build"
 
 [project]
-name = "corp-speech-risk"
+name = "corp-speech-risk-dataset"
 version = "0.1.0"
 description = "Pipeline to collect and structure corporate speech legal risk examples."
 authors = [
@@ -28,7 +28,15 @@ dependencies = [
     "types-toml",
     "pre-commit",
     "ipykernel",
-    "pydantic"
+    "pydantic<2.0",
+    "nltk",
+    "spacy>=3.5",
+    "numpy<2.0.0",
+    "sentence-transformers",
+    "textacy",
+    "coreferee==1.4.1",
+    "tf-keras",
+    "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.5.0/en_core_web_lg-3.5.0.tar.gz",
 ]
 
 [project.optional-dependencies]
@@ -50,4 +58,19 @@ multi_line_output = 3
 [tool.mypy]
 python_version = "3.8"
 strict = true
-ignore_missing_imports = true 
+ignore_missing_imports = true
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+python_files = ["test_*.py"]
+
+python_paths = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-asyncio",
+]

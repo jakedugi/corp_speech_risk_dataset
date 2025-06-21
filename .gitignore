@@ -248,4 +248,16 @@ cython_debug/
 *.key
 
 # Local override configs
-config.local.yaml
+config.local.yamllogs/
+tmp_txt/
+tmp_json/
+
+*.json
+*.jsonl
+*.txt
+*.pdf
+*.docx
+*.doc
+*.xls
+*.xlsx
+*.pptx

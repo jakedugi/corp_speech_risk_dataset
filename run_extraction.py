@@ -1,22 +1,23 @@
 """
-Main execution script for the quote extraction pipeline.
-
-This script initializes the QuoteExtractionPipeline, runs it on the configured
-dataset, and saves the results to a JSONL file.
+Entry point for the quote extraction pipeline.
+Run with CLI options for output file and visualization mode.
 """
+import argparse
 from loguru import logger
 from corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline import QuoteExtractionPipeline
 
 def main():
-    """
-    Initializes and runs the quote extraction pipeline, saving the results.
-    """
+    parser = argparse.ArgumentParser(description="Run the quote extraction pipeline.")
+    parser.add_argument("--output", type=str, default="extracted_quotes.jsonl", help="Output JSONL file.")
+    parser.add_argument("--visualize", action="store_true", help="Enable visualization mode (stage outputs).")
+    args = parser.parse_args()
+
     logger.add("pipeline_run.log", rotation="500 MB")
     logger.info("Starting quote extraction process...")
 
-    pipeline = QuoteExtractionPipeline(visualization_mode=True)
+    pipeline = QuoteExtractionPipeline.from_config(visualization_mode=args.visualize)
     results = pipeline.run()
-    pipeline.save_results(results, "extracted_quotes.jsonl")
+    pipeline.save_results(results, args.output)
 
     logger.info("Quote extraction process finished successfully.")
 

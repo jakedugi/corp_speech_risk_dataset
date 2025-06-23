@@ -10,6 +10,7 @@ from ..extractors.first_pass import FirstPassExtractor
 from ..extractors.attribution import Attributor
 from ..extractors.rerank import SemanticReranker
 from ..models.quote_candidate import QuoteCandidate
+from ..extractors.cleaner import TextCleaner
 
 class QuoteExtractionPipeline:
     """
@@ -20,6 +21,7 @@ class QuoteExtractionPipeline:
         logger.info("Initializing Quote Extraction Pipeline...")
         self.visualization_mode = visualization_mode
         self.loader = DocumentLoader()
+        self.cleaner = TextCleaner()
         self.first_pass = FirstPassExtractor(config.KEYWORDS)
         self.attributor = Attributor(config.COMPANY_ALIASES)
         self.reranker = SemanticReranker(config.SEED_QUOTES, config.THRESHOLD)
@@ -29,9 +31,10 @@ class QuoteExtractionPipeline:
             self.DATA_DIR.mkdir(exist_ok=True, parents=True)
             self.file_paths = {
                 0: self.DATA_DIR / "stage0_raw.jsonl",
-                1: self.DATA_DIR / "stage1_candidates.jsonl",
-                2: self.DATA_DIR / "stage2_attributed.jsonl",
-                3: self.DATA_DIR / "stage3_final.jsonl",
+                1: self.DATA_DIR / "stage1_cleaner.jsonl",
+                2: self.DATA_DIR / "stage2_extractor.jsonl",
+                3: self.DATA_DIR / "stage3_attributor.jsonl",
+                4: self.DATA_DIR / "stage4_reranker.jsonl",
             }
             logger.info(f"Visualization mode is ON. Output will be saved to {self.DATA_DIR}")
             for path in self.file_paths.values():
@@ -63,30 +66,48 @@ class QuoteExtractionPipeline:
                     f0.write(json.dumps(rec) + "\n")
         for doc in docs:
             logger.debug(f"Processing document: {doc.doc_id}")
-            candidates = list(self.first_pass.extract(doc.text))
-            if self.visualization_mode and candidates:
+            raw_text = doc.text
+            # Stage 1: CLEAN
+            cleaned_text = self.cleaner.clean(raw_text)
+            if self.visualization_mode:
                 with self.file_paths[1].open("a", encoding="utf8") as f1:
+                    rec = {
+                        "doc_id": doc.doc_id,
+                        "stage": 1,
+                        "text": cleaned_text,
+                        "context": None,
+                        "speaker": None,
+                        "score": None,
+                        "urls": []
+                    }
+                    f1.write(json.dumps(rec) + "\n")
+            # Stage 2: FIRST PASS EXTRACTION
+            candidates = list(self.first_pass.extract(cleaned_text))
+            if self.visualization_mode and candidates:
+                with self.file_paths[2].open("a", encoding="utf8") as f2:
                     for qc in candidates:
-                        rec = {"doc_id": doc.doc_id, "stage": 1, **qc.to_dict()}
-                        f1.write(json.dumps(rec) + "\n")
+                        rec = {"doc_id": doc.doc_id, "stage": 2, **qc.to_dict()}
+                        f2.write(json.dumps(rec) + "\n")
             if not candidates:
                 continue
             logger.debug(f"Found {len(candidates)} candidates in {doc.doc_id}")
+            # Stage 3: ATTRIBUTION
             vetted = list(self.attributor.filter(candidates))
             if self.visualization_mode and vetted:
-                with self.file_paths[2].open("a", encoding="utf8") as f2:
+                with self.file_paths[3].open("a", encoding="utf8") as f3:
                     for qc in vetted:
-                        rec = {"doc_id": doc.doc_id, "stage": 2, **qc.to_dict()}
-                        f2.write(json.dumps(rec) + "\n")
+                        rec = {"doc_id": doc.doc_id, "stage": 3, **qc.to_dict()}
+                        f3.write(json.dumps(rec) + "\n")
             if not vetted:
                 continue
             logger.debug(f"Attributed {len(vetted)} quotes in {doc.doc_id}")
+            # Stage 4: RERANKING
             final_quotes = list(self.reranker.rerank(vetted))
             if self.visualization_mode and final_quotes:
-                with self.file_paths[3].open("a", encoding="utf8") as f3:
+                with self.file_paths[4].open("a", encoding="utf8") as f4:
                     for qc in final_quotes:
-                        rec = {"doc_id": doc.doc_id, "stage": 3, **qc.to_dict()}
-                        f3.write(json.dumps(rec) + "\n")
+                        rec = {"doc_id": doc.doc_id, "stage": 4, **qc.to_dict()}
+                        f4.write(json.dumps(rec) + "\n")
             if final_quotes:
                 logger.debug(f"Yielding {len(final_quotes)} final quotes for {doc.doc_id}")
                 yield doc.doc_id, final_quotes

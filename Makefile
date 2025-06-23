@@ -6,7 +6,7 @@ all: run setup_notebook visualize
 # Step 1: Run the Python-based quote extraction pipeline
 run:
 	@echo "--- Running Quote Extraction Pipeline ---"
-	uv run python3 run_extraction.py
+	uv run python3 run_extraction.py --visualize
 
 # Step 2: (One-time setup) Create the visualization notebook from the script
 setup_notebook:

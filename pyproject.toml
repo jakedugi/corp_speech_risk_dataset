@@ -40,6 +40,11 @@ dependencies = [
     "notebook",
     "nbformat",
     "seaborn",
+    "scikit-learn",
+    "pygments",
+    "nbconvert",
+    "jupyterlab",
+    "ipython",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +52,9 @@ dev = [
   "black>=23.0.0",
   "isort>=5.0.0",
   "mypy>=1.0.0",
-  "pytest-cov>=4.0.0"
+  "pytest-cov>=4.0.0",
+  "pytest>=8.4.1",
+  "pytest-asyncio",
 ]
 
 [tool.black]

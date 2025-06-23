@@ -14,7 +14,7 @@ def main():
     logger.add("pipeline_run.log", rotation="500 MB")
     logger.info("Starting quote extraction process...")
 
-    pipeline = QuoteExtractionPipeline()
+    pipeline = QuoteExtractionPipeline(visualization_mode=True)
     results = pipeline.run()
     pipeline.save_results(results, "extracted_quotes.jsonl")
 

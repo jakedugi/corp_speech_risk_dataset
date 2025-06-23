@@ -37,6 +37,9 @@ dependencies = [
     "coreferee==1.4.1",
     "tf-keras",
     "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.5.0/en_core_web_lg-3.5.0.tar.gz",
+    "notebook",
+    "nbformat",
+    "seaborn",
 ]
 
 [project.optional-dependencies]

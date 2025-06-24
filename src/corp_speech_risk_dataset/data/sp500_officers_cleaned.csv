@@ -1,0 +1,999 @@
+ticker,official_name,cik,name,title
+MMM,3M,66740,Michael F. Roman,chairman
+MMM,3M,66740,William M. Brown,CEO
+AOS,A. O. Smith,91142,Kevin J. Wheeler,"chairman , president & CEO"
+ABT,Abbott Laboratories,1800,Robert B. Ford,chairman & CEO
+ABT,Abbott Laboratories,1800,Robert Funck,EVP & CFO
+ABBV,AbbVie,1551152,Richard A. Gonzalez,chairman
+ABBV,AbbVie,1551152,Robert Michael,CEO
+ACN,Accenture,1467373,Julie Sweet,chair and CEO
+ADBE,Adobe Inc.,796343,Shantanu Narayen,chairman & CEO
+AMD,Advanced Micro Devices,2488,Lisa Su,chair & CEO
+AMD,Advanced Micro Devices,2488,Mark Papermaster,CTO
+AES,AES Corporation,874761,Jay Morse,chairman
+AES,AES Corporation,874761,Andres Gluski,president & CEO
+AFL,Aflac,4977,Dan Amos,"chairman , CEO"
+AFL,Aflac,4977,Max Broden,CFO
+A,Agilent Technologies,1090872,Padraig McDonnell,CEO
+A,Agilent Technologies,1090872,Mike McMullen,CEO until April 2024
+A,Agilent Technologies,1090872,Koh Boon Hwee,chairman
+APD,Air Products,2969,Eduardo F. Menezes,CEO
+ABNB,Airbnb,1559720,Brian Chesky,CEO
+ABNB,Airbnb,1559720,Nathan Blecharczyk,CSO
+AKAM,Akamai Technologies,1086222,F. Thomson Leighton,CEO
+AKAM,Akamai Technologies,1086222,Daniel Hesse,chairman
+ALB,Albemarle Corporation,915913,Kent Masters,"chairman , president & CEO"
+ALB,Albemarle Corporation,915913,Scott A. Tozier,CFO
+ARE,Alexandria Real Estate Equities,1035443,Joel S. Marcus,chairman
+ARE,Alexandria Real Estate Equities,1035443,Marc E. Binda,CFO
+ALGN,Align Technology,1097149,Joe Hogan,president & CEO
+ALGN,Align Technology,1097149,Karim Boussebaa,"EVP and MD , iTero Scanner and Services Business"
+ALGN,Align Technology,1097149,John F. Morici,CFO
+ALGN,Align Technology,1097149,Mitra Derakhshan,"SVP , Global Clinical"
+ALLE,Allegion,1579241,Lauren Peters,chair
+ALLE,Allegion,1579241,John Stone,CEO
+ALL,Allstate,899051,Thomas J. Wilson,"chairman , president , and CEO"
+GOOGL,Alphabet Inc. (Class A),1652044,John L. Hennessy,Chairman
+GOOGL,Alphabet Inc. (Class A),1652044,Sundar Pichai,CEO
+GOOGL,Alphabet Inc. (Class A),1652044,Ruth Porat,President and CIO
+GOOGL,Alphabet Inc. (Class A),1652044,Anat Ashkenazi,CFO
+GOOG,Alphabet Inc. (Class C),1652044,John L. Hennessy,Chairman
+GOOG,Alphabet Inc. (Class C),1652044,Sundar Pichai,CEO
+GOOG,Alphabet Inc. (Class C),1652044,Ruth Porat,President and CIO
+GOOG,Alphabet Inc. (Class C),1652044,Anat Ashkenazi,CFO
+MO,Altria,764180,Billy Gifford,chairman & CEO
+AMZN,Amazon,1018724,Jeff Bezos,executive chairman
+AMZN,Amazon,1018724,Andy Jassy,president and CEO
+AMCR,Amcor,1748790,Peter Konieczny,CEO
+AEE,Ameren,1002910,"Martin J. Lyons, Jr.","chairman , president & CEO"
+AEE,Ameren,1002910,Mark C. Birk,Ameren Missouri chairman & president
+AEE,Ameren,1002910,Leonard Singh,Ameren Illinois chairman & president
+AEE,Ameren,1002910,Michael L. Moehn,Ameren Services chairman & president
+AEE,Ameren,1002910,Shawn E. Schukar,Ameren Transmission chairman & president
+AEP,American Electric Power,4904,Bill Fehrman,"chairman , president & CEO"
+AXP,American Express,4962,Stephen Squeri,chairman & CEO
+AXP,American Express,4962,Christophe Le Caillec,CFO
+AIG,American International Group,5272,Peter Zaffino,chairman and CEO
+AMT,American Tower,1053507,Steven Vondran,President and CEO
+AMP,Ameriprise Financial,820027,James M. Cracchiolo,chairman & CEO
+AMP,Ameriprise Financial,820027,Walter S. Berman,CFO
+AMP,Ameriprise Financial,820027,Jeff Noddle,director
+AMP,Ameriprise Financial,820027,Lon R. Greenberg,director
+AME,Ametek,1037868,David A. Zapico,Chairman and CEO
+AMGN,Amgen,318154,Robert A. Bradway,"chairman , president & CEO"
+APH,Amphenol,820313,R. Adam Norwitt,president and CEO
+ADI,Analog Devices,6281,Vincent Roche,chairman and CEO
+ANSS,Ansys,1013462,Ronald Hovsepian,chairman
+ANSS,Ansys,1013462,Ajei S. Gopal,president & CEO
+AON,Aon plc,315293,Lester Knight,chairman
+AON,Aon plc,315293,Eric Andersen,president
+AON,Aon plc,315293,Greg Case,CEO
+APA,APA Corporation,1841666,John J. Christmann IV,CEO
+APO,Apollo Global Management,1858681,Marc Rowan,CEO
+AAPL,Apple Inc.,320193,Tim Cook,CEO
+AAPL,Apple Inc.,320193,Arthur Levinson,chairman
+AMAT,Applied Materials,6951,Gary E. Dickerson,President & CEO
+AMAT,Applied Materials,6951,Thomas J. Iannotti,Chairman
+APTV,Aptiv,1521332,Kevin P. Clark,chairman and CEO
+ACGL,Arch Capital Group,947484,John M. Pasquesi,Chair
+ACGL,Arch Capital Group,947484,Nicolas Papadopoulo,CEO
+ACGL,Arch Capital Group,947484,David Gansberg,President
+ACGL,Arch Capital Group,947484,Maamoun Rajeh,President
+ACGL,Arch Capital Group,947484,François Morin,CFO
+ACGL,Arch Capital Group,947484,Paul Ingrey,former Chair and CEO
+ACGL,Arch Capital Group,947484,Arch Reinsurance Dinos Iordanou,"former Chair, President and CEO"
+ADM,Archer Daniels Midland,7084,Juan Luciano,chairman and CEO
+ANET,Arista Networks,1596532,Jayshree Ullal,CEO and Chairperson
+ANET,Arista Networks,1596532,Andy Bechtolsheim,Chief Architect
+ANET,Arista Networks,1596532,Kenneth Duda,CTO
+AJG,Arthur J. Gallagher & Co.,354190,"J. Patrick Gallagher, Jr.","chairman, president, & CEO"
+AJG,Arthur J. Gallagher & Co.,354190,Douglas K. Howell,vice president & CFO
+AIZ,Assurant,1267238,Keith W. Demmings,president & CEO
+T,AT&T,732717,William Kennard,chairman
+T,AT&T,732717,John Stankey,CEO
+ATO,Atmos Energy,731802,J. Kevin Akers,President and CEO
+ATO,Atmos Energy,731802,Kim R Cocklin,Executive Chairman of the Board
+ATO,Atmos Energy,731802,Charles K Vaughan,Founder
+ADSK,Autodesk,769397,Crawford W. Beveridge,chairman
+ADSK,Autodesk,769397,Andrew Anagnost,CEO
+ADP,Automatic Data Processing,8670,Maria Black,CEO
+ADP,Automatic Data Processing,8670,John Ayala,COO
+ADP,Automatic Data Processing,8670,Gus Blanchard,CMO
+AZO,AutoZone,866787,Phil Daniele,"Chairman , President , & CEO"
+AZO,AutoZone,866787,Jamere Jackson,CFO
+AVB,AvalonBay Communities,915912,Timothy J. Naughton,chairman
+AVB,AvalonBay Communities,915912,Benjamin Schall,CEO
+AVB,AvalonBay Communities,915912,Kevin P. O’Shea,CFO
+AVY,Avery Dennison,8818,Deon Stander,President and CEO
+AVY,Avery Dennison,8818,Mitch Butier,Executive Chairman
+AXON,Axon Enterprise,1069183,Patrick W. Smith,CEO
+AXON,Axon Enterprise,1069183,Joshua Isner,president
+BKR,Baker Hughes,1701605,Lorenzo Simonelli,chairman & CEO
+BALL,Ball Corporation,9389,Dan Fisher,CEO
+BAC,Bank of America,70858,Brian Moynihan,chairman and CEO
+BAC,Bank of America,70858,Bruce Thompson,vice chairman
+BAX,Baxter International,10456,José E. Almeida,chairman & CEO
+BAX,Baxter International,10456,Jay Saccaro,CFO
+BDX,Becton Dickinson,10795,Tom Polen,"chairman, CEO and president"
+BDX,Becton Dickinson,10795,Christopher DelOrefice,Executive Vice President and CFO
+BRK.B,Berkshire Hathaway,1067983,Warren Buffett,chairman and CEO
+BRK.B,Berkshire Hathaway,1067983,Greg Abel,"vice chairman, Non-Insurance"
+BRK.B,Berkshire Hathaway,1067983,Ajit Jain,"vice chairman, Insurance"
+BBY,Best Buy,764478,David Kenny,chairman
+BBY,Best Buy,764478,Corie Barry,CEO
+TECH,Bio-Techne,842023,Kim Kelderman,CEO
+TECH,Bio-Techne,842023,James Hippel,CFO
+TECH,Bio-Techne,842023,Robert V. Baumgartner,Chairman
+BIIB,Biogen,875045,Caroline Dorsa,chairman
+BIIB,Biogen,875045,Chris Viehbacher,CEO
+BLK,BlackRock,2012383,Larry Fink,chairman and CEO
+BLK,BlackRock,2012383,Robert S. Kapito,president
+BLK,BlackRock,2012383,Philipp Hildebrand,vice chairman
+BX,Blackstone Inc.,1393818,Stephen Schwarzman,chairman and CEO
+BX,Blackstone Inc.,1393818,Jonathan Gray,president and COO
+BX,Blackstone Inc.,1393818,Joseph Baratta,head of private equity
+BX,Blackstone Inc.,1393818,David Blitzer,chairman of tactical opportunities
+BK,BNY Mellon,1390777,Robin Vince,CEO
+BK,BNY Mellon,1390777,Dermot McDonogh,CFO
+BA,Boeing,12927,Kelly Ortberg,president and CEO
+BA,Boeing,12927,Steve Mollenkopf,chair
+BKNG,Booking Holdings,1075531,Glenn D. Fogel,director and CEO
+BKNG,Booking Holdings,1075531,Robert J. Mylod Jr.,Chair of Board
+BKNG,Booking Holdings,1075531,"Peter J. Millones, Jr.",General counsel
+BKNG,Booking Holdings,1075531,Paulo Pisano,CHRO
+BSX,Boston Scientific,885725,Michael F. Mahoney,Chairman and CEO
+BSX,Boston Scientific,885725,Daniel Brennan,CFO
+BMY,Bristol Myers Squibb,14272,Chris Boerner,chairman and CEO
+BMY,Bristol Myers Squibb,14272,David Elkins,CFO
+AVGO,Broadcom,1730168,Henry Samueli,chairman
+AVGO,Broadcom,1730168,Hock Tan,president and CEO
+BR,Broadridge Financial Solutions,1383312,Tim Gokey,CEO
+BR,Broadridge Financial Solutions,1383312,Chris Perry,President
+BR,Broadridge Financial Solutions,1383312,Richard J. Daly,Chairman
+BRO,Brown & Brown,79282,J. Powell Brown,President & CEO
+BRO,Brown & Brown,79282,J. Hyatt Brown,chairman
+BF.B,Brown–Forman,14693,Lawson E. Whiting,CEO
+BF.B,Brown–Forman,14693,Campbell P. Brown,Chairman
+BLDR,Builders FirstSource,1316835,Peter Jackson,CEO
+BG,Bunge Global,1996862,Mark Zenuk,chairman
+BG,Bunge Global,1996862,Greg Heckman,CEO
+BXP,"BXP, Inc.",1037540,Owen D. Thomas,CEO
+BXP,"BXP, Inc.",1037540,Douglas T. Linde,president
+BXP,"BXP, Inc.",1037540,Mortimer Zuckerman,chairman
+CHRW,C.H. Robinson,1043277,Jodee Kozlak,chairman
+CHRW,C.H. Robinson,1043277,David Bozeman,CEO
+CDNS,Cadence Design Systems,813672,Anirudh Devgan,"president , CEO"
+CZR,Caesars Entertainment,1590895,Gary Carano,executive chairman
+CZR,Caesars Entertainment,1590895,Thomas Reeg,CEO
+CZR,Caesars Entertainment,1590895,Anthony Carano,president and COO
+CPT,Camden Property Trust,906345,Richard J. Campo,Chairman & CEO
+CPT,Camden Property Trust,906345,D. Keith Oden,Executive Vice Chairman
+CPT,Camden Property Trust,906345,Alexander J. Jessett,CFO
+CPB,Campbell's Company (The),16732,Mick Beekhuizen,president & CEO
+COF,Capital One,927628,Richard Fairbank,"chairman , president and CEO"
+COF,Capital One,927628,Andrew Young,CFO
+CAH,Cardinal Health,721371,Jason Hollar,CEO
+CAH,Cardinal Health,721371,Deborah Weitzman,"CEO, pharma segment"
+CAH,Cardinal Health,721371,Stephen Mason,"CEO, medical segment"
+KMX,CarMax,1170010,Bill Nash,president & CEO
+KMX,CarMax,1170010,Ed Hill,COO
+KMX,CarMax,1170010,Jim Lyski,CMO
+KMX,CarMax,1170010,Shamim Mohammad,CITO
+KMX,CarMax,1170010,Diane Cafritz,CHRO
+KMX,CarMax,1170010,Enrique Mayor-Mora,CFO
+CCL,Carnival,815097,Micky Arison,Chairman
+CCL,Carnival,815097,Joshua Weinstein,President and CEO
+CARR,Carrier Global,1783180,Dave Gitlin,CEO
+CAT,Caterpillar Inc.,18230,Joe Creed,CEO
+CBOE,Cboe Global Markets,1374310,Craig Donohue,CEO
+CBOE,Cboe Global Markets,1374310,Chris Isaacson,COO
+CBOE,Cboe Global Markets,1374310,Jill Griebenow,CFO
+CBOE,Cboe Global Markets,1374310,David Howson,President
+CBRE,CBRE Group,1138118,Bob Sulentic,chairman and CEO
+CDW,CDW Corporation,1402057,Christine Leahy,chairman & CEO
+COR,Cencora,1140859,Steven H. Collis,chairman
+COR,Cencora,1140859,Robert Mauch,President & CEO
+CNC,Centene Corporation,1071739,Sarah London,CEO
+CNC,Centene Corporation,1071739,Susan Smith,COO
+CNP,CenterPoint Energy,1130310,Jason P. Wells,CEO & president
+CF,CF Industries,1324404,Tony Will,CEO
+CRL,Charles River Laboratories,1100682,James C. Foster,CEO
+SCHW,Charles Schwab Corporation,316709,Charles R. Schwab,co-chairman
+SCHW,Charles Schwab Corporation,316709,Rick Wurster,president & CEO
+CHTR,Charter Communications,1091667,Eric Zinterhofer,chairman
+CHTR,Charter Communications,1091667,Chris Winfrey,president and CEO
+CVX,Chevron Corporation,93410,Mike Wirth,chairman and CEO
+CMG,Chipotle Mexican Grill,1058090,Scott Maw,chairman
+CMG,Chipotle Mexican Grill,1058090,Scott Boatwright,CEO
+CB,Chubb Limited,896159,Evan G. Greenberg,chairman and CEO
+CHD,Church & Dwight,313927,Richard Dierker,CEO
+CI,Cigna,1739940,David Cordani,chairman and CEO
+CI,Cigna,1739940,Brian Evanko,CFO
+CINF,Cincinnati Financial,20286,Stephen M. Spray,CEO
+CTAS,Cintas,723254,Todd Schneider,CEO
+CTAS,Cintas,723254,Scott D. Farmer,executive chairman
+CTAS,Cintas,723254,Mike Thompson,CAO
+CSCO,Cisco,858877,Chuck Robbins,CEO & chairman
+C,Citigroup,831001,John C. Dugan,chairman
+C,Citigroup,831001,Viswas Raghavan,executive vice chairman
+C,Citigroup,831001,Jane Fraser,CEO
+C,Citigroup,831001,Mark Mason,CFO
+CFG,Citizens Financial Group,759944,Bruce Van Saun,chairman & CEO
+CLX,Clorox,21076,Linda Rendle,CEO
+CME,CME Group,1156375,Terrence A. Duffy,chairman & CEO
+CME,CME Group,1156375,Lynne Fitzpatrick,CFO
+CMS,CMS Energy,811156,Garrick Rochow,President & CEO
+CMS,CMS Energy,811156,Rejji Hayes,CFO
+KO,Coca-Cola Company (The),21344,James Quincey,chairman and CEO
+KO,Coca-Cola Company (The),21344,John Murphy,president and CFO
+CTSH,Cognizant,1058290,Ravi Kumar Singisetti,CEO
+COIN,Coinbase,1679788,Brian Armstrong,"Chair , CEO"
+COIN,Coinbase,1679788,Emilie Choi,"President , COO"
+COIN,Coinbase,1679788,Alesia Haas,CFO
+CL,Colgate-Palmolive,21665,Noel Wallace,"Chairman, President & CEO"
+CL,Colgate-Palmolive,21665,Stanley J. Sutula III,CFO
+CMCSA,Comcast,1166691,Brian L. Roberts,chairman & CEO
+CMCSA,Comcast,1166691,Michael J. Cavanagh,president
+CMCSA,Comcast,1166691,Jason S. Armstrong,CFO
+CAG,Conagra Brands,23217,Sean Connolly,CEO
+COP,ConocoPhillips,1163165,Ryan Lance,chairman & CEO
+ED,Consolidated Edison,1047862,Tim Cawley,CEO
+STZ,Constellation Brands,16918,Rob Sands,Chairman
+STZ,Constellation Brands,16918,Richard Sands,Vice Chairman
+STZ,Constellation Brands,16918,Bill Newlands,CEO
+CEG,Constellation Energy,1868275,Joseph Dominguez,president and CEO
+COO,Cooper Companies (The),711404,Albert G. White III,President & CEO
+CPRT,Copart,900075,Jay Adair,executive chairman
+CPRT,Copart,900075,Willis J. Johnson,chairman
+CPRT,Copart,900075,Jeff Liaw,CEO
+GLW,Corning Inc.,24741,Wendell P. Weeks,chairman & CEO
+GLW,Corning Inc.,24741,Lawrence D. McRae,vice chairman
+CPAY,Corpay,1175454,Ronald F. Clarke,Chairman & CEO
+CTVA,Corteva,1755672,Chuck Magro,CEO
+CSGP,CoStar Group,1057352,Andrew C. Florance,President and CEO
+CSGP,CoStar Group,1057352,Louise S. Sams,Chairman
+CSGP,CoStar Group,1057352,Lisa Ruggles,"SVP , global operations"
+CSGP,CoStar Group,1057352,Frank Simuro,CTO
+COST,Costco,909832,Hamilton E. James,chairman
+COST,Costco,909832,Ron Vachris,president and CEO
+CTRA,Coterra,858470,Thomas E. Jorden,"chairman , president & CEO"
+CRWD,CrowdStrike,1535527,George Kurtz,CEO
+CRWD,CrowdStrike,1535527,Michael Sentonas,President
+CSX,CSX Corporation,277948,John J. Zillmer,chairman
+CSX,CSX Corporation,277948,Joseph R. Hinrichs,president & CEO
+CMI,Cummins,26172,Jennifer Rumsey,President & CEO
+CMI,Cummins,26172,N. Thomas Linebarger,Executive Chairman
+CMI,Cummins,26172,Mark Smith,Vice President & CFO
+CVS,CVS Health,64803,David Joyner,president and CEO
+DHR,Danaher Corporation,313616,Steven Rales,chairman of the board
+DHR,Danaher Corporation,313616,Mitchell Rales,chairman of the executive committee
+DHR,Danaher Corporation,313616,Rainer Blair,president and CEO
+DRI,Darden Restaurants,940944,Cynthia T. Jamison,chair
+DRI,Darden Restaurants,940944,Rick Cardenas,president & CEO
+DVA,DaVita,927066,Javier J. Rodriguez,CEO
+DAY,Dayforce,1725057,David Ossip,CEO
+DECK,Deckers Brands,910521,Michael Devine III,Chairman
+DECK,Deckers Brands,910521,Stefano Caroti,CEO
+DE,Deere & Company,315189,John C. May,"chairman , CEO & president"
+DELL,Dell Technologies,1571996,Michael Dell,chairman and CEO
+DELL,Dell Technologies,1571996,Jeff Clarke,vice chairman and COO
+DAL,Delta Air Lines,27904,Ed Bastian,CEO
+DAL,Delta Air Lines,27904,David Taylor,chairman
+DAL,Delta Air Lines,27904,Glen Hauenstein,president
+DVN,Devon Energy,1090012,Clay Gaspar,CEO & president
+DVN,Devon Energy,1090012,Jeffrey L. Ritenour,CFO
+DXCM,Dexcom,1093557,Kevin Sayer,"chairman , president & CEO"
+FANG,Diamondback Energy,1539838,Kaes Van't Hof,chairman and CEO
+DLR,Digital Realty,1297996,Mary Hogan Preusse,Chairman
+DLR,Digital Realty,1297996,Andrew P. Power,CEO & President
+DG,Dollar General,29534,Michael M. Calbert,chairman
+DG,Dollar General,29534,Todd Vasos,CEO
+DG,Dollar General,29534,John W. Garratt,CFO
+DLTR,Dollar Tree,935703,"Michael C. Creedon, Jr.",CEO
+D,Dominion Energy,715957,Robert Blue,CEO and Chairman
+D,Dominion Energy,715957,James R. Chapman,CFO
+DPZ,Domino's,1286681,David A. Brandon,chairman
+DPZ,Domino's,1286681,Russell Weiner,CEO
+DASH,DoorDash,1792789,Tony Xu,chairman & CEO
+DASH,DoorDash,1792789,Prabir Adarkar,president & COO
+DASH,DoorDash,1792789,Ravi Inukonda,CFO
+DOV,Dover Corporation,29905,Richard J. Tobin,"president , CEO , and chairman"
+DOV,Dover Corporation,29905,Michael F. Johnston,lead independent director
+DOW,Dow Inc.,1751788,Jim Fitterling,chairman and CEO
+DOW,Dow Inc.,1751788,Jeff Tate,CFO
+DHI,D. R. Horton,882184,David V. Auld,executive chairman
+DHI,D. R. Horton,882184,Paul J. Romanowski,President & CEO
+DHI,D. R. Horton,882184,Bill W. Wheat,CFO
+DTE,DTE Energy,936340,Gerardo Norcia,Chairman and CEO
+DTE,DTE Energy,936340,Joi Harris,President & COO
+DTE,DTE Energy,936340,David Rudd,CFO
+DUK,Duke Energy,1326160,Harry Sideris,"chair , president & CEO"
+DUK,Duke Energy,1326160,Brian D. Savoy,CFO
+DD,DuPont,1666700,Edward D. Breen,executive chairman
+DD,DuPont,1666700,Lori Koch,CEO
+EMN,Eastman Chemical Company,915389,Mark J. Costa,CEO
+ETN,Eaton Corporation,1551182,Craig Arnold,"Chairman , President & CEO"
+ETN,Eaton Corporation,1551182,Olivier Leonetti,CFO
+ETN,Eaton Corporation,1551182,Heath Monesmith,President & COO Electrical Sector
+ETN,Eaton Corporation,1551182,Paulo Ruiz,President & COO Industrial Sector
+EBAY,eBay Inc.,1065088,Paul Pressler,chairman
+EBAY,eBay Inc.,1065088,Jamie Iannone,president and CEO
+ECL,Ecolab,31462,Christophe Beck,CEO
+EIX,Edison International,827052,Pedro J. Pizarro,President and CEO
+EW,Edwards Lifesciences,1099800,Bernard J. Zovighian,CEO
+EA,Electronic Arts,712515,Andrew Wilson,CEO and chairman
+EA,Electronic Arts,712515,Laura Miele,president of EA Entertainment
+EA,Electronic Arts,712515,Cam Weber,president of EA Sports
+ELV,Elevance Health,1156039,Elizabeth E. Tallett,chairman
+ELV,Elevance Health,1156039,Gail Koziara Boudreaux,president & CEO
+EMR,Emerson Electric,32604,Jim Turley,chairman
+EMR,Emerson Electric,32604,Lal Karsanbhai,CEO
+EMR,Emerson Electric,32604,Mike Baughman,CFO
+ENPH,Enphase Energy,1463101,Badri Kothandaraman,CEO
+ETR,Entergy,65984,Andrew Marsh,Chair and CEO
+EOG,EOG Resources,821189,Ezra Y. Yacob,CEO & director
+EOG,EOG Resources,821189,Timothy K. Driggers,CFO
+EPAM,EPAM Systems,1352010,Arkadiy Dobkin,"chairman, president & CEO"
+EQT,EQT Corporation,33213,Lydia Beebe,chair
+EQT,EQT Corporation,33213,Toby Rice,president & CEO
+EQT,EQT Corporation,33213,Jeremy Knop,CFO
+EFX,Equifax,33185,Mark L. Feidler,Chairman
+EFX,Equifax,33185,Mark W. Begor,CEO
+EFX,Equifax,33185,"John W. Gamble, Jr.",COO & CFO
+EQIX,Equinix,1101239,Adaire Fox-Martin,CEO and president
+EQR,Equity Residential,906107,Mark J. Parrell,CEO
+EQR,Equity Residential,906107,David J. Neithercut,Chairman
+EQR,Equity Residential,906107,Robert A. Garechana,CFO
+ERIE,Erie Indemnity,922621,Timothy G. NeCastro,CEO
+ERIE,Erie Indemnity,922621,Thomas B. Hagen,chairman
+EL,Estée Lauder Companies (The),1001250,William P. Lauder,Chairman
+EL,Estée Lauder Companies (The),1001250,Stéphane de La Faverie,President and CEO
+EG,Everest Group,1095073,Jim Williamson,CEO
+EG,Everest Group,1095073,Joseph V. Taranto,Chairman
+EVRG,Evergy,1711269,David Campbell,CEO
+ES,Eversource Energy,72741,Joseph R. Nolan,"Chairman, CEO, President"
+EXC,Exelon,1109357,Calvin Butler,president and CEO
+EXE,Expand Energy,895126,Michael Wichterich,executive chairman
+EXE,Expand Energy,895126,"Domenic J. Dell'Osso, Jr.",CEO & president
+EXE,Expand Energy,895126,Mohit Singh,CFO
+EXPE,Expedia Group,1324424,Barry Diller,chairman and senior executive
+EXPE,Expedia Group,1324424,Ariane Gorin,vice chairman and CEO
+EXPD,Expeditors International,746515,Dan Wall,president & CEO
+EXPD,Expeditors International,746515,Benjamin G. Clark,CSO
+EXPD,Expeditors International,746515,Bradley S. Powell,CFO
+EXR,Extra Space Storage,1289490,Kenneth Woolley,Chairman
+EXR,Extra Space Storage,1289490,Joseph D. Margolis,CEO
+XOM,ExxonMobil,34088,Darren Woods,chairman & CEO
+FFIV,"F5, Inc.",1048695,François Locoh-Donou,president and CEO
+FDS,FactSet,1013237,F. Philip Snow,CEO
+FICO,Fair Isaac,814547,William Lansing,CEO
+FICO,Fair Isaac,814547,Bill Fair,co-founder
+FICO,Fair Isaac,814547,Earl Isaac,co-founder
+FAST,Fastenal,815556,Daniel L. Florness,CEO
+FAST,Fastenal,815556,Holden Lewis,CFO
+FRT,Federal Realty Investment Trust,34903,David Faeder,Chairman
+FRT,Federal Realty Investment Trust,34903,Donald C. Wood,CEO & President
+FRT,Federal Realty Investment Trust,34903,Daniel Guglielmone,CFO
+FDX,FedEx,1048911,Raj Subramaniam,president & CEO
+FIS,Fidelity National Information Services,1136893,Stephanie Ferris,CEO & President
+FIS,Fidelity National Information Services,1136893,Jeffrey A. Goldstein,Chairman
+FITB,Fifth Third Bancorp,35527,Timothy N. Spence,"chairman , CEO and president"
+FITB,Fifth Third Bancorp,35527,Bryan D. Preston,CFO
+FSLR,First Solar,1274494,Michael J. Ahearn,chairman
+FSLR,First Solar,1274494,Mark Widmar,CEO
+FE,FirstEnergy,1031296,Brian X. Tierney,CEO
+FI,Fiserv,798354,Mike Lyons,president and CEO
+FI,Fiserv,798354,Robert W. Hau,CFO and Treasurer
+FI,Fiserv,798354,Guy Chiarello,COO
+F,Ford Motor Company,37996,William Clay Ford Jr.,executive chairman
+F,Ford Motor Company,37996,Jim Farley,president & CEO
+FTNT,Fortinet,1262039,Ken Xie,CEO
+FTNT,Fortinet,1262039,Michael Xie,CTO
+FTNT,Fortinet,1262039,Keith Jensen,CFO
+FTV,Fortive,1659166,Alan Spoon,chairman
+FTV,Fortive,1659166,Jim Lico,president & CEO
+FOXA,Fox Corporation (Class A),1754301,Rupert Murdoch,chairman emeritus
+FOXA,Fox Corporation (Class A),1754301,Lachlan Murdoch,chairman and CEO
+FOXA,Fox Corporation (Class A),1754301,John P. Nallen,COO
+FOX,Fox Corporation (Class B),1754301,Rupert Murdoch,chairman emeritus
+FOX,Fox Corporation (Class B),1754301,Lachlan Murdoch,chairman and CEO
+FOX,Fox Corporation (Class B),1754301,John P. Nallen,COO
+BEN,Franklin Resources,38777,Jennifer M. Johnson,president and CEO
+BEN,Franklin Resources,38777,Gregory E. Johnson,executive chairman
+BEN,Franklin Resources,38777,Rupert H. Johnson Jr.,vice chairman
+FCX,Freeport-McMoRan,831259,Richard Adkerson,Chairman
+FCX,Freeport-McMoRan,831259,Kathleen L. Quirk,President & CEO
+GRMN,Garmin,1121788,Cliff Pemble,President & CEO
+GRMN,Garmin,1121788,Min Kao,Chairman
+GRMN,Garmin,1121788,Patrick Desbois,Co- COO
+GRMN,Garmin,1121788,Brad Trenkle,Co-COO
+IT,Gartner,749251,Gene Hall,CEO
+IT,Gartner,749251,Craig Safian,CFO
+IT,Gartner,749251,Altaf Rupani,CIO
+GE,GE Aerospace,40545,H. Lawrence Culp Jr.,Chair & CEO
+GEHC,GE HealthCare,1932393,Peter Arduini,CEO
+GEHC,GE HealthCare,1932393,H. Lawrence Culp Jr.,chairman
+GEV,GE Vernova,1996810,Scott Strazik,CEO
+GEV,GE Vernova,1996810,Steve Angel,chairman
+GEN,Gen Digital,849399,Frank E. Dangeard,chairman
+GEN,Gen Digital,849399,Vincent Pilette,CEO
+GNRC,Generac,1474735,Aaron Jagdfeld,CEO
+GD,General Dynamics,40533,Phebe Novakovic,chairman and CEO
+GIS,General Mills,40704,Jeffrey Harmening,chairman and CEO
+GM,General Motors,1467858,Pierre S. du Pont, Chairman of the Board 1915–1929
+GM,General Motors,1467858,Charles Kettering, Director of Research 1920–1947
+GM,General Motors,1467858,Alfred P. Sloan, CEO 1923–1946
+GPC,Genuine Parts Company,40987,Paul Donahue,executive chairman
+GPC,Genuine Parts Company,40987,Will Stengel,CEO
+GILD,Gilead Sciences,882095,Daniel O'Day,chairman and CEO
+GILD,Gilead Sciences,882095,Andrew Dickinson,CFO
+GILD,Gilead Sciences,882095,Tomáš Cihlář,"vice president , and senior director, Biology"
+GPN,Global Payments,1123360,Cameron M. Bready,president and CEO
+GPN,Global Payments,1123360,Andréa Carter,CHRO
+GPN,Global Payments,1123360,David Rumph,CFO
+GL,Globe Life,320335,Matthew Darden,co-CEO
+GL,Globe Life,320335,Frank M. Svoboda,co-CEO
+GS,Goldman Sachs,886982,David M. Solomon,chairman and CEO
+HAL,Halliburton,45012,Jeff Miller,"chairman , president , CEO"
+HIG,Hartford (The),874766,Christopher J. Swift,Chairman & CEO
+HIG,Hartford (The),874766,Beth A. Costello,Executive VP & CFO
+HIG,Hartford (The),874766,Allison Niderno,Senior VP & Controller
+HAS,Hasbro,46080,Richard Stoddart,chairman
+HAS,Hasbro,46080,Chris Cocks,CEO
+HCA,HCA Healthcare,860730,Sam Hazen,CEO
+HCA,HCA Healthcare,860730,John Reay,"CEO, HCA UK"
+DOC,Healthpeak Properties,765880,Scott M. Brinker,President and CEO
+DOC,Healthpeak Properties,765880,Kelvin O. Moses,CFO
+HSIC,Henry Schein,1000228,Stanley M. Bergman,chairman and CEO
+HSIC,Henry Schein,1000228,Jim Breslawski,"president , vice chairman"
+HSIC,Henry Schein,1000228,Ronald N. South,"Senior vice president , CFO"
+HSIC,Henry Schein,1000228,Michael Ettinger,"Executive vice president , COO"
+HSIC,Henry Schein,1000228,Andrea Albertini,"Chief Executive Officer , Global Distribution and Technology"
+HSY,Hershey Company (The),47111,Michele Buck,"chairwoman , president and CEO"
+HSY,Hershey Company (The),47111,Steven Voskuil,"SVP , Chief Financial & Accounting Officer"
+HES,Hess Corporation,4447,John B. Hess,CEO
+HPE,Hewlett Packard Enterprise,1645590,Patricia Russo,chairwoman
+HPE,Hewlett Packard Enterprise,1645590,Antonio Neri,president and CEO
+HLT,Hilton Worldwide,1585689,Christopher J. Nassetta,president and CEO
+HLT,Hilton Worldwide,1585689,Jonathan D. Gray,chairman
+HOLX,Hologic,859737,Stephen P. MacMillan,"Chairman, President, CEO"
+HOLX,Hologic,859737,Karleen Marie Oberton,CFO
+HOLX,Hologic,859737,Jay A. Stein,"Chairman-Emeritus, CTO, SVP"
+HD,Home Depot (The),354950,Ted Decker,"chairman , president & CEO"
+HON,Honeywell,773840,Darius Adamczyk,chairman
+HON,Honeywell,773840,Vimal Kapur,CEO
+HRL,Hormel Foods,48465,James Snee,"chairman, president and CEO"
+HST,Host Hotels & Resorts,1070750,Richard E. Marriott,chairman
+HST,Host Hotels & Resorts,1070750,James F. Risoleo,president & CEO
+HST,Host Hotels & Resorts,1070750,Sourav Ghosh,CFO
+HWM,Howmet Aerospace,4281,John C. Plant,Executive Chairman & CEO
+HPQ,HP Inc.,47217,Chip Bergh,chairman
+HPQ,HP Inc.,47217,Enrique Lores,president & CEO
+HUBB,Hubbell Incorporated,48898,Gerben Bakker,"chairman, president and CEO"
+HUM,Humana,49071,Kurt J. Hilzinger,chairman
+HUM,Humana,49071,Jim Rechtin,CEO
+HUM,Humana,49071,Susan Diamond,CFO
+HBAN,Huntington Bancshares,49196,Stephen D. Steinour,"chairman , president & CEO"
+HBAN,Huntington Bancshares,49196,Zachary Wasserman,CFO
+HII,Huntington Ingalls Industries,1501585,Kirkland H. Donald,Chairman
+HII,Huntington Ingalls Industries,1501585,Christopher D. Kastner,President and CEO
+HII,Huntington Ingalls Industries,1501585,Jennifer Boykin,Vice president
+HII,Huntington Ingalls Industries,1501585,Eric Chewning,Vice president
+IBM,IBM,51143,Arvind Krishna,chairman & CEO
+IBM,IBM,51143,Gary Cohn,vice chairman
+IEX,IDEX Corporation,832101,Eric Ashleman,CEO
+IEX,IDEX Corporation,832101,Abhi Khandelwal,CFO
+IDXX,Idexx Laboratories,874716,Jay Mazelsky,CEO
+IDXX,Idexx Laboratories,874716,Lawrence Kingsley,chairman
+ITW,Illinois Tool Works,49826,E. Scott Santi,Chairman
+ITW,Illinois Tool Works,49826,Christopher A. O'Herlihy,President & CEO
+INCY,Incyte,879169,Hervé Hoppenot,"CEO , chairman & president"
+IR,Ingersoll Rand,1699150,Vicente Reynal,Chairman and CEO
+INTC,Intel,50863,Lip-Bu Tan,CEO
+INTC,Intel,50863,Frank D. Yeary,chairman
+INTC,Intel,50863,David Zinsner,CFO
+INTC,Intel,50863,MJ Holthaus,co-CEO - products
+ICE,Intercontinental Exchange,1571949,Jeffrey Sprecher,chair and CEO
+ICE,Intercontinental Exchange,1571949,Benjamin Jackson,President
+ICE,Intercontinental Exchange,1571949,Warren Gardiner,CFO
+ICE,Intercontinental Exchange,1571949,Lynn Martin,"president , NYSE Group"
+IFF,International Flavors & Fragrances,51253,Erik Fyrwald,CEO
+IFF,International Flavors & Fragrances,51253,"Roger W. Ferguson, Jr.",chairman
+IP,International Paper,51434,Andrew Silvernail,CEO
+IPG,Interpublic Group of Companies (The),51644,Philippe Krakowsky,CEO
+INTU,Intuit,896878,Sasan Goodarzi,CEO
+INTU,Intuit,896878,Suzanne Nora Johnson,chair
+ISRG,Intuitive Surgical,1035267,Gary S. Guthart,CEO
+ISRG,Intuitive Surgical,1035267,Dave Rosa,president
+ISRG,Intuitive Surgical,1035267,Craig Barratt,chairman
+IVZ,Invesco,914208,Rick Wagoner,chairman
+IVZ,Invesco,914208,Andrew Schlossberg,CEO
+INVH,Invitation Homes,1687229,Dallas B. Tanner,CEO
+INVH,Invitation Homes,1687229,Charles Young,President/COO
+INVH,Invitation Homes,1687229,Jon Olsen,CFO
+IQV,IQVIA,1478242,Ari Bousbib,Chairman & CEO
+JBHT,J.B. Hunt,728535,"John N. Roberts, III",chairman of the board
+JBHT,J.B. Hunt,728535,Shelley Simpson,President
+JBHT,J.B. Hunt,728535,John Kuhlow,CFO
+JBL,Jabil,898293,Mark Mondello,Chairman
+JBL,Jabil,898293,Mike Dastoor,CEO
+JBL,Jabil,898293,Gregory Hebard,CFO
+J,Jacobs Solutions,52988,Bob Pragada,chairman & CEO
+JNJ,Johnson & Johnson,200406,Joaquin Duato,chairman & CEO
+JCI,Johnson Controls,833444,George Oliver,"Chairman, CEO"
+JPM,JPMorgan Chase,19617,Jamie Dimon,chairman & CEO
+JPM,JPMorgan Chase,19617,Jennifer Piepszak,COO
+JPM,JPMorgan Chase,19617,Daniel E. Pinto,president
+JNPR,Juniper Networks,1043604,Scott Kriens,chairman
+JNPR,Juniper Networks,1043604,Pradeep Sindhu,vice chairman
+JNPR,Juniper Networks,1043604,Rami Rahim,CEO
+K,Kellanova,55067,Steven Cahillane,chairman & CEO
+KVUE,Kenvue,1944048,Thibaut Mongon,CEO
+KVUE,Kenvue,1944048,Larry Merlo,chairman
+KDP,Keurig Dr Pepper,1418135,Tim Cofer,CEO
+KDP,Keurig Dr Pepper,1418135,Robert Gamgort,executive chairman
+KEY,KeyCorp,91576,Chris Gorman,chairman and CEO
+KEY,KeyCorp,91576,Clark Khayat,CFO
+KEYS,Keysight Technologies,1601046,Ron Nersesian,chairman
+KEYS,Keysight Technologies,1601046,Satish Dhanasekaran,CEO & president
+KMB,Kimberly-Clark,55785,Michael D. Hsu,chairman & CEO
+KIM,Kimco Realty,879101,Milton Cooper,chairman
+KIM,Kimco Realty,879101,Conor C. Flynn,CEO
+KIM,Kimco Realty,879101,Glenn G. Cohen,CFO
+KMI,Kinder Morgan,1506307,Richard Kinder,Executive Chairman
+KMI,Kinder Morgan,1506307,Kimberly A. Dang,CEO
+KMI,Kinder Morgan,1506307,Tom Martin,President
+KKR,KKR & Co.,1404912,Henry R. Kravis,co-executive chairman
+KKR,KKR & Co.,1404912,George R. Roberts,co-executive chairman
+KKR,KKR & Co.,1404912,Joseph Bae,co-CEO
+KKR,KKR & Co.,1404912,Scott Nuttall,co-CEO
+KLAC,KLA Corporation,319201,Robert Calderoni,chairman
+KLAC,KLA Corporation,319201,Richard P. Wallace,CEO & president
+KHC,Kraft Heinz,1637459,Miguel Patricio,chairman
+KHC,Kraft Heinz,1637459,John T. Cahill,vice chairman
+KHC,Kraft Heinz,1637459,Carlos Abrams-Rivera,CEO
+KHC,Kraft Heinz,1637459,Andre Maciel,CFO
+KR,Kroger,56873,Ron Sargent,CEO (interim
+LHX,L3Harris,202058,Chris Kubasik,chair and CEO
+LH,Labcorp,920148,Adam H. Schechter,president and CEO
+LRCX,Lam Research,707549,Tim Archer,CEO and president
+LRCX,Lam Research,707549,Abhi Talwalkar,chairman
+LVS,Las Vegas Sands,1300514,Robert G. Goldstein,chairman & CEO
+LVS,Las Vegas Sands,1300514,Patrick Dumont,president & COO
+LVS,Las Vegas Sands,1300514,Randy Hyzak,CFO
+LVS,Las Vegas Sands,1300514,Zachary Hudson,General Counsel
+LDOS,Leidos,1336920,Thomas Bell,CEO
+LEN,Lennar,920760,Stuart Miller,executive chairman & co- CEO
+LEN,Lennar,920760,Jon Jaffe,president & co-CEO
+LEN,Lennar,920760,Fred Rothman,COO
+LII,Lennox International,1069202,Alok Maskara,CEO
+LLY,Lilly (Eli),59478,David A. Ricks,"chair , president , & CEO"
+LIN,Linde plc,1707925,Sanjiv Lamba,CEO
+LIN,Linde plc,1707925,Steve Angel,chairman
+LIN,Linde plc,1707925,Matthew J. White,CFO
+LYV,Live Nation Entertainment,1335258,Michael Rapino,CEO and president
+LYV,Live Nation Entertainment,1335258,Greg Maffei,chairman
+LKQ,LKQ Corporation,1065696,Justin Jude,president and CEO
+LMT,Lockheed Martin,936468,James D. Taiclet,"chair , president & CEO"
+L,Loews Corporation,60086,James Tisch,chairman
+L,Loews Corporation,60086,Ben Tisch,president & CEO
+LOW,Lowe's,60667,Marvin Ellison,"president , chairman , and CEO"
+LOW,Lowe's,60667,Brandon Sink,CFO
+LULU,Lululemon Athletica,1397187,Calvin McDonald,CEO
+LULU,Lululemon Athletica,1397187,Meghan Frank,CFO
+LULU,Lululemon Athletica,1397187,Sun Choe,CPO
+LULU,Lululemon Athletica,1397187,Celeste Burgoyne,"EVP , Americas"
+LULU,Lululemon Athletica,1397187,Isabella Pirzadeh,HOD
+LYB,LyondellBasell,1489393,Peter Vanacker,CEO
+LYB,LyondellBasell,1489393,Michael McMurray,CFO
+LYB,LyondellBasell,1489393,Jeffrey Kaplan,CLO
+MTB,M&T Bank,36270,René F. Jones,chairman and CEO
+MTB,M&T Bank,36270,Kevin J. Pearson,vice chairman
+MTB,M&T Bank,36270,Daryl N. Bible,CFO
+MPC,Marathon Petroleum,1510295,Michael J. Hennigan,chairman
+MPC,Marathon Petroleum,1510295,Maryann Mannen,president & CEO
+MPC,Marathon Petroleum,1510295,John P. Surma,Lead Independent Director
+MKTX,MarketAxess,1278021,Carlos M. Hernandez,chairman
+MKTX,MarketAxess,1278021,Chris Concannon,CEO
+MAR,Marriott International,1048286,David Marriott,chairman
+MAR,Marriott International,1048286,Anthony Capuano,CEO
+MMC,Marsh McLennan,62709,H. Edward Hanway,chairman
+MMC,Marsh McLennan,62709,Dominick Burke,vice chairman
+MMC,Marsh McLennan,62709,John Q. Doyle,president and CEO
+MLM,Martin Marietta Materials,916076,C. Nye,President & CEO
+MLM,Martin Marietta Materials,916076,Jim Nickolas,CFO
+MAS,Masco,62996,Richard Manoogian,chairman emeritus
+MAS,Masco,62996,Keith J. Allman,president and CEO
+MA,Mastercard,1141391,Merit Janow,chair
+MA,Mastercard,1141391,Michael Miebach,CEO
+MA,Mastercard,1141391,Sachin Mehra,CFO
+MTCH,Match Group,891103,Thomas J. McInerney,chairman
+MTCH,Match Group,891103,Spencer Rascoff,CEO
+MTCH,Match Group,891103,Gary Swidler,CFO & president
+MKC,McCormick & Company,63754,Brendan Foley,"chairman, president, and CEO"
+MCD,McDonald's,63908,Chris Kempczinski,Chairman and CEO
+MCK,McKesson Corporation,927653,Brian S. Tyler,CEO
+MDT,Medtronic,1613103,Geoff Martha,chairman & CEO
+MDT,Medtronic,1613103,Karen L. Parkhill,CFO
+MRK,Merck & Co.,310158,Robert M. Davis,"chairman , president and CEO"
+META,Meta Platforms,1326801,Mark Zuckerberg,Chairman and CEO
+META,Meta Platforms,1326801,Javier Olivan,COO
+META,Meta Platforms,1326801,Andrew Bosworth,CTO
+META,Meta Platforms,1326801,Chris Cox,CPO
+MET,MetLife,1099219,Michel A. Khalaf,president & CEO
+MET,MetLife,1099219,Glenn Hubbard,chairman
+MTD,Mettler Toledo,1037646,Patrick Kaltenbach,President and CEO
+MTD,Mettler Toledo,1037646,Shawn Vadala,CFO
+MGM,MGM Resorts,789570,Bill Hornbuckle,CEO and president
+MGM,MGM Resorts,789570,Paul Salem,chairman
+MCHP,Microchip Technology,827054,Steve Sanghi,"president , CEO & chairman"
+MCHP,Microchip Technology,827054,J. Eric Bjornholt,CFO
+MU,Micron Technology,723125,Robert E. Switz,chairman
+MU,Micron Technology,723125,Sanjay Mehrotra,president & CEO April Arnzen ( CPO
+MSFT,Microsoft,789019,Satya Nadella,chairman & CEO
+MSFT,Microsoft,789019,Brad Smith,vice chairman & president
+MSFT,Microsoft,789019,Bill Gates,technical adviser
+MAA,Mid-America Apartment Communities,912595,"H. Eric Bolton, Jr.","Chairman , CEO & President"
+MAA,Mid-America Apartment Communities,912595,Clay Holder,CFO
+MRNA,Moderna,1682852,Stéphane Bancel,CEO
+MRNA,Moderna,1682852,Noubar Afeyan,chairman
+MRNA,Moderna,1682852,Stephen Hoge,president
+MRNA,Moderna,1682852,David Meline,CFO
+MHK,Mohawk Industries,851968,Jeffrey Lorberbaum,Chairman & CEO
+MOH,Molina Healthcare,1179929,Joseph Zubretsky,president and CEO
+MOH,Molina Healthcare,1179929,Mark Keim,CFO
+TAP,Molson Coors Beverage Company,24545,Geoff Molson,chairman
+TAP,Molson Coors Beverage Company,24545,David Coors,vice chairman
+TAP,Molson Coors Beverage Company,24545,Gavin Hattersley,president and CEO
+MDLZ,Mondelez International,1103982,Dirk Van de Put,chairman and CEO
+MPWR,Monolithic Power Systems,1280452,Michael R. Hsing,CEO
+MNST,Monster Beverage,865752,Rodney Sacks,chairman and co-CEO
+MNST,Monster Beverage,865752,Hilton Schlosberg,vice-chairman and co-CEO
+MCO,Moody's Corporation,1059556,Rob Fauber,CEO
+MCO,Moody's Corporation,1059556,Raymond W. McDaniel Jr.,chairman
+MS,Morgan Stanley,895421,James P. Gorman,chairman emeritus
+MS,Morgan Stanley,895421,Ted Pick,chairman and CEO
+MS,Morgan Stanley,895421,Andy Saperstein,co-president
+MS,Morgan Stanley,895421,Dan Simkowitz,co-president
+MS,Morgan Stanley,895421,Sharon Yeshaya,CFO
+MOS,Mosaic Company (The),1285785,Gregory Ebel,chairman
+MOS,Mosaic Company (The),1285785,Bruce Bodine,president & CEO
+MSI,Motorola Solutions,68505,Greg Brown,chairman & CEO
+MSCI,MSCI Inc.,1408198,Henry A. Fernandez,CEO
+MSCI,MSCI Inc.,1408198,Baer Pettit,President
+MSCI,MSCI Inc.,1408198,Andrew Wiechmann,CFO
+MSCI,MSCI Inc.,1408198,Scott Crum,CHRO
+NDAQ,"Nasdaq, Inc.",1120193,Michael Splinter,chairman
+NDAQ,"Nasdaq, Inc.",1120193,Adena Friedman,CEO
+NTAP,NetApp,1002047,George Kurian,CEO
+NTAP,NetApp,1002047,César Cernuda,president
+NTAP,NetApp,1002047,Mike Nevens,chairman
+NFLX,Netflix,1065280,Reed Hastings,executive chairman
+NFLX,Netflix,1065280,Ted Sarandos,co-CEO
+NFLX,Netflix,1065280,Greg Peters,co-CEO
+NEM,Newmont,1164727,Thomas R. Palmer,president and CEO
+NEM,Newmont,1164727,Gregory H. Boyce,chairman
+NWSA,News Corp (Class A),1564708,Rupert Murdoch,chairman emeritus
+NWSA,News Corp (Class A),1564708,Lachlan Murdoch,chair
+NWSA,News Corp (Class A),1564708,Robert James Thomson,CEO
+NWSA,News Corp (Class A),1564708,Lavanya Chandrashekar,CFO
+NWS,News Corp (Class B),1564708,Rupert Murdoch,chairman emeritus
+NWS,News Corp (Class B),1564708,Lachlan Murdoch,chair
+NWS,News Corp (Class B),1564708,Robert James Thomson,CEO
+NWS,News Corp (Class B),1564708,Lavanya Chandrashekar,CFO
+NEE,NextEra Energy,753308,John W. Ketchum,"Chairman , President and CEO of NEE"
+NEE,NextEra Energy,753308,Armando Pimentel Jr.,President and CEO of FPL
+NEE,NextEra Energy,753308,Rebecca J. Kujawa,President and CEO of NEER
+NKE,"Nike, Inc.",320187,Philip Knight,chairman emeritus
+NKE,"Nike, Inc.",320187,Mark Parker,executive chairman
+NKE,"Nike, Inc.",320187,Elliott Hill,president and CEO
+NKE,"Nike, Inc.",320187,John Hoke III,chief innovation officer
+NI,NiSource,1111711,Lloyd Yates,CEO
+NDSN,Nordson Corporation,72331,Sundaram Nagarajan,president & CEO
+NDSN,Nordson Corporation,72331,"Victor L. Richey, Jr.",chairman
+NSC,Norfolk Southern,702165,Mark R. George,President and CEO
+NTRS,Northern Trust,73124,Michael G. O'Grady,chairman and CEO
+NOC,Northrop Grumman,1133421,Kathy J. Warden,President and CEO
+NCLH,Norwegian Cruise Line Holdings,1513761,Harry Sommer,CEO
+NRG,NRG Energy,1013871,Larry Coben,president and CEO
+NUE,Nucor,73309,Leon Topalian,"chairman , president , & CEO"
+NUE,Nucor,73309,Steve Laxton,CFO
+NVDA,Nvidia,1045810,Jensen Huang,president and CEO
+NVDA,Nvidia,1045810,Bill Dally,chief scientist
+NVR,"NVR, Inc.",906163,Paul Saville,chairman
+NVR,"NVR, Inc.",906163,Eugene Bredow,CEO
+NXPI,NXP Semiconductors,1413447,Peter Bonfield,chairman
+NXPI,NXP Semiconductors,1413447,Kurt Sievers,president and CEO
+ORLY,O’Reilly Automotive,898173,Brad Beckham,CEO
+ODFL,Old Dominion,878927,David S. Congdon,executive chairman
+ODFL,Old Dominion,878927,Kevin Freeman,president & CEO
+ODFL,Old Dominion,878927,Gregory Plemmons,COO
+ODFL,Old Dominion,878927,Adam Satterfield,CFO
+OMC,Omnicom Group,29989,John D. Wren,CEO and Chairman
+OMC,Omnicom Group,29989,Daryl Simm,COO and President
+OMC,Omnicom Group,29989,Philip Angelastro,CFO
+ON,ON Semiconductor,1097864,Alan Campbell,chairman
+ON,ON Semiconductor,1097864,Hassane El-Khoury,president & CEO
+ON,ON Semiconductor,1097864,Thad Trent,EVP & CFO
+OKE,Oneok,1039684,Pierce Norton,CEO
+OKE,Oneok,1039684,Julie Edwards,board chair
+ORCL,Oracle Corporation,1341439,Larry Ellison,executive chairman & CTO
+ORCL,Oracle Corporation,1341439,Jeff Henley,vice chairman
+ORCL,Oracle Corporation,1341439,Safra Catz,CEO
+OTIS,Otis Worldwide,1781335,Judy Marks,"chair, president and CEO"
+PCAR,Paccar,75362,Mark C. Pigott,chairman
+PCAR,Paccar,75362,Preston Feight,CEO
+PKG,Packaging Corporation of America,75677,Mark W. Kowlzan,Chairman and CEO
+PLTR,Palantir Technologies,1321655,Peter Thiel,chairman
+PLTR,Palantir Technologies,1321655,Alex Karp,CEO
+PLTR,Palantir Technologies,1321655,Stephen Cohen,president
+PANW,Palo Alto Networks,1327567,Nikesh Arora,CEO
+PARA,Paramount Global,813828,Shari Redstone,chairwoman
+PARA,Paramount Global,813828,Chris McCarthy,co-CEO
+PARA,Paramount Global,813828,Brian Robbins,co-CEO
+PARA,Paramount Global,813828,George Cheeks,co-CEO
+PH,Parker Hannifin,76334,Jennifer A. Parmentier,Chairman and CEO
+PAYX,Paychex,723531,B. Thomas Golisano,chairman
+PAYX,Paychex,723531,John Gibson,president & CEO
+PAYX,Paychex,723531,Robert Schrader,CFO
+PAYC,Paycom,1590955,Chad Richison,CEO
+PAYC,Paycom,1590955,Randy Peck,COO
+PAYC,Paycom,1590955,Bob Foster,CFO
+PAYC,Paycom,1590955,Brad Smith,CIO
+PYPL,PayPal,1633917,John Donahoe,chairman
+PYPL,PayPal,1633917,Alex Chriss,president and CEO
+PNR,Pentair,77360,John L. Stauch,President and CEO
+PNR,Pentair,77360,Bob Fishman,CFO
+PEP,PepsiCo,77476,Ramon Laguarta,chairman & CEO
+PEP,PepsiCo,77476,Jamie Caulfield,EVP and CFO
+PFE,Pfizer,78003,Albert Bourla,chairman and CEO
+PCG,PG&E Corporation,1004980,PG&E Corporation: Robert Flexon,chairman
+PCG,PG&E Corporation,1004980,Patti Poppe,CEO
+PCG,PG&E Corporation,1004980,Carolyn Burke,EVP & CFO
+PCG,PG&E Corporation,1004980,Pacific Gas & Electric Company: Sumeet Singh,EVP & COO
+PCG,PG&E Corporation,1004980,Peter Kenny,"SVP, Electric"
+PCG,PG&E Corporation,1004980,Joseph Forline,"SVP, Gas"
+PM,Philip Morris International,1413329,André Calantzopoulos,chairman
+PM,Philip Morris International,1413329,Jacek Olczak,CEO
+PSX,Phillips 66,1534701,Greg Garland,chairman
+PSX,Phillips 66,1534701,Mark Lashier,CEO
+PNW,Pinnacle West Capital,764622,Jeffrey B. Guldner,Chairman & CEO
+PNC,PNC Financial Services,713676,William S. Demchak,chairman and CEO
+PNC,PNC Financial Services,713676,Michael P. Lyons,president
+PPG,PPG Industries,79879,Tim Knavish,chairman & CEO
+PFG,Principal Financial Group,1126328,Daniel Houston,CEO
+PG,Procter & Gamble,80424,Jon R. Moeller,"chairman , president and CEO"
+PGR,Progressive Corporation,80661,Lawton W. Fitt,Chairperson
+PGR,Progressive Corporation,80661,Tricia Griffith,President and CEO
+PLD,Prologis,1045609,Hamid Moghadam,Chairman and CEO
+PLD,Prologis,1045609,Dan Letter,president
+PLD,Prologis,1045609,Carter H. Andrus,COO
+PLD,Prologis,1045609,Tim Arndt,CFO
+PRU,Prudential Financial,1137774,Andy Sullivan,Chief Executive Officer
+PEG,Public Service Enterprise Group,788784,Ralph LaRossa,"President , CEO"
+PEG,Public Service Enterprise Group,788784,Daniel Cregg,"EVP , CFO"
+PTC,PTC Inc.,857005,Janice Chaffin,chairwoman
+PTC,PTC Inc.,857005,Neil Barua,"president , CEO"
+PSA,Public Storage,1393311,"Ronald L. Havner, Jr.",chairman
+PSA,Public Storage,1393311,"Joseph D. Russell, Jr.",president and CEO
+PWR,Quanta Services,1050915,Earl C. Austin Jr.,CEO
+QCOM,Qualcomm,804328,Cristiano Amon,CEO
+QCOM,Qualcomm,804328,Mark D. McLaughlin,chairman
+DGX,Quest Diagnostics,1022079,Jim Davis,CEO
+RL,Ralph Lauren Corporation,1037038,Patrice Louvet,president and CEO
+RL,Ralph Lauren Corporation,1037038,Ralph Lauren,executive chairman and CCO
+RL,Ralph Lauren Corporation,1037038,David Lauren,vice chairman and CIO
+RJF,Raymond James Financial,720005,Tom James,chairman emeritus
+RJF,Raymond James Financial,720005,Paul Reilly,chairman and CEO
+RJF,Raymond James Financial,720005,Paul Shoukry,president
+RTX,RTX Corporation,101829,Christopher T. Calio,CEO
+RTX,RTX Corporation,101829,Gregory J. Hayes,chairman
+REG,Regency Centers,910606,Martin E.,Hap
+REG,Regency Centers,910606,Stein Jr.,chairman
+REG,Regency Centers,910606,Lisa Palmer,CEO
+REG,Regency Centers,910606,Michael J. Mas,CFO
+REGN,Regeneron Pharmaceuticals,872589,Leonard Schleifer,CEO
+REGN,Regeneron Pharmaceuticals,872589,George Yancopoulos,CSO
+RF,Regions Financial Corporation,1281761,Charles D. McCrary,chairman
+RF,Regions Financial Corporation,1281761,"John M. Turner, Jr.","president , CEO"
+RF,Regions Financial Corporation,1281761,"David J. Turner, Jr.",CFO
+RSG,Republic Services,1060391,Jon Vander Ark,President and CEO
+RSG,Republic Services,1060391,Brian DelGhiaccio,CFO
+RSG,Republic Services,1060391,Gregg Brummer,COO
+RSG,Republic Services,1060391,Manuel Kadre,Chairman
+RMD,ResMed,943819,Michael Farrell,CEO
+RMD,ResMed,943819,Brett Sandercock,CFO
+RMD,ResMed,943819,Justin Leong,CPO
+RMD,ResMed,943819,Michael Rider,CLO
+RMD,ResMed,943819,Katrin Pucknat,CMO
+RMD,ResMed,943819,Mike Fliss,CRO
+RVTY,Revvity,31791,Prahlad Singh,President and CEO
+ROK,Rockwell Automation,1024478,Blake Moret,Chairman and CEO
+ROL,"Rollins, Inc.",84839,John F. Wilson,chairman
+ROL,"Rollins, Inc.",84839,Gary Rollins,chairman emeritus
+ROL,"Rollins, Inc.",84839,"Jerry E. Gahlhoff, Jr.",CEO
+ROP,Roper Technologies,882835,Neil Hunn,president & CEO
+ROP,Roper Technologies,882835,Amy Woods Brinkley,chair
+ROST,Ross Stores,745732,James Conroy,CEO
+ROST,Ross Stores,745732,K. Gunnar Bjorklund,executive chairman
+ROST,Ross Stores,745732,Michael Balmuth,president
+ROST,Ross Stores,745732,Michael J. Hartshorn,COO
+RCL,Royal Caribbean Group,884887,Jason Liberty,president & CEO
+RCL,Royal Caribbean Group,884887,Naftali Holtz,CFO
+SPGI,S&P Global,64040,Martina Cheung,president & CEO
+CRM,Salesforce,1108524,Marc Benioff,Chairman & CEO
+SLB,Schlumberger,87347,Olivier Le Peuch,CEO
+SLB,Schlumberger,87347,James Hackett,chairman
+STX,Seagate Technology,1137789,Michael R. Cannon,chairman
+STX,Seagate Technology,1137789,Dave Mosley,CEO
+SRE,Sempra,1032208,Jeffrey W. Martin,chairman and CEO
+NOW,ServiceNow,1373715,Bill McDermott,CEO
+NOW,ServiceNow,1373715,Fred Luddy,chairman
+SHW,Sherwin-Williams,89800,John G. Morikis,Executive Chairman
+SHW,Sherwin-Williams,89800,Heidi G. Petz,president and CEO
+SHW,Sherwin-Williams,89800,Allen J. Mistysyn,SVP and CFO
+SPG,Simon Property Group,1063761,David E. Simon,chairman & CEO
+SPG,Simon Property Group,1063761,Herbert Simon,chairman emeritus
+SWKS,Skyworks Solutions,4127,Philip Brace,President & CEO
+SWKS,Skyworks Solutions,4127,Robert Schriesheim,CFO
+SJM,J.M. Smucker Company (The),91419,Mark Smucker,"chairman , president , and CEO"
+SW,Smurfit Westrock,2005951,Anthony Smurfit,President and CEO
+SNA,Snap-on,91440,Nicholas T. Pinchuk,Chairman & CEO
+SNA,Snap-on,91440,Aldo J. Pagliari,CFO
+SOLV,Solventum,1964738,Bryan Hanson,CEO
+SO,Southern Company,92122,Chris Womack,"chairman , president , & CEO"
+SO,Southern Company,92122,Daniel,Dan
+SO,Southern Company,92122,Tucker,EVP & CFO
+LUV,Southwest Airlines,92380,Bob Jordan,president and CEO
+LUV,Southwest Airlines,92380,Rakesh Gangwal,chairman of the Board
+SWK,Stanley Black & Decker,93556,Andrea J. Ayers,Chairman
+SWK,Stanley Black & Decker,93556,Don Allan,President & CEO
+SBUX,Starbucks,829224,Howard Schultz,chairman emeritus
+SBUX,Starbucks,829224,Brian Niccol,chairman and CEO
+STT,State Street Corporation,93751,Ronald P. O’Hanley,chairman & CEO
+STLD,Steel Dynamics,1022671,Mark D. Millett,president & CEO
+STLD,Steel Dynamics,1022671,Theresa E. Wagler,CFO
+STE,Steris,1757898,Daniel A. Carestio,President and CEO
+SYK,Stryker Corporation,310764,Kevin A. Lobo,Chairman and CEO
+SYK,Stryker Corporation,310764,Timothy J. Scannell,President and COO
+SMCI,Supermicro,1375365,Charles Liang,"chairman , president and CEO"
+SMCI,Supermicro,1375365,David Weigand,CFO
+SMCI,Supermicro,1375365,Don Clegg,SVP of Worldwide Sales
+SMCI,Supermicro,1375365,George Kao,SVP of Operations
+SYF,Synchrony Financial,1601712,Margaret M. Keane,Executive Chairman
+SYF,Synchrony Financial,1601712,Brian Doubles,CEO
+SNPS,Synopsys,883241,Aart de Geus,chairman
+SNPS,Synopsys,883241,Sassine Ghazi,president & CEO
+SYY,Sysco,96021,Kevin Hourican,chairman and CEO
+TMUS,T-Mobile US,1283699,Timotheus Höttges,chairman
+TMUS,T-Mobile US,1283699,Mike Sievert,president and CEO
+TROW,T. Rowe Price,1113169,Rob Sharps,"chairman , president & CEO"
+TTWO,Take-Two Interactive,946581,Strauss Zelnick,chairman and CEO
+TTWO,Take-Two Interactive,946581,Karl Slatoff,president
+TTWO,Take-Two Interactive,946581,Lainie Goldstein,CFO
+TPR,"Tapestry, Inc.",1116132,Joanne Crevoiserat,CEO
+TPR,"Tapestry, Inc.",1116132,Scott Roe,CFO
+TRGP,Targa Resources,1389170,Matthew J. Meloy,CEO
+TGT,Target Corporation,27419,Brian C. Cornell,chairman and CEO
+TEL,TE Connectivity,1385157,Terrence Curtin,CEO
+TDY,Teledyne Technologies,1094285,Robert Mehrabian,Executive Chairman
+TDY,Teledyne Technologies,1094285,Edwin Roks,CEO
+TSLA,"Tesla, Inc.",1318605,Elon Musk,CEO
+TSLA,"Tesla, Inc.",1318605,Robyn Denholm,chair
+TXN,Texas Instruments,97476,Haviv Ilan,"chairman , president , CEO"
+TXN,Texas Instruments,97476,Ahmad Bahai,CTO
+TPL,Texas Pacific Land Corporation,1811074,Tyler Glover,CEO & President
+TPL,Texas Pacific Land Corporation,1811074,Chris Steddum,CFO
+TXT,Textron,217346,Scott C. Donnelly,"CEO , chairman & president"
+TMO,Thermo Fisher Scientific,97745,Marc N. Casper,"chairman , president & CEO"
+TMO,Thermo Fisher Scientific,97745,Michel Lagarde,COO
+TMO,Thermo Fisher Scientific,97745,Ryan Snyder,CIO
+TJX,TJX Companies,109198,Carol Meyrowitz,executive chairman
+TJX,TJX Companies,109198,Ernie Herrman,"president , CEO"
+TJX,TJX Companies,109198,John Klinger,CFO
+TKO,TKO Group Holdings,1973266,Ari Emanuel,CEO and executive chairman
+TKO,TKO Group Holdings,1973266,Mark Shapiro,president and COO
+TSCO,Tractor Supply,916365,Hal Lawton,president and CEO
+TT,Trane Technologies,1466258,Dave Regnery,"chairman, president & CEO"
+TDG,TransDigm Group,1260221,Kevin Stein,President & CEO
+TDG,TransDigm Group,1260221,W. Nicholas Howley,Chairman
+TRV,Travelers Companies (The),86312,Alan D. Schnitzer,Chairman and CEO
+TRMB,Trimble Inc.,864749,Börje Ekholm,chairman
+TRMB,Trimble Inc.,864749,Robert Painter,CEO
+TRMB,Trimble Inc.,864749,David G. Barnes,CFO
+TFC,Truist Financial,92230,William H. Rogers Jr.,Chairman & CEO
+TFC,Truist Financial,92230,Michael Maguire,CFO
+TSN,Tyson Foods,100493,John H. Tyson,chairman
+TSN,Tyson Foods,100493,Donnie King,CEO
+USB,U.S. Bancorp,36104,Andrew Cecere,chairman
+UBER,Uber,1543151,Ronald Sugar,chairman
+UBER,Uber,1543151,Dara Khosrowshahi,CEO
+ULTA,Ulta Beauty,1403568,Kecia Steelman,CEO
+UNP,Union Pacific Corporation,100885,Jim Vena,CEO
+UNP,Union Pacific Corporation,100885,Beth Whited,president
+UNP,Union Pacific Corporation,100885,Mike McCarthy,chairman
+UAL,United Airlines Holdings,100517,Scott Kirby,CEO
+UAL,United Airlines Holdings,100517,Edward Philip,chairman
+UAL,United Airlines Holdings,100517,Brett Hart,president
+UPS,United Parcel Service,1090727,Carol B. Tomé,CEO
+UPS,United Parcel Service,1090727,William R. Johnson,chairman
+URI,United Rentals,1067701,Michael Kneeland,chairman
+URI,United Rentals,1067701,Matthew Flannery,CEO
+URI,United Rentals,1067701,Michael Durand,COO
+URI,United Rentals,1067701,Ted Grace,CFO
+UNH,UnitedHealth Group,731766,Stephen J. Hemsley,chairman & CEO
+UNH,UnitedHealth Group,731766,John Rex,"president , CFO"
+UNH,UnitedHealth Group,731766,Tim Noel,CEO of UnitedHealthCare
+UHS,Universal Health Services,352915,Alan B. Miller,Founder and Executive Chairman
+UHS,Universal Health Services,352915,Marc D. Miller,President and CEO
+UHS,Universal Health Services,352915,Steve G. Filton,Executive Vice President and CFO
+VLO,Valero Energy,1035002,Lane Riggs,President & CEO
+VLTO,Veralto,1967680,Steven Rales,chairman of the board
+VLTO,Veralto,1967680,Mitchell Rales,chairman of the executive committee
+VLTO,Veralto,1967680,Rainer Blair,president and CEO
+VRSN,Verisign,1014473,James Bidzos,chairman & CEO
+VRSK,Verisk Analytics,1442145,Lee Shavel,CEO
+VRSK,Verisk Analytics,1442145,Bruce Hansen,chair
+VZ,Verizon,732712,Hans Vestberg,chairman & CEO
+VZ,Verizon,732712,Tony Skiadas,EVP & CFO
+VRTX,Vertex Pharmaceuticals,875320,Reshma Kewalramani,president and CEO
+VRTX,Vertex Pharmaceuticals,875320,Jeffrey Leiden,chairman
+VRTX,Vertex Pharmaceuticals,875320,David Altshuler,CSO
+VTRS,Viatris,1792044,Scott A. Smith,CEO
+VICI,Vici Properties,1705696,Edward B. Pitoniak,CEO
+V,Visa Inc.,1403161,Ryan McInerney,CEO
+V,Visa Inc.,1403161,John F. Lundgren,chairman
+V,Visa Inc.,1403161,Oliver Jenkyn,group president & Global Markets
+V,Visa Inc.,1403161,Kelly Mahon Tullier,vice chair & CPO
+V,Visa Inc.,1403161,Chris Suh,CFO
+VST,Vistra Corp .,1692819,Jim Burke,CEO
+WRB,W. R. Berkley Corporation,11544,William R. Berkley,executive chairman
+WRB,W. R. Berkley Corporation,11544,W. Robert Berkley Jr.,president & CEO
+GWW,W. W. Grainger,277135,D.G. Macpherson,chairman & CEO
+GWW,W. W. Grainger,277135,Deidra Merriwether,CFO
+WAB,Wabtec,943452,Albert J. Neupaver,chairman
+WAB,Wabtec,943452,Rafael Santana,president and CEO
+WBA,Walgreens Boots Alliance,1618921,Stefano Pessina,executive chairman
+WBA,Walgreens Boots Alliance,1618921,Tim Wentworth,CEO
+WBA,Walgreens Boots Alliance,1618921,Ornella Barra,COO
+WMT,Walmart,104169,Greg Penner,chairman
+WMT,Walmart,104169,Doug McMillon,"president , CEO"
+DIS,Walt Disney Company (The),1744489,James P. Gorman,chairman
+DIS,Walt Disney Company (The),1744489,Bob Iger,CEO
+WBD,Warner Bros. Discovery,1437107,Samuel DiPiazza,chairman
+WBD,Warner Bros. Discovery,1437107,David Zaslav,president and CEO
+WBD,Warner Bros. Discovery,1437107,John C. Malone,chairman emeritus
+WM,Waste Management,823768,"James C. Fish, Jr.",president & CEO
+WAT,Waters Corporation,1000697,Flemming Ørnskov,chairman
+WAT,Waters Corporation,1000697,Udit Batra,CEO
+WFC,Wells Fargo,72971,Steven Black,chairman
+WFC,Wells Fargo,72971,Charles Scharf,president and CEO
+WST,West Pharmaceutical Services,105770,Eric M. Green,CEO since 2015
+WST,West Pharmaceutical Services,105770,Silji Abraham,CDO since 2018
+WST,West Pharmaceutical Services,105770,Bernard J. Birkett,CFO since 2018
+WDC,Western Digital,106040,Irving Tan,CEO
+WY,Weyerhaeuser,106535,Devin Stockfish,CEO
+WSM,"Williams-Sonoma, Inc.",719955,Laura Alber,CEO
+WSM,"Williams-Sonoma, Inc.",719955,Jeff Howie,CFO
+WSM,"Williams-Sonoma, Inc.",719955,Sameer Hassan,CTO
+WMB,Williams Companies,107263,Alan S. Armstrong,CEO
+WTW,Willis Towers Watson,1140536,Paul Thomas,chairman
+WTW,Willis Towers Watson,1140536,Carl Hess,CEO
+WTW,Willis Towers Watson,1140536,Inga Beale,director
+WDAY,"Workday, Inc.",1327811,Aneel Bhusri,executive chairman
+WDAY,"Workday, Inc.",1327811,Carl Eschenbach,CEO
+WYNN,Wynn Resorts,1174922,Craig Billings,CEO
+XEL,Xcel Energy,72903,Robert C. Frenzel,"chairman , president , and CEO"
+XEL,Xcel Energy,72903,Timothy O'Connor,Executive VP and COO
+XEL,Xcel Energy,72903,Brian J. Van Abel,Executive VP and CFO
+XYL,Xylem Inc.,1524472,Matthew Pine,president & CEO
+XYL,Xylem Inc.,1524472,Bill Grogan,CFO
+YUM,Yum! Brands,1041061,Brian Cornell,non-executive chairman
+YUM,Yum! Brands,1041061,David Gibbs,CEO
+YUM,Yum! Brands,1041061,Tracy Skeans,COO
+ZBRA,Zebra Technologies,877212,Anders Gustafsson,chair
+ZBRA,Zebra Technologies,877212,William Burns,CEO
+ZBH,Zimmer Biomet,1136869,Ivan Tornos,CEO
+ZTS,Zoetis,1555280,Kristin Peck,CEO
+ZTS,Zoetis,1555280,Michael McCallister,chair
+ZTS,Zoetis,1555280,Ester Banque,EVP

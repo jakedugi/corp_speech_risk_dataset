@@ -8,6 +8,7 @@ import textacy.extract
 
 from ..utils.nlp import get_nlp
 from ..models.quote_candidate import QuoteCandidate
+from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS
 
 
 class Attributor:
@@ -33,6 +34,7 @@ class Attributor:
         """
         for qc in candidates:
             doc = self.nlp(qc.context)
+            yielded = False
             try:
                 for speaker_span, cue_span, content in textacy.extract.triples.direct_quotations(doc):
                     logger.debug(f"textacy spans: speaker={speaker_span}, cue={cue_span}, content={content!r}")
@@ -61,8 +63,23 @@ class Attributor:
                         qc.quote = content.text.strip()
                         qc.speaker = resolved_speaker
                         yield qc
+                        yielded = True
                         break # Move to the next candidate once a valid quote is found in the context
             except ValueError as e:
                 # textacy can fail on unbalanced quotes, which is common.
                 logger.warning(f"textacy failed to extract quotes from context: {qc.context!r}. Error: {e}")
-                continue 
+                continue
+            # Fallback: if any company alias *and* any role keyword occur in the same context window,
+            # assume "that" alias is the speaker
+            if not yielded:
+                low_ctx = qc.context.lower()
+                for alias in self.aliases:
+                    if alias in low_ctx:
+                        for role in ROLE_KEYWORDS:
+                            if role in low_ctx:
+                                qc.speaker = alias.title()
+                                yield qc
+                                yielded = True
+                                break
+                    if yielded:
+                        break 

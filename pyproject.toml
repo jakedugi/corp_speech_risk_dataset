@@ -14,6 +14,8 @@ dependencies = [
     "httpx",
     "playwright",
     "beautifulsoup4",
+    "bs4",
+    "soupsieve",
     "polars",
     "typer",
     "loguru",
@@ -45,6 +47,10 @@ dependencies = [
     "nbconvert",
     "jupyterlab",
     "ipython",
+    "pandas",
+    "requests",
+    "lxml",
+    "pyarrow"
 ]
 
 [project.optional-dependencies]

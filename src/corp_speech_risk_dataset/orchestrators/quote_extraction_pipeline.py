@@ -22,7 +22,7 @@ class QuoteExtractionPipeline:
         self.visualization_mode = visualization_mode
         self.loader = DocumentLoader()
         self.cleaner = TextCleaner()
-        self.first_pass = FirstPassExtractor(config.KEYWORDS)
+        self.first_pass = FirstPassExtractor(config.KEYWORDS, self.cleaner)
         self.attributor = Attributor(config.COMPANY_ALIASES)
         self.reranker = SemanticReranker(config.SEED_QUOTES, config.THRESHOLD)
         self.output_dir = output_dir or (config.ROOT / "data")

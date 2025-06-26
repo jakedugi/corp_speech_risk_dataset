@@ -55,13 +55,14 @@ class FirstPassExtractor:
     ]
     STOP_RE = re.compile("|".join(STOP_PHRASES), re.I) if STOP_PHRASES else re.compile(r'^\b$')  # dummy fallback
 
-    def __init__(self, keywords: List[str]):
-            self.keywords: Set[str] = {k.lower() for k in keywords}
-            self._seen_hashes: deque[int] = deque(maxlen=8000)
-            try:
-                nltk.data.find("tokenizers/punkt")
-            except LookupError:
-                nltk.download("punkt")
+    def __init__(self, keywords: List[str], cleaner):
+        self.keywords: Set[str] = {k.lower() for k in keywords}
+        self._seen_hashes: deque[int] = deque(maxlen=8000)
+        self.cleaner = cleaner
+        try:
+            nltk.data.find("tokenizers/punkt")
+        except LookupError:
+            nltk.download("punkt")
 
     @staticmethod
     def _simhash(text: str, bits: int = 64) -> int:
@@ -101,8 +102,8 @@ class FirstPassExtractor:
                 # 3) near-duplicate, stop-phrases, etc.
                 if self._is_near_duplicate(raw_quote) or self.STOP_RE.search(raw_quote):
                     continue
-                # collapse any extra spaces in the paragraph context
-                context = ' '.join(para.split())
+                # Clean context using the provided cleaner (already cleaned doc, but context may need normalization)
+                context = self.cleaner.clean(' '.join(para.split()))
                 urls    = self.URL.findall(context)
                 quote_text = self.URL.sub("", raw_quote).strip()
                 yield QuoteCandidate(quote=quote_text, context=context, urls=urls) 

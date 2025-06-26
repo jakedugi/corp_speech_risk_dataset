@@ -28,13 +28,14 @@ class FirstPassExtractor:
     MAX_DUP_HAMMING   = 3           # SimHash distance threshold for near-dupes
     BULLET            = re.compile(r'^\s*(?:[\*\-–‣•]|[0-9]+[.)])\s+')
     BLOCK_QUOTE       = re.compile(r'^\s*[>│▏▕▍▌▊]+')
-    # Match curly or straight double quotes only
+    # DOTALL makes "..." match newlines
     QUOTE = re.compile(r'''
+        (?s)                                # DOTALL: allow multiline
         (?:
-        “([^”]+)”         # curly double
-        | "([^"]+)"         # straight double
+          “(.*?)”                          # curly quotes
+         |"(.*?)"                          # straight quotes
         )
-    ''', re.S | re.X)
+    ''', re.X)
     ANC = re.compile(
         r'\b(?:said|testif(?:y|ied)|deposed|swor(?:e|n)|submitted|'
         r'annonce(?:d|ment)|blog(?:ged)?|posted|wrote|quoted|'
@@ -83,46 +84,25 @@ class FirstPassExtractor:
         return False
 
     def extract(self, doc_text: str) -> Iterator[QuoteCandidate]:
-        # sentence splitting via spaCy or NLTK
-        if _spacy_nlp:
-            doc = _spacy_nlp(doc_text)
-            sentences = [s.text for s in doc.sents]
-        else:
-            sentences = nltk.sent_tokenize(doc_text)
-
-        for i, sent in enumerate(sentences):
-            window = " ".join(
-                sentences[max(0, i - self.MAX_SENT_WINDOW):
-                          i + self.MAX_SENT_WINDOW + 1]
-            )
-
-            # quick heuristic filter
-            if not (self.QUOTE.search(sent) or self.ANC.search(sent)
-                    or self.BULLET.match(sent) or self.BLOCK_QUOTE.match(sent)):
+        # Scan per-paragraph to avoid page headers & stray lines
+        for para in doc_text.split('\n\n'):
+            para = para.strip()
+            if not para:
                 continue
-            if self.keywords and not any(k in window.lower() for k in self.keywords):
-                continue
-
-            # print(f"Window: {window}")
-            #print(f"Matches: {[m.group(0) for m in self.QUOTE.finditer(window)]}")
-
-            # extract and clean quote candidates
-            for m in self.QUOTE.finditer(window):
-                raw_quote = m.group(0).strip()
+            for m in self.QUOTE.finditer(para):
+                quote = m.group(1) or m.group(2)
+                raw_quote = quote.strip()
+                # 1) length sanity check
                 if not (self.MIN_QUOTE_CHARS <= len(raw_quote) <= self.MAX_QUOTE_CHARS):
                     continue
-                if self._is_near_duplicate(raw_quote):
+                # 2) skip if it's just numbers or starts with a number
+                if re.match(r'^[\d\W]+$', raw_quote) or re.match(r'^\d', raw_quote):
                     continue
-                # stop-phrase blacklist
-                if self.STOP_RE.search(raw_quote):
-                    logger.debug(f"Dropped by stop-phrase filter: {raw_quote}")
+                # 3) near-duplicate, stop-phrases, etc.
+                if self._is_near_duplicate(raw_quote) or self.STOP_RE.search(raw_quote):
                     continue
-
-                context = window
-                urls = self.URL.findall(context)
-                # lazy URL stripping from quote text
+                # collapse any extra spaces in the paragraph context
+                context = ' '.join(para.split())
+                urls    = self.URL.findall(context)
                 quote_text = self.URL.sub("", raw_quote).strip()
-
-                yield QuoteCandidate(quote=quote_text,
-                                     context=context,
-                                     urls=urls) 
+                yield QuoteCandidate(quote=quote_text, context=context, urls=urls) 

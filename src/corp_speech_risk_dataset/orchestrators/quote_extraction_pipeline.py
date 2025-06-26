@@ -45,6 +45,22 @@ class QuoteExtractionPipeline:
     def from_config(cls, visualization_mode: bool = False, output_dir: Optional[str] = None):
         return cls(visualization_mode=visualization_mode, output_dir=output_dir)
 
+    @staticmethod
+    def merge_adjacent(candidates):
+        merged = []
+        prev = None
+        for qc in candidates:
+            if prev and qc.context == prev.context and \
+               qc.quote.split() and qc.quote.startswith(prev.quote.split()[-1]):
+                prev.quote += ' ' + qc.quote
+            else:
+                if prev:
+                    merged.append(prev)
+                prev = qc
+        if prev:
+            merged.append(prev)
+        return merged
+
     def run(self) -> Iterator[tuple[str, list[QuoteCandidate]]]:
         """
         Runs the full pipeline and yields (doc_id, list_of_quotes) for each document.
@@ -83,6 +99,7 @@ class QuoteExtractionPipeline:
                     f1.write(json.dumps(rec) + "\n")
             # Stage 2: FIRST PASS EXTRACTION
             candidates = list(self.first_pass.extract(cleaned_text))
+            candidates = self.merge_adjacent(candidates)
             if self.visualization_mode and candidates:
                 with self.file_paths[2].open("a", encoding="utf8") as f2:
                     for qc in candidates:

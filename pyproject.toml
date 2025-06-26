@@ -10,7 +10,7 @@ authors = [
   { name = "Jake Dugan", email = "jake.dugan@ed.ac.uk" }
 ]
 # Restrict to Python 3.11 and 3.12 so TensorFlow wheels install cleanly
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11,<3.12"
 
 dependencies = [
   "httpx",

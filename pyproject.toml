@@ -67,6 +67,11 @@ dev = [
   "pytest>=8.4.1",
   "pytest-asyncio",
 ]
+# Optional: For transformer fallback in Attributor
+# transformers = [
+#  "onnxruntime",
+#  "transformers"
+# ]
 
 [tool.black]
 line-length = 88

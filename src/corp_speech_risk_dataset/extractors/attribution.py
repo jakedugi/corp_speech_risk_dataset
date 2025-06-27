@@ -8,21 +8,64 @@ import textacy.extract
 import csv
 from pathlib import Path
 import re
+from spacy.pipeline import EntityRuler
 
 from ..utils.nlp import get_nlp
 from ..models.quote_candidate import QuoteCandidate
 from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS, SP500_CSV
 
+# Optional transformer imports (commented out)
+# import onnxruntime as ort
+# from transformers import DistilBertTokenizerFast
 
 class Attributor:
     """
-    Uses NLP (spaCy, textacy) to perform quote attribution and filters out
-    quotes that are not attributed to a known company alias.
+    Multi-sieve quote attribution:
+      1) Rule-based cue regex
+      2) Dependency-pattern fallback
+      3) Textacy direct-quotation triples (original logic)
+      4) Alias-enhanced NER via EntityRuler
+      5) Optional quantized DistilBERT (commented)
+      6) (Commented) Coreference and LLM fallbacks
+      7) Final alias & role fallbacks
     """
+
+    ANC_PATTERN = re.compile(
+        r'\b(?:said|stated|noted|blogged|posted|wrote|quoted|'
+        r'according to|testif(?:y|ied)|deposed|swor(?:e|n)|submitted|'
+        r'annonce(?:d|ment)|privacy policy|public statements?)\b',
+        re.I
+    )
+
     def __init__(self, company_aliases: List[str]):
         """Initializes the attributor with company aliases."""
-        self.nlp = get_nlp()
+        # spaCy nlp with AppleOps optimizations if available
+        self.nlp = get_nlp()  # should load en_core_web_sm with thinc-apple-ops
         self.aliases = set(a.lower() for a in company_aliases)
+        self._add_officer_ruler()
+
+        # Optional: load quantized DistilBERT (commented)
+        # self.tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
+        # self.ort_sess = ort.InferenceSession("distilbert_cpu_quant.onnx")
+
+    def _add_officer_ruler(self):
+        """Load SP500 officers into an EntityRuler under label 'EXEC'."""
+        patterns = []
+        with open(SP500_CSV, newline='', encoding='utf8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # CSV columns: ticker,official_name,cik,name,title
+                name = row.get('name')
+                if name:
+                    name = name.strip()
+                    if name:
+                        patterns.append({"label": "EXEC", "pattern": name})
+        if patterns:
+            # Add the entity ruler pipe if not present
+            if 'entity_ruler' not in self.nlp.pipe_names:
+                self.nlp.add_pipe('entity_ruler', before='ner')
+            ruler = self.nlp.get_pipe('entity_ruler')
+            ruler.add_patterns(patterns)
 
     def _doc_aliases(self, text: str) -> set[str]:
         """
@@ -56,82 +99,98 @@ class Attributor:
             Enriched QuoteCandidate objects with the speaker identified.
         """
         for qc in candidates:
-            # 0.5) sanitize unbalanced straight-quotes in context
+            # 0) Sanitize unbalanced quotes
             ctx = qc.context
             if ctx.count('"') % 2 == 1:
-                # append a closing quote to balance
-                ctx = ctx + '"'
-            # rebuild doc on sanitized text
+                ctx += '"'
             doc = self.nlp(ctx)
-
-            # reuse sanitized low-ctx and quote text
-            dyn             = self._doc_aliases(ctx)
-            aliases         = self.aliases | dyn | set(ROLE_KEYWORDS)
-            speaker_assigned = None
             low_ctx   = ctx.lower()
             low_quote = qc.quote.lower() if qc.quote else ""
+            dyn_alias = self._doc_aliases(ctx)
+            aliases   = self.aliases | dyn_alias | set(ROLE_KEYWORDS)
 
-            # 1) sentence-level Textacy: only the sentence containing the quote
-            try:
-                for sent in doc.sents:
-                    if low_quote in sent.text.lower():
-                        mini = self.nlp(sent.text)
-                        # wrap Textacy call in try/except
-                        try:
-                            for speaker_span, _, content in textacy.extract.triples.direct_quotations(mini):
-                                # resolve speaker text
-                                if isinstance(speaker_span, list):
-                                    spk = " ".join(s.text for s in speaker_span)
-                                else:
-                                    spk = speaker_span.text or ""
-                                if spk:
-                                    speaker_assigned = spk
-                                    break
-                        except ValueError:
-                            # fallback: simple regex within this sentence
-                            m = re.search(r'"([^"]+)"', sent.text)
-                            if m:
-                                speaker_assigned = "Unknown"
-                        break
-            except Exception:
-                # if sent iteration fails, skip to next step
-                pass
+            # 1) Rule-based cue regex
+            for sent in doc.sents:
+                m = re.search(
+                    rf'([A-Z][a-z]+)\s+{self.ANC_PATTERN.pattern}\s*[:,-]?\s*["“](.+?)["”]',
+                    sent.text
+                )
+                if m:
+                    qc.speaker = m.group(1)
+                    yield qc
+                    break
+            if getattr(qc, "speaker", None):
+                continue
 
-            # 2) full-context Textacy: any speaker_span in the whole window
-            if not speaker_assigned:
-                try:
-                    for speaker_span, _, content in textacy.extract.triples.direct_quotations(doc):
-                        if isinstance(speaker_span, list):
-                            spk = " ".join(s.text for s in speaker_span)
-                        else:
-                            spk = speaker_span.text or ""
-                        if spk:
-                            speaker_assigned = spk
+            # 2) Dependency-pattern fallback
+            for sent in doc.sents:
+                for token in sent:
+                    if token.lemma_ in {"say","state","note","post","blog","quote","write"}:
+                        subs = [c for c in token.children if c.dep_ in {"nsubj","nsubjpass"}]
+                        if subs and subs[0].ent_type_ in {"PERSON","ORG"}:
+                            qc.speaker = subs[0].text
+                            yield qc
                             break
-                except ValueError:
-                    # still unbalanced somewhere? regex fallback across full context
-                    m = re.search(r'"([^"]+)"', ctx)
-                    if m:
-                        speaker_assigned = "Unknown"
+                if getattr(qc, "speaker", None):
+                    break
+            if getattr(qc, "speaker", None):
+                continue
 
-            # 3) alias fallback: company or exec name in quote or context
-            if not speaker_assigned:
-                for alias in aliases:
-                    if alias in low_quote or alias in low_ctx:
-                        speaker_assigned = alias.title()
-                        break
+            # 3) Original Textacy direct-quotation triples
+            # try:
+            #     for sent in doc.sents:
+            #         if low_quote in sent.text.lower():
+            #             mini = self.nlp(sent.text)
+            #             try:
+            #                 for sp, _, _ in textacy.extract.triples.direct_quotations(mini):
+            #                     spk = (" ".join([t.text for t in sp]) if isinstance(sp, list) else sp.text)
+            #                     if spk:
+            #                         qc.speaker = spk
+            #                         break
+            #             except ValueError:
+            #                 pass
+            #             break
+            # except Exception:
+            #     pass
+            if getattr(qc, "speaker", None):
+                yield qc
+                continue
 
-            # 4) pure-role fallback: any role keyword in quote or context
-            if not speaker_assigned:
+            # 4) Alias-enhanced NER/EntityRuler
+            for ent in doc.ents:
+                if ent.label_ in {"PERSON","ORG","EXEC"} and ent.text.lower() in low_ctx:
+                    qc.speaker = ent.text
+                    yield qc
+                    break
+            if getattr(qc, "speaker", None):
+                continue
+
+            # 5) Optional quantized DistilBERT fallback (commented out)
+            # inputs = self.tokenizer(qc.quote, ctx, return_tensors="np")
+            # outs   = self.ort_sess.run(None, inputs)
+            # pred   = outs[0].argmax(-1)[0]
+            # qc.speaker = id2label[pred]
+            # yield qc
+            # continue
+
+            # 6) Commented-out heavy sieves
+            # (coreference, LLM prompts)
+
+            # 7) Final alias & role fallbacks
+            for alias in aliases:
+                # skip 1-letter tickers *and* pronoun/ticker "it" (ticker=IT)
+                if len(alias) < 2 or alias in {"it","he","she","they","we","i","you","its","their"}:
+                    continue
+                pat = re.compile(rf'\b{re.escape(alias)}\b')
+                if pat.search(low_ctx) or pat.search(low_quote):
+                    qc.speaker = alias.title()
+                    break
+            else:
                 for role in ROLE_KEYWORDS:
-                    if role in low_quote or role in low_ctx:
-                        speaker_assigned = role.title()
+                    if role in low_ctx or role in low_quote:
+                        qc.speaker = role.title()
                         break
+                else:
+                    qc.speaker = "Unknown"
 
-            # 5) default to "Unknown"
-            if not speaker_assigned:
-                speaker_assigned = "Unknown"
-
-            # assign & yield once, preserving qc.quote
-            qc.speaker = speaker_assigned
             yield qc 

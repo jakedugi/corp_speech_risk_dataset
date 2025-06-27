@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[3]
 
 # Where to find your S&P 500 aliases CSV
-SP500_CSV = ROOT / "data" / "sp500_aliases.csv"
+SP500_CSV = ROOT / "data" / "sp500_officers_cleaned.csv"
 
 # Function to load company aliases from CSV
 # CSV columns: ticker,official_name,exec1,exec2,exec3,...

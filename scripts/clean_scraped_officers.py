@@ -37,7 +37,7 @@ def extract_officers(raw: str) -> list[tuple[str,str]]:
 
 # Apply the helper across the DataFrame
 # 1. load
-df = pd.read_csv("src/corp_speech_risk_dataset/data/sp500_aliases_enriched.csv", dtype=str)
+df = pd.read_csv("data/sp500_aliases_enriched.csv", dtype=str)
 
 # 2. pick up all the exec columns
 exec_cols = [col for col in df.columns if col.startswith("exec")]
@@ -66,4 +66,4 @@ rows = (df
        )
 
 # 7. write out
-rows.to_csv("src/corp_speech_risk_dataset/data/sp500_officers_cleaned.csv", index=False) 
+rows.to_csv("data/sp500_officers_cleaned.csv", index=False) 

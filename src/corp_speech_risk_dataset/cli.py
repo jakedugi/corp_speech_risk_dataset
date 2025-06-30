@@ -1,5 +1,8 @@
-"""Command-line interface for CourtListener batch processing."""
+"""
+Command-line interface for CourtListener batch processing.
 
+This CLI exposes a single orchestrate command for the modern workflow, and a legacy command for the original 7-step process.
+"""
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -9,9 +12,14 @@ import sys
 import typer
 from loguru import logger
 import httpx
+from dotenv import load_dotenv
 
-from corp_speech_risk_dataset.api.courtlistener import STATUTE_QUERIES, process_statutes, process_recap_data, process_docket_entries, process_recap_documents, process_full_docket, process_search_api, process_recap_fetch
+from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
 from corp_speech_risk_dataset.config import load_config
+from corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator import CourtListenerOrchestrator
+from corp_speech_risk_dataset.workflows.legacy_multistep import LegacyCourtListenerWorkflow
+
+load_dotenv()  # Load environment variables from .env if present
 
 app = typer.Typer(help="CourtListener batch search CLI")
 
@@ -32,6 +40,78 @@ RESOURCE_FIELDS = {
         "id", "status", "created", "modified", "request_type", "docket", "recap_document"
     ]
 }
+
+@app.command()
+def orchestrate(
+    statutes: List[str] = typer.Option(
+        None,
+        "--statutes",
+        "-s",
+        help="Statutes to process (default: all supported)",
+    ),
+    company_file: Optional[Path] = typer.Option(
+        None,
+        "--company-file",
+        "-c",
+        exists=True,
+        readable=True,
+        help="CSV with company names (column 'official_name')",
+    ),
+    outdir: Path = typer.Option(
+        Path("CourtListener"),
+        "--outdir",
+        "-o",
+        help="Base output directory",
+    ),
+    pages: int = typer.Option(
+        1, "--pages", "-p", min=1, help="Pages per search request"
+    ),
+    page_size: int = typer.Option(
+        50, "--page-size", min=1, max=100, help="Results per page"
+    ),
+    date_min: Optional[str] = typer.Option(
+        None, "--date-min", help="Earliest filing date (YYYY-MM-DD)"
+    ),
+    api_mode: str = typer.Option(
+        "standard", "--api-mode", "-m", help="'standard' or 'recap'"
+    ),
+    token: Optional[str] = typer.Option(
+        None,
+        "--token",
+        "-t",
+        help="CourtListener API token (overrides env/--config)",
+    ),
+):
+    """Run the full multi-step CourtListener workflow in one go."""
+    config = load_config()
+    token = token or os.getenv("COURTLISTENER_API_TOKEN")
+    try:
+        orchestrator = CourtListenerOrchestrator(
+            config=config,
+            statutes=statutes,          # may be None (means "all")
+            company_file=company_file,
+            outdir=outdir,
+            token=token,
+            pages=pages,
+            page_size=page_size,
+            date_min=date_min,
+            api_mode=api_mode,
+        )
+        orchestrator.run()
+    except Exception:
+        logger.exception("Fatal error during orchestration")
+        raise typer.Exit(code=1)
+
+@app.command()
+def legacy(
+    query: List[str] = typer.Argument(..., help="One or more raw search strings"),
+    court: str = typer.Option(None, "--court", "-c", help="Override court id"),
+    outdir: Path = typer.Option("CourtListener", "--outdir", "-o"),
+):
+    """
+    Run the original 7-step multi-call workflow verbatim.
+    """
+    LegacyCourtListenerWorkflow(query, court, outdir).run()
 
 @app.command()
 def search(
@@ -62,7 +142,7 @@ def search(
         "--opinions",
         help="Also fetch opinion texts"
     ),
-    output_dir: Path = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
         "--output-dir",
         "-o",
@@ -73,6 +153,12 @@ def search(
         "--api-mode",
         "-m",
         help="API mode to use (standard or recap)"
+    ),
+    company_file: str = typer.Option(
+        None,
+        "--company-file",
+        "-c",
+        help="CSV of company names (official_name) for filtering"
     )
 ):
     """Run batch searches for specified statutes."""
@@ -99,7 +185,8 @@ def search(
             page_size=page_size or config.default_page_size,
             date_min=date_min or config.default_date_min,
             output_dir=output_dir or config.output_dir,
-            api_mode=api_mode
+            api_mode=api_mode,
+            company_file=company_file
         )
     except Exception as e:
         logger.exception("Error during batch processing")
@@ -130,7 +217,7 @@ def recap(
         "--page-size",
         help="Results per page (max 100)"
     ),
-    output_dir: Path = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
         "--output-dir",
         "-o",
@@ -185,7 +272,7 @@ def docket_entries(
         "--page-size",
         help="Results per page (max 20 recommended due to nested docs)"
     ),
-    output_dir: Path = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
         "--output-dir",
         "-o",
@@ -264,7 +351,7 @@ def documents(
         "--include-text",
         help="Include plain text content (can be large)"
     ),
-    output_dir: Path = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
         "--output-dir",
         "-o",
@@ -320,7 +407,7 @@ def full_docket(
         "--order-by",
         help="How to order docket entries"
     ),
-    output_dir: Path = typer.Option(
+    output_dir: Optional[Path] = typer.Option(
         None,
         "--output-dir",
         "-o",
@@ -440,32 +527,13 @@ def recap_fetch(
         logger.exception("Error during recap-fetch POST")
         raise typer.Exit(1)
 
-def main() -> None:
+def main():
     """Main entry point for the CLI."""
-    parser = argparse.ArgumentParser(description="Process statutes from CourtListener")
-    parser.add_argument("--statutes", nargs="+", help="Statutes to process")
-    parser.add_argument("--pages", type=int, help="Number of pages to fetch")
-    parser.add_argument("--page-size", type=int, help="Number of results per page")
-    parser.add_argument("--date-min", help="Minimum date to fetch from (YYYY-MM-DD)")
-    parser.add_argument("--output-dir", help="Directory to save results to")
-    args = parser.parse_args()
-
-    # Load configuration
-    config = load_config()
-    
-    # Process statutes
-    try:
-        process_statutes(
-            statutes=args.statutes,
-            config=config,
-            pages=args.pages or config.default_pages,
-            page_size=args.page_size or config.default_page_size,
-            date_min=args.date_min or config.default_date_min,
-            output_dir=args.output_dir or config.output_dir
-        )
-    except Exception as e:
-        logger.error(f"Error processing statutes: {e}")
-        sys.exit(1)
+    import sys
+    from loguru import logger
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG", colorize=True)
+    app()
 
 if __name__ == "__main__":
-    app() 
+    main() 

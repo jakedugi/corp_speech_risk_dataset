@@ -118,3 +118,7 @@ Results are saved to `data/raw/courtlistener/YYYY-MM-DD/<statute-slug>/`:
 - Run tests: `pytest tests/`
 - Format code: `black src/ tests/`
 - Type check: `mypy src/ tests/`
+
+## Company Name Chunking
+
+When you use the `--company-file` option, the CLI will automatically split your company list into safe-size chunks (about 200 names per chunk) to avoid exceeding the CourtListener server's URL length limit. Each chunk is queried separately, and results are saved in subdirectories (e.g., `chunk_1`, `chunk_2`, ...). This ensures you only download the opinions you need, without hitting server errors or wasting disk space.

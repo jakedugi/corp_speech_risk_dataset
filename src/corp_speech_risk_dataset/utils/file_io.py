@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import httpx
+import time
 
 from loguru import logger
 
@@ -70,4 +72,79 @@ def merge_json_files(files: List[Path], output_path: Path) -> None:
     
     save_json(merged_data, output_path)
     logger.info(f"Merged {len(files)} files into {output_path}")
+
+# --- New helpers for legacy workflow support ---
+def download(url: str, path: Path, max_attempts: int = 3, sleep: float = 0.5) -> None:
+    """
+    Download a file from a URL to a local path with retry and logging.
+    Follows redirects automatically.
+    Args:
+        url: The URL to download from
+        path: The local file path to save to
+        max_attempts: Number of retry attempts
+        sleep: Seconds to wait between retries
+    """
+    ensure_dir(path.parent)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as r:
+                r.raise_for_status()
+                with open(path, "wb") as f:
+                    for chunk in r.iter_bytes():
+                        f.write(chunk)
+            logger.info(f"Downloaded {url} to {path}")
+            return
+        except Exception as e:
+            logger.warning(f"[{attempt}/{max_attempts}] Failed to download {url}: {e}")
+            time.sleep(sleep * attempt)
+    raise RuntimeError(f"Failed to download {url} after {max_attempts} attempts")
+
+def needs_recap_fetch(ia_json_path: Path) -> bool:
+    """
+    Returns True if any entry in the IA dump has empty recap_documents or missing description.
+    Args:
+        ia_json_path: Path to the IA JSON dump
+    Returns:
+        True if RECAP fetch is needed, False otherwise
+    """
+    if not ia_json_path.exists():
+        logger.warning(f"IA JSON not found: {ia_json_path}")
+        return False
+    try:
+        data = load_json(ia_json_path)
+        entries = data.get("entries") or data.get("docket_entries") or []
+        for entry in entries:
+            if not entry.get("recap_documents") or not entry.get("description"):
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error reading {ia_json_path}: {e}")
+        return False
+
+def download_missing_pdfs(entry_json: Path, filings_dir: Path) -> None:
+    """
+    Download PDFs for recap_documents in an entry if plain_text is missing.
+    Args:
+        entry_json: Path to the entry JSON file
+        filings_dir: Directory to save PDFs to
+    """
+    ensure_dir(filings_dir)
+    try:
+        entry = load_json(entry_json)
+        docs = entry.get("recap_documents") or []
+        for doc in docs:
+            pdf_url = doc.get("filepath_local")
+            doc_id = doc.get("id")
+            has_text = bool(doc.get("plain_text"))
+            if pdf_url and not has_text:
+                pdf_path = filings_dir / f"doc_{doc_id}.pdf"
+                if not pdf_path.exists():
+                    try:
+                        download(pdf_url, pdf_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to download PDF for doc {doc_id}: {e}")
+                else:
+                    logger.debug(f"PDF already exists: {pdf_path}")
+    except Exception as e:
+        logger.error(f"Error processing {entry_json}: {e}")
 

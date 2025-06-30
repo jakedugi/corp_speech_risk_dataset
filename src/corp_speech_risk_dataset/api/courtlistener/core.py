@@ -18,133 +18,13 @@ import os
 import httpx
 from loguru import logger
 
-from corp_speech_risk_dataset.api.base_api_client import BaseAPIClient
 from corp_speech_risk_dataset.custom_types.base_types import APIConfig
-
-# API endpoints
-BASE_DOCKETS_URL = "https://www.courtlistener.com/api/rest/v4/dockets/"
-BASE_CLUSTERS_URL = "https://www.courtlistener.com/api/rest/v4/clusters/"
-BASE_OPINIONS_URL = "https://www.courtlistener.com/api/rest/v4/opinions/"
-BASE_DOCKET_ENTRIES_URL = "https://www.courtlistener.com/api/rest/v4/docket-entries/"
-BASE_RECAP_DOCS_URL = "https://www.courtlistener.com/api/rest/v4/recap-documents/"
-BASE_RECAP_URL = "https://www.courtlistener.com/api/rest/v4/recap/"
-
-# API endpoint configurations
-API_ENDPOINTS = {
-    "standard": {
-        "base_url": "https://www.courtlistener.com/api/rest/v4",
-        "dockets": BASE_DOCKETS_URL,
-        "clusters": BASE_CLUSTERS_URL,
-        "opinions": BASE_OPINIONS_URL,
-        "docket_entries": BASE_DOCKET_ENTRIES_URL,
-        "recap_docs": BASE_RECAP_DOCS_URL,
-    },
-    "recap": {
-        "base_url": "https://www.courtlistener.com/api/rest/v4",
-        "dockets": BASE_DOCKETS_URL,
-        "clusters": BASE_CLUSTERS_URL,
-        "opinions": BASE_OPINIONS_URL,
-        "docket_entries": BASE_DOCKET_ENTRIES_URL,
-        "recap_docs": BASE_RECAP_DOCS_URL,
-        "recap": BASE_RECAP_URL,
-    }
-}
-
-# Statute queries
-STATUTE_QUERIES: Dict[str, str] = {
-    "FTC Section 5": '''(
-        ("FTC Act" OR "Section 5" OR "15 U.S.C. § 45" OR "unfair methods of competition")
-        AND
-        (
-            tweet OR "Twitter post" OR "X post" OR Facebook OR Instagram OR website OR blog
-            OR TikTok OR YouTube OR LinkedIn OR "social media" OR "online advertising"
-        )
-        AND
-        (
-            deceptive OR misleading OR "unfair practice" OR fraudulent OR "false claim"
-            OR "unfair methods"
-        )
-        AND
-        (
-            "corporate speech" OR "press release" OR "company statement" OR "internal memo"
-            OR "marketing materials" OR "executive statement" OR advertisement OR promotion OR claim
-        )
-    )''',
-    "FTC Section 12": '(("Section 12" OR "15 USC 52" OR "15 U.S.C. § 52") AND (Instagram OR TikTok OR YouTube OR tweet OR website OR "landing page") AND (efficacy OR health OR "performance claim"))',
-    "Lanham Act § 43(a)": '(("Lanham Act" OR "Section 43(a)" OR "15 USC 1125(a)" OR "15 U.S.C. § 1125(a)") AND (Twitter OR "X post" OR influencer OR hashtag OR TikTok OR "sponsored post" OR website) AND ("false advertising" OR "false endorsement" OR misrepresentation))',
-    "SEC Rule 10b-5": '(("10b-5" OR "Rule 10b-5" OR "17 CFR 240.10b-5") AND ("press release" OR tweet OR blog OR "CEO post" OR Reddit OR Discord) AND ("material misstatement" OR fraud OR "stock price" OR "market manipulation"))',
-    "SEC Regulation FD": '(("Regulation FD" OR "Reg FD" OR "17 CFR 243.100" OR "Rule FD") AND (CEO OR CFO OR executive) AND ("Facebook post" OR tweet OR "LinkedIn post" OR webcast OR blog) AND ("material information" OR disclosure OR "selective disclosure"))',
-    "NLRA § 8(a)(1)": '(("Section 8(a)(1)" OR "29 USC 158(a)(1)" OR "29 U.S.C. § 158(a)(1)") AND (tweet OR "X post" OR Facebook OR website OR memo OR blog) AND (union OR unionize OR collective-bargaining OR organizing) AND (threat OR promise OR coercive))',
-    "CFPA UDAAP": '((UDAAP OR "12 USC 5531" OR "12 U.S.C. § 5531" OR "Consumer Financial Protection Act") AND (loan OR fintech OR credit OR "BNPL") AND (website OR app OR tweet OR "Instagram ad" OR webinar) AND (deceptive OR misleading OR unfair))',
-    "California § 17200 / 17500": '(("Business and Professions Code § 17200" OR "Bus & Prof Code 17200" OR "§ 17500") AND (site OR newsletter OR email OR Instagram OR TikTok OR tweet) AND (claim OR representation OR advertisement) AND (misleading OR deceptive OR untrue))',
-    "NY GBL §§ 349–350": '(("GBL § 349" OR "General Business Law § 349" OR "GBL § 350") AND (webinar OR "landing page" OR infomercial OR website OR tweet OR Facebook) AND (misleading OR deceptive OR fraud OR "false advertising"))',
-    "FD&C Act § 331": '(("21 USC 331" OR "21 U.S.C. § 331" OR "FD&C Act") AND (marketing OR promo OR blog OR website OR Facebook OR tweet OR "YouTube video") AND (misbranding OR "risk disclosure" OR "omitted risk"))'
-}
+from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
+from .client import CourtListenerClient
 
 def slugify(text: str) -> str:
     """Convert text to a filesystem-safe slug."""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-
-class CourtListenerClient(BaseAPIClient):
-    """Client for interacting with the CourtListener API."""
-
-    BASE_URL = "https://www.courtlistener.com/api/rest/v4"
-    BASE_OPINIONS_URL = f"{BASE_URL}/opinions/"
-
-    def __init__(self, config: APIConfig, api_mode: str = "standard"):
-        """Initialize the client with API configuration.
-        
-        Args:
-            config: API configuration containing token and settings
-            api_mode: API mode to use ("standard" or "recap")
-        """
-        super().__init__(config)
-        self.logger = logger.bind(client="courtlistener")
-        self.api_mode = api_mode
-        self.endpoints = API_ENDPOINTS.get(api_mode, API_ENDPOINTS["standard"])
-        self._session = httpx.Client(
-            headers=self._build_headers(),
-            follow_redirects=True,
-            timeout=30.0
-        )
-        self._sleep = config.rate_limit or 0.25
-        
-    def _build_headers(self) -> Dict[str, str]:
-        """Build headers for API requests."""
-        return {
-            "Accept": "application/json",
-            "Authorization": f"Token {getattr(self.config, 'api_token', getattr(self.config, 'api_key', None))}"
-        }
-
-    def _get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Make a GET request to the API."""
-        self.logger.debug(f"Making GET request to {url} with params {params}")
-        self.logger.debug(f"Headers: {self._build_headers()}")
-        response = self._session.get(url, params=params)
-        self.logger.debug(f"Response status: {response.status_code}")
-        response.raise_for_status()
-        time.sleep(self._sleep)  # Rate limiting
-        return response.json()
-
-    def fetch_resource(self, resource_type: str, params: dict = None, limit: int = None) -> list[dict]:
-        """Fetch any resource from CourtListener by type, with optional result limit."""
-        endpoint = self.endpoints.get(resource_type)
-        if not endpoint:
-            raise ValueError(f"Unknown resource type: {resource_type}")
-        url = endpoint
-        results = []
-        while url:
-            data = self._get(url, params)
-            batch = data.get("results", [])
-            if limit is not None and len(results) + len(batch) > limit:
-                results.extend(batch[:limit - len(results)])
-                break
-            results.extend(batch)
-            if limit is not None and len(results) >= limit:
-                break
-            url = data.get("next")
-            params = None  # Only use params on first request
-        return results
 
 def process_and_save(
     client: CourtListenerClient,
@@ -169,6 +49,7 @@ def process_statutes(
     date_min: Optional[str] = None,
     output_dir: Optional[str] = None,
     api_mode: str = "standard",
+    company_file: Optional[str] = None,
 ) -> None:
     """Process a list of statutes and save the results.
     
@@ -180,42 +61,84 @@ def process_statutes(
         date_min: Minimum date to fetch from (YYYY-MM-DD)
         output_dir: Directory to save results to
         api_mode: API mode to use ("standard" or "recap")
+        company_file: Optional path to CSV file with company names to filter by
     """
+    import math
+    import csv
+    from itertools import islice
+
     client = CourtListenerClient(config, api_mode=api_mode)
-    
+    CHUNK_SIZE = 50  # Safe chunk size for company names due to URL length limits
+
     for statute in statutes:
-        logger.info(f"Searching {statute}: {STATUTE_QUERIES[statute]}")
-        
-        # Fetch opinions using the new method
-        opinions = client.fetch_resource("opinions", {
-            "search": STATUTE_QUERIES[statute],
-            "date_filed_min": date_min
-        })
-        
-        logger.info(f"Retrieved {len(opinions)} opinions")
-        
-        # Create output directory with correct structure
-        if output_dir is None:
-            output_dir = Path("data") / "raw" / "courtlistener" / slugify(statute)
+        base_query = STATUTE_QUERIES[statute].strip()
+        logger.info(f"Base query for {statute}: {base_query}")
+
+        if company_file:
+            # Read all company names
+            names = []
+            with open(company_file, newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    names.append(row["official_name"].strip())
+            
+            # Chunk the names
+            total_chunks = math.ceil(len(names) / CHUNK_SIZE)
+            for chunk_idx in range(total_chunks):
+                chunk = names[chunk_idx * CHUNK_SIZE : (chunk_idx + 1) * CHUNK_SIZE]
+                company_filter = "(" + " OR ".join(f'"{n}"' for n in sorted(chunk)) + ")"
+                query = base_query + "\nAND\n" + company_filter
+                logger.info(f"Searching {statute} (chunk {chunk_idx+1}/{total_chunks}): {query}")
+                params = {
+                    "search": query,
+                    "date_filed_min": date_min,
+                    "page_size": page_size,
+                }
+                max_results = pages * page_size
+                opinions = client.fetch_resource("opinions", params, limit=max_results)
+                logger.info(f"Retrieved {len(opinions)} opinions for chunk {chunk_idx+1}/{total_chunks}")
+                # Save results in subdirectory or with chunk info
+                if output_dir is None:
+                    chunk_output_dir = Path("data") / "raw" / "courtlistener" / slugify(statute) / f"chunk_{chunk_idx+1}"
+                else:
+                    chunk_output_dir = Path(output_dir) / slugify(statute) / f"chunk_{chunk_idx+1}"
+                chunk_output_dir.mkdir(parents=True, exist_ok=True)
+                for opinion in opinions:
+                    metadata_path = chunk_output_dir / f"opinion_{opinion['id']}_metadata.json"
+                    with open(metadata_path, "w") as f:
+                        json.dump(opinion, f, indent=2)
+                    if opinion.get("plain_text"):
+                        text_path = chunk_output_dir / f"opinion_{opinion['id']}_text.txt"
+                        with open(text_path, "w") as f:
+                            f.write(opinion["plain_text"])
+                logger.info(f"Saved {len(opinions)} opinions to {chunk_output_dir}")
         else:
-            output_dir = Path(output_dir) / slugify(statute)
-            
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save each opinion
-        for opinion in opinions:
-            # Save metadata
-            metadata_path = output_dir / f"opinion_{opinion['id']}_metadata.json"
-            with open(metadata_path, "w") as f:
-                json.dump(opinion, f, indent=2)
-            
-            # Save plain text if available
-            if opinion.get("plain_text"):
-                text_path = output_dir / f"opinion_{opinion['id']}_text.txt"
-                with open(text_path, "w") as f:
-                    f.write(opinion["plain_text"])
-        
-        logger.info(f"Saved {len(opinions)} opinions to {output_dir}")
+            query = base_query
+            logger.info(f"Searching {statute}: {query}")
+            params = {
+                "search": query,
+                "date_filed_min": date_min,
+                "page_size": page_size,
+            }
+            max_results = pages * page_size
+            opinions = client.fetch_resource("opinions", params, limit=max_results)
+            logger.info(f"Retrieved {len(opinions)} opinions")
+            if output_dir is None:
+                output_dir_final = Path("data") / "raw" / "courtlistener" / slugify(statute)
+            else:
+                output_dir_final = Path(output_dir) / slugify(statute)
+            output_dir_final.mkdir(parents=True, exist_ok=True)
+            for opinion in opinions:
+                metadata_path = output_dir_final / f"opinion_{opinion['id']}_metadata.json"
+                with open(metadata_path, "w") as f:
+                    json.dump(opinion, f, indent=2)
+                if opinion.get("plain_text"):
+                    text_path = output_dir_final / f"opinion_{opinion['id']}_text.txt"
+                    with open(text_path, "w") as f:
+                        f.write(opinion["plain_text"])
+            logger.info(f"Saved {len(opinions)} opinions to {output_dir_final}")
+
+    # NOTE: Company name chunking is required to avoid exceeding the CourtListener server's URL length limit (8,190 bytes). Each chunk is queried separately to ensure all company names are included without hitting the server's 413 error.
 
 def process_recap_data(
     config: APIConfig,
@@ -405,86 +328,64 @@ def process_recap_documents(
     logger.info(f"Saved {len(documents)} RECAP documents to {output_dir}")
 
 def process_full_docket(
-    config: APIConfig,
+    config,
     docket_id: int,
     include_documents: bool = True,
     order_by: str = "-date_filed",
-    output_dir: Optional[str] = None,
-    api_mode: str = "standard"
-) -> None:
-    """Process a complete docket with all entries and documents.
-    
-    Args:
-        config: API configuration containing token and settings
-        docket_id: The docket ID to fetch
-        include_documents: Whether to include full document text
-        order_by: How to order docket entries
-        output_dir: Directory to save results to
-        api_mode: API mode to use
-    """
+    output_dir: str = None,
+    api_mode: str = "standard",
+    page_size: int = 100,
+):
+    """Process a complete docket with all entries (no RECAP docs for now)."""
+    from pathlib import Path
+    import json
+    from loguru import logger
+    from corp_speech_risk_dataset.api.courtlistener.client import CourtListenerClient
+
     client = CourtListenerClient(config, api_mode=api_mode)
-    
-    logger.info(f"Fetching complete docket {docket_id} with documents: {include_documents}")
-    
-    # Fetch complete docket
-    docket_data = client.fetch_resource("dockets", {
-        "docket": docket_id
-    })
-    
-    logger.info(f"Retrieved docket with {len(docket_data)} entries and {len(docket_data[0].get('documents', []))} documents")
-    
-    # Create output directory
+    logger.info(f"Fetching complete docket {docket_id} (no RECAP docs)")
+
+    # 1. Fetch docket metadata
+    docket_meta = client._get(f"{client.endpoints['dockets']}{docket_id}/")
+
+    # 2. Fetch entries for this docket
+    entries = client.fetch_resource(
+        "docket_entries",
+        {"docket": docket_id, "order_by": order_by, "page_size": page_size},
+        limit=None
+    )
+
+    # 3. Save everything
     if output_dir is None:
         output_dir = Path("data") / "raw" / "courtlistener" / "full_dockets" / f"docket_{docket_id}"
     else:
         output_dir = Path(output_dir) / f"docket_{docket_id}"
-        
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save docket info
     docket_path = output_dir / "docket_info.json"
     with open(docket_path, "w") as f:
-        json.dump(docket_data[0], f, indent=2)
-    
+        json.dump(docket_meta, f, indent=2)
+
     # Save entries
     entries_dir = output_dir / "entries"
     entries_dir.mkdir(exist_ok=True)
-    
-    for entry in docket_data:
+    for entry in entries:
         entry_path = entries_dir / f"entry_{entry.get('id')}_metadata.json"
         with open(entry_path, "w") as f:
             json.dump(entry, f, indent=2)
-    
-    # Save documents if included
-    if include_documents and docket_data[0].get("documents"):
-        docs_dir = output_dir / "documents"
-        docs_dir.mkdir(exist_ok=True)
-        
-        for doc in docket_data[0]["documents"]:
-            # Save document metadata
-            doc_meta_path = docs_dir / f"doc_{doc.get('id')}_metadata.json"
-            with open(doc_meta_path, "w") as f:
-                json.dump(doc, f, indent=2)
-            
-            # Save plain text if available
-            if doc.get("plain_text"):
-                doc_text_path = docs_dir / f"doc_{doc.get('id')}_text.txt"
-                with open(doc_text_path, "w") as f:
-                    f.write(doc["plain_text"])
-    
+
     # Save summary
     summary = {
         "docket_id": docket_id,
-        "entry_count": len(docket_data),
-        "document_count": len(docket_data[0].get("documents", [])),
+        "entry_count": len(entries),
         "include_documents": include_documents,
         "order_by": order_by
     }
-    
     summary_path = output_dir / "summary.json"
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
-    
+
     logger.info(f"Saved complete docket {docket_id} to {output_dir}")
 
 def process_search_api(

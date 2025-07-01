@@ -18,8 +18,12 @@ from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
 from corp_speech_risk_dataset.config import load_config
 from corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator import CourtListenerOrchestrator
 from corp_speech_risk_dataset.workflows.legacy_multistep import LegacyCourtListenerWorkflow
+from corp_speech_risk_dataset.utils.logging_utils import setup_logging
 
 load_dotenv()  # Load environment variables from .env if present
+
+# Set up logging to logs/pipeline.log with rotation and INFO level
+setup_logging(log_file=Path("logs/pipeline.log"), level="INFO", rotation="1 day")
 
 app = typer.Typer(help="CourtListener batch search CLI")
 
@@ -81,8 +85,27 @@ def orchestrate(
         "-t",
         help="CourtListener API token (overrides env/--config)",
     ),
+    print_query_chunks: bool = typer.Option(
+        False,
+        "--print-query-chunks",
+        help="Print the number of query chunks and exit (for debugging)",
+    ),
 ):
     """Run the full multi-step CourtListener workflow in one go."""
+    from corp_speech_risk_dataset.api.courtlistener.queries import build_queries
+    if print_query_chunks:
+        if not statutes or not company_file:
+            print("--print-query-chunks requires --statutes and --company-file")
+            sys.exit(1)
+        for statute in statutes:
+            queries = build_queries(statute, company_file)
+            with open(company_file, newline="") as f:
+                import csv
+                company_count = sum(1 for _ in csv.DictReader(f))
+            print(f"Statute: {statute}")
+            print(f"  Companies: {company_count}")
+            print(f"  Query chunks: {len(queries)} (chunk size: 200)")
+        sys.exit(0)
     config = load_config()
     token = token or os.getenv("COURTLISTENER_API_TOKEN")
     try:

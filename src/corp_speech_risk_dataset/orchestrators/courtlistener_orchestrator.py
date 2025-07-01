@@ -4,6 +4,7 @@ import os
 import json
 from loguru import logger
 from urllib.parse import urljoin
+from httpx import HTTPStatusError
 
 from corp_speech_risk_dataset.api.courtlistener.client import CourtListenerClient
 from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES, build_queries
@@ -61,7 +62,7 @@ class CourtListenerOrchestrator:
             query: The search query string
             search_dir: Directory to save search results
         """
-        params = {"q": query, "type": "d"}
+        params = {"q": query, "type": "d", "page_size": self.page_size}
         ensure_dir(search_dir)
         data = self.client._get(f"{self.client.BASE_URL}/search/", params)
         search_path = search_dir / "search_api_results.json"
@@ -112,7 +113,6 @@ class CourtListenerOrchestrator:
                 "pacer_username": os.getenv("PACER_USER"),
                 "pacer_password": os.getenv("PACER_PASS")
             }
-            from httpx import HTTPStatusError
             try:
                 process_recap_fetch(self.config, payload)
             except HTTPStatusError as e:
@@ -141,12 +141,22 @@ class CourtListenerOrchestrator:
             for doc_meta in entry.get("recap_documents", []):
                 resource = doc_meta.get("resource_uri")
                 if resource:
-                    doc = self.client._get(resource)
+                    try:
+                        doc = self.client._get(resource)
+                    except HTTPStatusError as e:
+                        if e.response.status_code == 503:
+                            logger.warning(f"Recap-document {resource} temporarily unavailable—skipping.")
+                            continue
+                        else:
+                            raise
                     doc_path = entries_dir / f"doc_{doc['id']}.json"
                     with doc_path.open("w") as f:
                         json.dump(doc, f, indent=2)
-                    # Download PDF if available
+                    # Download PDF if available and allowed
                     if doc.get("filepath_local"):
+                        if doc.get("is_available") is False:
+                            logger.warning(f"PDF {doc['id']} is marked unavailable—skipping.")
+                            continue
                         pdf_url = urljoin("https://www.courtlistener.com/", doc["filepath_local"])
                         pdf_dest = filings_dir / f"{doc['id']}.pdf"
                         if not pdf_dest.exists():
@@ -155,6 +165,11 @@ class CourtListenerOrchestrator:
                             else:
                                 try:
                                     download(pdf_url, pdf_dest)
+                                except HTTPStatusError as e:
+                                    if e.response.status_code == 403:
+                                        logger.warning(f"PDF {doc['id']} is forbidden—skipping.")
+                                    else:
+                                        raise
                                 except Exception as e:
                                     logger.warning(f"Failed to download PDF for doc {doc['id']}: {e}")
 

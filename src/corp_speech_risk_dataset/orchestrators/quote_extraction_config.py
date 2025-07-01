@@ -2,39 +2,45 @@
 
 import csv
 from pathlib import Path
+from typing import Set
 
 # Project root (go up 3 levels from this file: src/corp_speech_risk_dataset/orchestrators/)
 ROOT = Path(__file__).parents[3]
 
-# Where to find your S&P 500 aliases CSV
-SP500_CSV = ROOT / "data" / "sp500_officers_cleaned.csv"
+# point to your cleaned CSVs
+SP500_OFFICERS_CSV  = Path(__file__).parents[3] / "data" / "sp500_officers_cleaned.csv"
+SP500_OFFICIALS_CSV = Path(__file__).parents[3] / "data" / "sp500_official_names_cleaned.csv"
 
-# Function to load company aliases from CSV
-# CSV columns: ticker,official_name,exec1,exec2,exec3,...
-def load_company_aliases(path: Path = SP500_CSV) -> set[str]:
-    aliases: set[str] = set()
-    if not path.exists():
-        raise FileNotFoundError(f"Expected aliases CSV at {path}")
-    with path.open(newline="", encoding="utf8") as f:
+def load_company_aliases(
+    officers_path: Path = SP500_OFFICERS_CSV,
+    official_names_path: Path = SP500_OFFICIALS_CSV
+) -> Set[str]:
+    aliases: Set[str] = set()
+
+    # 1) load officer names
+    with officers_path.open(newline="", encoding="utf8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # ticker, official_name
-            aliases.add(row["ticker"].lower())
-            aliases.add(row["official_name"].lower())
-            # optional exec/board columns
-            for col in row:
-                if col.startswith("exec") or col.startswith("board"):
-                    name = row[col].strip()
-                    if name:
-                        aliases.add(name.lower())
+            name = row.get("name", "").strip()
+            if name:
+                aliases.add(name)
+
+    # 2) load official company names
+    with official_names_path.open(newline="", encoding="utf8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cname = row.get("official_name", "").strip()
+            if cname:
+                aliases.add(cname)
+
     return aliases
 
-# load once
-COMPANY_ALIASES = load_company_aliases()
+# your single master alias set
+COMPANY_ALIASES = {a.lower() for a in load_company_aliases()}
 
 # add generic "role" words that—if mentioned in the context of a company—
 # you'll assume they refer to that company's people
-# generic “role” words + board & executive titles
+# generic "role" words + board & executive titles
 ROLE_KEYWORDS = {
     # 1) generic staff roles
     "employee", "staff", "associate", "worker",
@@ -79,7 +85,7 @@ ROLE_KEYWORDS = {
     "principal", "venture partner",
     "angel investor", "limited partner", "lp",
 
-    # 6) other “people” headings you sometimes see
+    # 6) other "people" headings you sometimes see
     "key people", "leadership", "management team",
     "executive team", "governing body", "senior management"
 }

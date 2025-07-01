@@ -2,7 +2,7 @@
 The Attributor, responsible for identifying the speaker of a quote and
 filtering candidates based on company aliases.
 """
-from typing import Iterable, List
+from typing import Iterable, List, Set
 from loguru import logger
 import textacy.extract
 import csv
@@ -12,7 +12,7 @@ from spacy.pipeline import EntityRuler
 
 from ..utils.nlp import get_nlp
 from ..models.quote_candidate import QuoteCandidate
-from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS, SP500_CSV
+from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS
 
 # Optional transformer imports (commented out)
 # import onnxruntime as ort
@@ -37,55 +37,26 @@ class Attributor:
         re.I
     )
 
-    def __init__(self, company_aliases: List[str]):
-        """Initializes the attributor with company aliases."""
-        # spaCy nlp with AppleOps optimizations if available
-        self.nlp = get_nlp()  # should load en_core_web_sm with thinc-apple-ops
-        self.aliases = set(a.lower() for a in company_aliases)
-        self._add_officer_ruler()
+    def __init__(self, company_aliases: Set[str]):
+        """Initializes the attributor with company + officer aliases."""
+        self.nlp     = get_nlp()          # spaCy with AppleOps if available
+        self.aliases = company_aliases    # already lowered in config
+        self._add_alias_ruler()
 
         # Optional: load quantized DistilBERT (commented)
         # self.tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
         # self.ort_sess = ort.InferenceSession("distilbert_cpu_quant.onnx")
 
-    def _add_officer_ruler(self):
-        """Load SP500 officers into an EntityRuler under label 'EXEC'."""
-        patterns = []
-        with open(SP500_CSV, newline='', encoding='utf8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # CSV columns: ticker,official_name,cik,name,title
-                name = row.get('name')
-                if name:
-                    name = name.strip()
-                    if name:
-                        patterns.append({"label": "EXEC", "pattern": name})
-        if patterns:
-            # Add the entity ruler pipe if not present
-            if 'entity_ruler' not in self.nlp.pipe_names:
-                self.nlp.add_pipe('entity_ruler', before='ner')
-            ruler = self.nlp.get_pipe('entity_ruler')
-            ruler.add_patterns(patterns)
-
-    def _doc_aliases(self, text: str) -> set[str]:
-        """
-        Scan for any official_name or ticker in the S&P CSV;
-        if found, pull that row's official_name + ticker + all exec/board names.
-        """
-        aliases = set()
-        low = text.lower()
-        with SP500_CSV.open(encoding="utf8", newline="") as f:
-            rdr = csv.DictReader(f)
-            for row in rdr:
-                name, tkr = row["official_name"].lower(), row["ticker"].lower()
-                if name in low or tkr in low:
-                    # always include ticker & official name
-                    aliases.update({name, tkr})
-                    # pull every exec*/board* column
-                    for col, val in row.items():
-                        if (col.startswith("exec") or col.startswith("board")) and val.strip():
-                            aliases.add(val.strip().lower())
-        return aliases
+    def _add_alias_ruler(self):
+        """Adds _all_ names into an EntityRuler under label 'COMPANY'."""
+        patterns = [
+            {"label": "COMPANY", "pattern": name}
+            for name in self.aliases
+        ]
+        if "entity_ruler" not in self.nlp.pipe_names:
+            self.nlp.add_pipe("entity_ruler", before="ner")
+        ruler = self.nlp.get_pipe("entity_ruler")
+        ruler.add_patterns(patterns)
 
     def filter(self, candidates: List[QuoteCandidate]) -> Iterable[QuoteCandidate]:
         """
@@ -106,13 +77,12 @@ class Attributor:
             doc = self.nlp(ctx)
             low_ctx   = ctx.lower()
             low_quote = qc.quote.lower() if qc.quote else ""
-            dyn_alias = self._doc_aliases(ctx)
-            aliases   = self.aliases | dyn_alias | set(ROLE_KEYWORDS)
+            aliases   = self.aliases | set(ROLE_KEYWORDS)
 
             # 1) Rule-based cue regex
             for sent in doc.sents:
                 m = re.search(
-                    rf'([A-Z][a-z]+)\s+{self.ANC_PATTERN.pattern}\s*[:,-]?\s*["“](.+?)["”]',
+                    rf'([A-Z][a-z]+)\s+{self.ANC_PATTERN.pattern}\s*[:,-]?\s*[""](.+?)[""]',
                     sent.text
                 )
                 if m:
@@ -158,7 +128,7 @@ class Attributor:
 
             # 4) Alias-enhanced NER/EntityRuler
             for ent in doc.ents:
-                if ent.label_ in {"PERSON","ORG","EXEC"} and ent.text.lower() in low_ctx:
+                if ent.label_ in {"PERSON","ORG","COMPANY"} and ent.text.lower() in low_ctx:
                     qc.speaker = ent.text
                     yield qc
                     break

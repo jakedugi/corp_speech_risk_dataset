@@ -55,7 +55,8 @@ def run_law_pipeline(
             page_size=config.default_page_size,
             date_filed_min=config.default_date_min,
             save_opinions=save_opinions,
-            output_root=raw_dir
+            output_root=raw_dir,
+            chunk_size=10,
         )
         
         # Process collected data

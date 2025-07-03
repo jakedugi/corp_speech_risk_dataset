@@ -90,21 +90,31 @@ def orchestrate(
         "--print-query-chunks",
         help="Print the number of query chunks and exit (for debugging)",
     ),
+    chunk_size: int = typer.Option(
+        10,
+        "--chunk-size",
+        help="Number of companies per query chunk (default: 10)",
+    ),
+    async_mode: bool = typer.Option(
+        False,
+        "--async/--no-async",
+        help="Run document fetching in parallel using asyncio (default: False)",
+    ),
 ):
-    """Run the full multi-step CourtListener workflow in one go."""
+    """Run the full multi-step CourtListener workflow in one go. Use --async for parallel doc fetching."""
     from corp_speech_risk_dataset.api.courtlistener.queries import build_queries
     if print_query_chunks:
         if not statutes or not company_file:
             print("--print-query-chunks requires --statutes and --company-file")
             sys.exit(1)
         for statute in statutes:
-            queries = build_queries(statute, company_file)
+            queries = build_queries(statute, company_file, chunk_size=chunk_size)
             with open(company_file, newline="") as f:
                 import csv
                 company_count = sum(1 for _ in csv.DictReader(f))
             print(f"Statute: {statute}")
             print(f"  Companies: {company_count}")
-            print(f"  Query chunks: {len(queries)} (chunk size: 200)")
+            print(f"  Query chunks: {len(queries)} (chunk size: {chunk_size})")
         sys.exit(0)
     config = load_config()
     token = token or os.getenv("COURTLISTENER_API_TOKEN")
@@ -119,8 +129,14 @@ def orchestrate(
             page_size=page_size,
             date_min=date_min,
             api_mode=api_mode,
+            chunk_size=chunk_size,
+            async_mode=async_mode,
         )
-        orchestrator.run()
+        if async_mode:
+            import asyncio
+            asyncio.run(orchestrator.run_async())
+        else:
+            orchestrator.run()
     except Exception:
         logger.exception("Fatal error during orchestration")
         raise typer.Exit(code=1)
@@ -182,7 +198,12 @@ def search(
         "--company-file",
         "-c",
         help="CSV of company names (official_name) for filtering"
-    )
+    ),
+    chunk_size: int = typer.Option(
+        50,
+        "--chunk-size",
+        help="Number of companies per query chunk (default: 50)",
+    ),
 ):
     """Run batch searches for specified statutes."""
     # Load configuration
@@ -209,7 +230,8 @@ def search(
             date_min=date_min or config.default_date_min,
             output_dir=output_dir or config.output_dir,
             api_mode=api_mode,
-            company_file=company_file
+            company_file=company_file,
+            chunk_size=chunk_size,
         )
     except Exception as e:
         logger.exception("Error during batch processing")

@@ -50,6 +50,7 @@ def process_statutes(
     output_dir: Optional[str] = None,
     api_mode: str = "standard",
     company_file: Optional[str] = None,
+    chunk_size: int = 10,
 ) -> None:
     """Process a list of statutes and save the results.
     
@@ -62,13 +63,13 @@ def process_statutes(
         output_dir: Directory to save results to
         api_mode: API mode to use ("standard" or "recap")
         company_file: Optional path to CSV file with company names to filter by
+        chunk_size: Number of companies per query chunk (default 50)
     """
     import math
     import csv
     from itertools import islice
 
     client = CourtListenerClient(config, api_mode=api_mode)
-    CHUNK_SIZE = 50  # Safe chunk size for company names due to URL length limits
 
     for statute in statutes:
         base_query = STATUTE_QUERIES[statute].strip()
@@ -83,9 +84,9 @@ def process_statutes(
                     names.append(row["official_name"].strip())
             
             # Chunk the names
-            total_chunks = math.ceil(len(names) / CHUNK_SIZE)
+            total_chunks = math.ceil(len(names) / chunk_size)
             for chunk_idx in range(total_chunks):
-                chunk = names[chunk_idx * CHUNK_SIZE : (chunk_idx + 1) * CHUNK_SIZE]
+                chunk = names[chunk_idx * chunk_size : (chunk_idx + 1) * chunk_size]
                 company_filter = "(" + " OR ".join(f'"{n}"' for n in sorted(chunk)) + ")"
                 query = base_query + "\nAND\n" + company_filter
                 logger.info(f"Searching {statute} (chunk {chunk_idx+1}/{total_chunks}): {query}")
@@ -208,19 +209,42 @@ def process_docket_entries(
         output_dir: Directory to save results to
         api_mode: API mode to use
     """
+    import time
+    import httpx
     client = CourtListenerClient(config, api_mode=api_mode)
-    
     logger.info(f"Fetching docket entries with docket_id: {docket_id}, query: {query or 'all'}")
-    
-    # Fetch docket entries
-    entries = client.fetch_resource("docket_entries", {
-        "docket": docket_id,
-        "order_by": order_by,
-        "page_size": page_size
-    })
-    
-    logger.info(f"Retrieved {len(entries)} docket entries")
-    
+    url = client.endpoints["docket_entries"]
+    params = {"docket": docket_id, "order_by": order_by, "page_size": page_size}
+    all_entries = []
+    backoff = 1.0
+    while url:
+        try:
+            data = client._get(url, params)
+        except httpx.HTTPStatusError as e:
+            code = e.response.status_code
+            if code == 404:
+                logger.warning(f"404 on {url}; stopping pagination.")
+                break
+            if 500 <= code < 600:
+                logger.warning(f"Server {code} on {url}; retrying in {backoff}s…")
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 10)
+                continue
+            raise
+        except httpx.ReadTimeout:
+            logger.warning(f"ReadTimeout on {url}; retrying in {backoff}s…")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 10)
+            continue
+        backoff = 1.0
+        batch = data.get("results", [])
+        if not batch:
+            logger.info(f"No results on {url}; done.")
+            break
+        all_entries.extend(batch)
+        url = data.get("next")
+        params = None  # Only use params on first request
+    logger.info(f"Retrieved {len(all_entries)} docket entries")
     # Create output directory
     if output_dir is None:
         if docket_id:
@@ -229,34 +253,24 @@ def process_docket_entries(
             output_dir = Path("data") / "raw" / "courtlistener" / "docket_entries" / "search"
     else:
         output_dir = Path(output_dir)
-        
     output_dir.mkdir(parents=True, exist_ok=True)
-    
     # Save docket entries
-    for i, entry in enumerate(entries):
-        # Save entry metadata
+    for i, entry in enumerate(all_entries):
         entry_path = output_dir / f"entry_{entry.get('id', i)}_metadata.json"
         with open(entry_path, "w") as f:
             json.dump(entry, f, indent=2)
-        
-        # Save nested RECAP documents if present
         if entry.get("recap_documents"):
             docs_dir = output_dir / f"entry_{entry.get('id', i)}_documents"
             docs_dir.mkdir(exist_ok=True)
-            
             for j, doc in enumerate(entry["recap_documents"]):
-                # Save document metadata
                 doc_meta_path = docs_dir / f"doc_{doc.get('id', j)}_metadata.json"
                 with open(doc_meta_path, "w") as f:
                     json.dump(doc, f, indent=2)
-                
-                # Save plain text if available
                 if doc.get("plain_text"):
                     doc_text_path = docs_dir / f"doc_{doc.get('id', j)}_text.txt"
                     with open(doc_text_path, "w") as f:
                         f.write(doc["plain_text"])
-    
-    logger.info(f"Saved {len(entries)} docket entries to {output_dir}")
+    logger.info(f"Saved {len(all_entries)} docket entries to {output_dir}")
 
 def process_recap_documents(
     config: APIConfig,

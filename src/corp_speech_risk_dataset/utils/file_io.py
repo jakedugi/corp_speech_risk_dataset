@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import httpx
 import time
+import random
 
 from loguru import logger
 
@@ -78,14 +79,16 @@ def download(url: str, path: Path, max_attempts: int = 3, sleep: float = 0.5) ->
     """
     Download a file from a URL to a local path with retry and logging.
     Follows redirects automatically.
+    For /recap/ URLs, only try once (no retry on 429).
     Args:
         url: The URL to download from
         path: The local file path to save to
-        max_attempts: Number of retry attempts
+        max_attempts: Number of retry attempts (ignored for /recap/)
         sleep: Seconds to wait between retries
     """
     ensure_dir(path.parent)
-    for attempt in range(1, max_attempts + 1):
+    effective_retries = 1 if "/recap/" in url else max_attempts
+    for attempt in range(1, effective_retries + 1):
         try:
             with httpx.stream("GET", url, timeout=30.0, follow_redirects=True) as r:
                 r.raise_for_status()
@@ -94,10 +97,27 @@ def download(url: str, path: Path, max_attempts: int = 3, sleep: float = 0.5) ->
                         f.write(chunk)
             logger.info(f"Downloaded {url} to {path}")
             return
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            # Treat 403 and 429 as "skip" errors
+            if code in (403, 429):
+                logger.warning(f"HTTP {code} for {url}; skipping download.")
+                return
+            # Otherwise, if it's a server error and we have retries left:
+            if 500 <= code < 600 and attempt < effective_retries:
+                backoff = int(exc.response.headers.get("Retry-After", "5")) if code == 429 else sleep * attempt
+                logger.warning(f"[{attempt}/{effective_retries}] Server {code} on {url}; retrying in {backoff}s…")
+                time.sleep(backoff)
+                continue
+            # Let all other errors bubble
+            raise
         except Exception as e:
-            logger.warning(f"[{attempt}/{max_attempts}] Failed to download {url}: {e}")
+            logger.warning(f"[{attempt}/{effective_retries}] Failed to download {url}: {e}")
             time.sleep(sleep * attempt)
-    raise RuntimeError(f"Failed to download {url} after {max_attempts} attempts")
+    if effective_retries == 1:
+        logger.warning(f"Giving up on {url} after single attempt (recap PDF policy)")
+    else:
+        raise RuntimeError(f"Failed to download {url} after {effective_retries} attempts")
 
 def needs_recap_fetch(ia_json_path: Path) -> bool:
     """

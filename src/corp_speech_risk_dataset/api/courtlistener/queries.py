@@ -69,15 +69,19 @@ STATUTE_QUERIES: dict[str, str] = {
 }
 
 # ---- 2. Public helper ------------------------------------------------------
-CHUNK_SIZE = 200  # leave room before CL's 8 190-byte limit
 
 def build_queries(
     statute: str,
     company_file: Path | None = None,
+    chunk_size: int = 10,
 ) -> list[str]:
     """
     Expand a single statute into one or many *final* CourtListener
     search strings (one per company-name chunk).
+    Args:
+        statute: Statute name
+        company_file: Optional CSV file with company names
+        chunk_size: Number of companies per query chunk (default 50)
     """
     base_q = STATUTE_QUERIES[statute].strip()
     if not company_file:
@@ -85,8 +89,8 @@ def build_queries(
     with open(company_file, newline="") as fh:
         names = [r["official_name"].strip() for r in csv.DictReader(fh)]
     out: list[str] = []
-    for i in range(0, len(names), CHUNK_SIZE):
-        chunk = names[i : i + CHUNK_SIZE]
+    for i in range(0, len(names), chunk_size):
+        chunk = names[i : i + chunk_size]
         filter_str = "(" + " OR ".join(f'"{n}"' for n in sorted(chunk)) + ")"
         out.append(f"{base_q}\nAND\n{filter_str}")
     return out 

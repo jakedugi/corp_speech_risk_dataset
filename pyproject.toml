@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build"]
+requires = ["uv_build", "setuptools>=61.0", "wheel"]
 build-backend = "uv_build"
 
 [project]
@@ -9,18 +9,17 @@ description = "Pipeline to collect and structure corporate speech legal risk exa
 authors = [
   { name = "Jake Dugan", email = "jake.dugan@ed.ac.uk" }
 ]
-# Restrict to Python 3.11 and 3.12 so TensorFlow wheels install cleanly
 requires-python = ">=3.11,<3.12"
 
 dependencies = [
-  "httpx",
+  "httpx[http2]>=0.28.0,<1.0.0",
   "playwright",
   "beautifulsoup4",
   "bs4",
   "soupsieve",
   "polars",
   "typer",
-  "loguru",
+  "loguru>=0.7.2",
   "tomli",
   "tomli-w",
   "joblib",
@@ -56,6 +55,7 @@ dependencies = [
   "pyarrow",
   "urllib3==2.5.0",
   "thinc>=8.1.0,<9.0.0",
+  python-dotenv >=1.0.0,
 ]
 
 [project.optional-dependencies]
@@ -81,6 +81,7 @@ target-version = ["py38"]
 profile = "black"
 multi_line_output = 3
 
+# fix?
 [tool.mypy]
 python_version = "3.8"
 strict = true
@@ -97,3 +98,6 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-asyncio",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]

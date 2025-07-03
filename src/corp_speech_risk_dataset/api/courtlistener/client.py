@@ -10,6 +10,10 @@ import httpx
 from loguru import logger
 import time
 from typing import Any, Dict, List, Optional
+import asyncio
+import random
+from asyncio import Semaphore
+from httpx import AsyncClient, Limits, AsyncHTTPTransport
 
 from corp_speech_risk_dataset.api.base_api_client import BaseAPIClient
 from corp_speech_risk_dataset.custom_types.base_types import APIConfig
@@ -63,7 +67,7 @@ class CourtListenerClient(BaseAPIClient):
                 pool=5.0
             )
         )
-        self._sleep = config.rate_limit or 0.25
+        self._sleep = config.rate_limit or 3.0
         
     def _build_headers(self) -> Dict[str, str]:
         """Build headers for API requests."""
@@ -73,10 +77,13 @@ class CourtListenerClient(BaseAPIClient):
         }
 
     def _get(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Make a GET request to the API."""
+        """Make a GET request to the API with robust retry/backoff for 5xx and timeouts."""
         self.logger.debug(f"Making GET request to {url} with params {params}")
         self.logger.debug(f"Headers: {self._build_headers()}")
-        max_attempts = 3
+        import time
+        import httpx
+        max_attempts = 5
+        backoff = 1.0
         for attempt in range(1, max_attempts + 1):
             try:
                 response = self._session.get(url, params=params)
@@ -85,18 +92,27 @@ class CourtListenerClient(BaseAPIClient):
                 time.sleep(self._sleep)  # Rate limiting
                 return response.json()
             except httpx.ReadTimeout:
-                self.logger.warning(f"[{attempt}/{max_attempts}] ReadTimeout, retrying…")
+                self.logger.warning(f"[{attempt}/{max_attempts}] ReadTimeout on {url}; retrying in {backoff}s…")
             except httpx.HTTPStatusError as e:
                 code = e.response.status_code
+                # For /recap/ or /recap-documents/, skip immediately on 403/429
+                if ("/recap/" in url or "/recap-documents/" in url) and code in (403, 429):
+                    self.logger.warning(f"[{attempt}/{max_attempts}] HTTP {code} on {url} (recap); skipping immediately as empty page.")
+                    return {"results": [], "next": None}
+                # Treat 403 and 429 as empty page
+                if code in (403, 429):
+                    self.logger.warning(f"[{attempt}/{max_attempts}] HTTP {code} on {url}; skipping as empty page.")
+                    return {"results": [], "next": None}
                 if 500 <= code < 600 and attempt < max_attempts:
-                    self.logger.warning(f"[{attempt}/{max_attempts}] Server error {code}, retrying…")
+                    self.logger.warning(f"[{attempt}/{max_attempts}] Server error {code} on {url}; retrying in {backoff}s…")
                 else:
                     raise
-            time.sleep(2 ** attempt)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 10)
         # final attempt, let any exception bubble
-        resp = self._session.get(url, params=params)
-        resp.raise_for_status()
-        return resp.json()
+        response = self._session.get(url, params=params)
+        response.raise_for_status()
+        return response.json()
 
     def fetch_resource(self, resource_type: str, params: dict = None, limit: int = None) -> list[dict]:
         """
@@ -128,3 +144,72 @@ class CourtListenerClient(BaseAPIClient):
             url = data.get("next")
             params = None  # Only use params on first request; never set page manually
         return results 
+
+class AsyncCourtListenerClient:
+    """
+    Asynchronous CourtListener API client with bounded concurrency, robust retry/backoff,
+    and respect for server rate limits and Retry-After headers.
+    Uses HTTPX's built-in AsyncHTTPTransport for automatic retries.
+    """
+    def __init__(self, token: str, max_concurrency: int = 2, rate_limit: float = 3.0):
+        # Use HTTPX built-in AsyncHTTPTransport with retries
+        transport = AsyncHTTPTransport(retries=5)
+        self.client = AsyncClient(
+            transport=transport,
+            headers={"Authorization": f"Token {token}", "Accept": "application/json"},
+            limits=Limits(max_connections=max_concurrency),
+            timeout=60.0,
+        )
+        self.sem = asyncio.Semaphore(max_concurrency)
+        self.rate_limit = rate_limit
+
+    async def _get(self, url, params=None, retries=5):
+        backoff = 1.0
+        for attempt in range(1, retries + 1):
+            async with self.sem:
+                try:
+                    r = await self.client.get(url, params=params)
+                    # If this is a recap‐PDF URL, bail immediately on 429
+                    if "/recap/" in url and r.status_code == 429:
+                        logger.warning(f"429 on recap URL {url}; not retrying.")
+                        return None
+                    r.raise_for_status()
+                    await asyncio.sleep(self.rate_limit + random.uniform(2, 4))
+                    return r.json()
+                except httpx.HTTPStatusError as e:
+                    code = e.response.status_code
+                    # For /recap/ or /recap-documents/, skip immediately on 403/429
+                    if ("/recap/" in url or "/recap-documents/" in url) and code in (403, 429):
+                        logger.warning(f"[{attempt}/{retries}] HTTP {code} on {url} (recap); skipping immediately as empty page.")
+                        return {}
+                    # PATCH: treat 403 and 429 as non-fatal, return empty dict
+                    if code in (403, 429):
+                        logger.warning(f"[{attempt}/{retries}] HTTP {code} on {url}; skipping as empty page.")
+                        # For 429, back-off and retry if attempts remain
+                        if code == 429 and attempt < retries:
+                            retry_after = int(e.response.headers.get("Retry-After", 60))
+                            logger.warning(f"429 received, sleeping {retry_after}s before retrying {url}")
+                            await asyncio.sleep(retry_after)
+                            continue
+                        return {}
+                    if 500 <= code < 600 and attempt < retries:
+                        logger.warning(f"[{attempt}/{retries}] {code} from {url}; back off {backoff}s")
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, 10)
+                        continue
+                    raise
+                except httpx.ReadTimeout:
+                    if attempt < retries:
+                        logger.warning(f"[{attempt}/{retries}] timeout on {url}; retrying")
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, 10)
+                    else:
+                        raise
+        return None
+
+    async def fetch_docs(self, doc_uris: list[str]):
+        """
+        Fire off all doc GETs in parallel, return list of results or exceptions.
+        """
+        tasks = [self._get(uri) for uri in doc_uris]
+        return await asyncio.gather(*tasks, return_exceptions=True) 

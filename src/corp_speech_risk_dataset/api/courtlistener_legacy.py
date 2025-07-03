@@ -140,6 +140,7 @@ def process_statutes(
     output_dir: Optional[str] = None,
     api_mode: str = "standard",
     company_file: Optional[str] = None,
+    chunk_size: int = 10,
 ) -> None:
     """Process a list of statutes and save the results.
     
@@ -152,13 +153,13 @@ def process_statutes(
         output_dir: Directory to save results to
         api_mode: API mode to use ("standard" or "recap")
         company_file: Optional path to CSV file with company names to filter by
+        chunk_size: Number of companies per query chunk (default 50)
     """
     import math
     import csv
     from itertools import islice
 
     client = CourtListenerClient(config, api_mode=api_mode)
-    CHUNK_SIZE = 200  # Safe chunk size for company names due to URL length limits
 
     for statute in statutes:
         base_query = STATUTE_QUERIES[statute].strip()
@@ -171,11 +172,10 @@ def process_statutes(
                 reader = csv.DictReader(f)
                 for row in reader:
                     names.append(row["official_name"].strip())
-            
             # Chunk the names
-            total_chunks = math.ceil(len(names) / CHUNK_SIZE)
+            total_chunks = math.ceil(len(names) / chunk_size)
             for chunk_idx in range(total_chunks):
-                chunk = names[chunk_idx * CHUNK_SIZE : (chunk_idx + 1) * CHUNK_SIZE]
+                chunk = names[chunk_idx * chunk_size : (chunk_idx + 1) * chunk_size]
                 company_filter = "(" + " OR ".join(f'"{n}"' for n in sorted(chunk)) + ")"
                 query = base_query + "\nAND\n" + company_filter
                 logger.info(f"Searching {statute} (chunk {chunk_idx+1}/{total_chunks}): {query}")

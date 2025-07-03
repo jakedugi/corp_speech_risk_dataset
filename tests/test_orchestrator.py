@@ -23,9 +23,10 @@ def test_orchestrator_builds_all_chunks(tmp_path):
         page_size=1,
         date_min="2020-01-01",
         api_mode="standard",
+        chunk_size=2,
     )
     orch.run()
-    expected = build_queries("FTC Section 5", company_file=companies)
+    expected = build_queries("FTC Section 5", company_file=companies, chunk_size=2)
     assert len(orch.queries_processed) == len(expected)
     for (_, q), q_expected in zip(orch.queries_processed, expected):
         assert q.strip() == q_expected.strip() 

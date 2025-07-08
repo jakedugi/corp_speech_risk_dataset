@@ -90,11 +90,43 @@ ROLE_KEYWORDS = {
     "executive team", "governing body", "senior management"
 }
 
-# Directory containing your test JSON files
-JSON_DIR = ROOT / "runtime" / "tmp" / "tmp_json"
+# # # Directory containing your test JSON files
+# JSON_DIR = ROOT / "runtime" / "tmp" / "tmp_json"
 
-# Directory containing your test TXT files
-TXT_DIR  = ROOT / "runtime" / "tmp" / "tmp_txt"
+# # # Directory containing your test TXT files
+# TXT_DIR = ROOT / "runtime" / "tmp" / "tmp_txt"
+
+# JSON_DIR = ROOT / "results" / "courtlistener_v11" / "2:12-cv-00695_caed" / "entries" / "entry_1872715_documents" 
+
+# TXT_DIR = ROOT / "results" / "courtlistener_v11" / "2:12-cv-00695_caed" / "entries" / "entry_1872715_documents"
+
+# / "doc_13417093_text.txt"
+
+# Single metadata JSON
+JSON_DIR = (
+    ROOT
+    / "results"
+    / "courtlistener_v11"
+    / "2:12-cv-00695_caed"
+    / "entries"
+    / "entry_1872715_documents"
+
+)
+
+# Single text file
+TXT_DIR = (
+    ROOT
+    / "results"
+    / "courtlistener_v11"
+    / "2:12-cv-00695_caed"
+    / "entries"
+    / "entry_1872715_documents"
+
+)
+
+# New top-level knobs for ETL I/O roots
+DB_DIR = ROOT / "results" / "courtlistener_v11"  # or CLI override
+MIRROR_OUT_DIR = ROOT / "extracted_mirror"        # or CLI override
 
 KEYWORDS = [
     "Section 5", "15 U.S.C.", "tweet", "Facebook", "misleading", "deceptive",

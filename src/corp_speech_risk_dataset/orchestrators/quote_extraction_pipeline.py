@@ -11,21 +11,34 @@ from ..extractors.attribution import Attributor
 from ..extractors.rerank import SemanticReranker
 from ..models.quote_candidate import QuoteCandidate
 from ..extractors.cleaner import TextCleaner
+from enum import Enum
+from ..utils.stage_writer import StageWriter
+from pathlib import Path
+
+class Stage(Enum):
+    RAW = 0
+    CLEAN = 1
+    EXTRACT = 2
+    ATTRIB = 3
+    RERANK = 4
 
 class QuoteExtractionPipeline:
     """
     Orchestrates the quote extraction workflow.
     Use `run()` to yield results and `save_results()` to write them to disk.
     """
-    def __init__(self, visualization_mode: bool = False, output_dir: Optional[str] = None):
+    def __init__(self, visualization_mode: bool = False, output_dir: Optional[str] = None, mirror_mode: bool = True, db_root: Path | None = None):
         logger.info("Initializing Quote Extraction Pipeline...")
         self.visualization_mode = visualization_mode
-        self.loader = DocumentLoader()
+        self.mirror_mode = mirror_mode
+        self.loader = DocumentLoader(db_root or config.DB_DIR)
         self.cleaner = TextCleaner()
         self.first_pass = FirstPassExtractor(config.KEYWORDS, self.cleaner)
         self.attributor = Attributor(config.COMPANY_ALIASES)
         self.reranker = SemanticReranker(config.SEED_QUOTES, config.THRESHOLD)
         self.output_dir = output_dir or (config.ROOT / "data")
+        if self.mirror_mode:
+            self.stage_writer = StageWriter(self.loader.source_root, config.MIRROR_OUT_DIR)
         if self.visualization_mode:
             self.DATA_DIR = self.output_dir
             self.DATA_DIR.mkdir(exist_ok=True, parents=True)
@@ -67,64 +80,73 @@ class QuoteExtractionPipeline:
         """
         logger.debug("Starting pipeline run...")
         docs = list(self.loader)
-        if self.visualization_mode:
-            with self.file_paths[0].open("a", encoding="utf8") as f0:
-                for doc in docs:
-                    rec = {
-                        "doc_id": doc.doc_id,
-                        "stage": 0,
-                        "text": doc.text,
-                        "context": None,
-                        "speaker": None,
-                        "score": None,
-                        "urls": []
-                    }
-                    f0.write(json.dumps(rec) + "\n")
         for doc in docs:
             logger.debug(f"Processing document: {doc.doc_id}")
             raw_text = doc.text
+            rec = {
+                "doc_id": doc.doc_id,
+                "stage": Stage.RAW.value,
+                "text": raw_text,
+                "context": None,
+                "speaker": None,
+                "score": None,
+                "urls": [],
+                "_src": str(doc.path)
+            }
+            if self.mirror_mode:
+                self.stage_writer.write(doc.path, Stage.RAW.value, rec)
+            if self.visualization_mode:
+                with self.file_paths[0].open("a", encoding="utf8") as f0:
+                    f0.write(json.dumps(rec) + "\n")
             # Stage 1: CLEAN
             cleaned_text = self.cleaner.clean(raw_text)
+            rec_clean = {
+                **rec,
+                "stage": Stage.CLEAN.value,
+                "text": cleaned_text
+            }
+            if self.mirror_mode:
+                self.stage_writer.write(doc.path, Stage.CLEAN.value, rec_clean)
             if self.visualization_mode:
                 with self.file_paths[1].open("a", encoding="utf8") as f1:
-                    rec = {
-                        "doc_id": doc.doc_id,
-                        "stage": 1,
-                        "text": cleaned_text,
-                        "context": None,
-                        "speaker": None,
-                        "score": None,
-                        "urls": []
-                    }
-                    f1.write(json.dumps(rec) + "\n")
+                    f1.write(json.dumps(rec_clean) + "\n")
             # Stage 2: FIRST PASS EXTRACTION
             candidates = list(self.first_pass.extract(cleaned_text))
             candidates = self.merge_adjacent(candidates)
+            if self.mirror_mode and candidates:
+                for qc in candidates:
+                    self.stage_writer.write(doc.path, Stage.EXTRACT.value, {"doc_id": doc.doc_id, "stage": Stage.EXTRACT.value, **qc.to_dict(), "_src": str(doc.path)})
             if self.visualization_mode and candidates:
                 with self.file_paths[2].open("a", encoding="utf8") as f2:
                     for qc in candidates:
-                        rec = {"doc_id": doc.doc_id, "stage": 2, **qc.to_dict()}
-                        f2.write(json.dumps(rec) + "\n")
+                        rec2 = {"doc_id": doc.doc_id, "stage": Stage.EXTRACT.value, **qc.to_dict(), "_src": str(doc.path)}
+                        f2.write(json.dumps(rec2) + "\n")
             if not candidates:
                 continue
             logger.debug(f"Found {len(candidates)} candidates in {doc.doc_id}")
             # Stage 3: ATTRIBUTION
             vetted = list(self.attributor.filter(candidates))
+            if self.mirror_mode and vetted:
+                for qc in vetted:
+                    self.stage_writer.write(doc.path, Stage.ATTRIB.value, {"doc_id": doc.doc_id, "stage": Stage.ATTRIB.value, **qc.to_dict(), "_src": str(doc.path)})
             if self.visualization_mode and vetted:
                 with self.file_paths[3].open("a", encoding="utf8") as f3:
                     for qc in vetted:
-                        rec = {"doc_id": doc.doc_id, "stage": 3, **qc.to_dict()}
-                        f3.write(json.dumps(rec) + "\n")
+                        rec3 = {"doc_id": doc.doc_id, "stage": Stage.ATTRIB.value, **qc.to_dict(), "_src": str(doc.path)}
+                        f3.write(json.dumps(rec3) + "\n")
             if not vetted:
                 continue
             logger.debug(f"Attributed {len(vetted)} quotes in {doc.doc_id}")
             # Stage 4: RERANKING
             final_quotes = list(self.reranker.rerank(vetted))
+            if self.mirror_mode and final_quotes:
+                for qc in final_quotes:
+                    self.stage_writer.write(doc.path, Stage.RERANK.value, {"doc_id": doc.doc_id, "stage": Stage.RERANK.value, **qc.to_dict(), "_src": str(doc.path)})
             if self.visualization_mode and final_quotes:
                 with self.file_paths[4].open("a", encoding="utf8") as f4:
                     for qc in final_quotes:
-                        rec = {"doc_id": doc.doc_id, "stage": 4, **qc.to_dict()}
-                        f4.write(json.dumps(rec) + "\n")
+                        rec4 = {"doc_id": doc.doc_id, "stage": Stage.RERANK.value, **qc.to_dict(), "_src": str(doc.path)}
+                        f4.write(json.dumps(rec4) + "\n")
             if final_quotes:
                 logger.debug(f"Yielding {len(final_quotes)} final quotes for {doc.doc_id}")
                 yield doc.doc_id, final_quotes

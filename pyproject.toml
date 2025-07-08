@@ -55,7 +55,7 @@ dependencies = [
   "pyarrow",
   "urllib3==2.5.0",
   "thinc>=8.1.0,<9.0.0",
-  python-dotenv >=1.0.0,
+  "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

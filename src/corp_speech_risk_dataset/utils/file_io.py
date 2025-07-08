@@ -99,17 +99,10 @@ def download(url: str, path: Path, max_attempts: int = 3, sleep: float = 0.5) ->
             return
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
-            # Treat 403 and 429 as "skip" errors
-            if code in (403, 429):
+            # Treat any 4xx/5xx as skip errors
+            if 400 <= code < 600:
                 logger.warning(f"HTTP {code} for {url}; skipping download.")
                 return
-            # Otherwise, if it's a server error and we have retries left:
-            if 500 <= code < 600 and attempt < effective_retries:
-                backoff = int(exc.response.headers.get("Retry-After", "5")) if code == 429 else sleep * attempt
-                logger.warning(f"[{attempt}/{effective_retries}] Server {code} on {url}; retrying in {backoff}s…")
-                time.sleep(backoff)
-                continue
-            # Let all other errors bubble
             raise
         except Exception as e:
             logger.warning(f"[{attempt}/{effective_retries}] Failed to download {url}: {e}")

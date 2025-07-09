@@ -14,7 +14,9 @@ setup_notebook:
 	uv run python3 scripts/create_notebook.py
 
 # Step 3: Open the generated notebook
+visualize DATA_DIR?=extracted_quotes
 visualize:
-	@echo "--- Launching Jupyter Notebook ---"
-	@echo "If the notebook does not open automatically, copy the URL from the terminal into your browser."
+	@echo "--- Launching notebook for $(DATA_DIR) ---"
+	uv run python3 scripts/create_notebook.py --data-root $(DATA_DIR) \
+	          --out notebooks/reports/pipeline_visualization.ipynb && \
 	uv run python3 -m notebook notebooks/reports/pipeline_visualization.ipynb 

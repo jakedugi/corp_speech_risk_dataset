@@ -71,9 +71,11 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
 3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+ deactivate                                          
+rm -rf .venv                            
+uv venv --python 3.11
+source .venv/bin/activate
+uv sync
 
 4. Configure your API token:
    - Copy `.env.example` to `.env`:

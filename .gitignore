@@ -47,6 +47,7 @@ data/processed/*
 data/transformed/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+data/models/*
 
 # Environment variables
 .env

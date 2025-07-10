@@ -21,4 +21,6 @@ def wl_vector(text: str):
     """
     g_nx = to_dependency_graph(text)
     g_gk = to_grakel_graph(g_nx)
-    return _wl.fit_transform([g_gk])[0]  # SciPy sparse row 
+    dense = _wl.fit_transform([g_gk])[0]           # 1-D NumPy
+    from scipy import sparse
+    return sparse.csr_matrix(dense)                # 1 × n CSR row 

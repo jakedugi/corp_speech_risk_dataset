@@ -1,13 +1,14 @@
 [build-system]
 requires = [
-  "setuptools>=61.0",   # PEP 517 backend
-  "wheel",              # to build wheels
-  "pip",                # GraKeL’s installer helper needs this
-  "numpy>=1.8.2",       # GraKeL build dependency
-  "scipy>=0.13.3",      # GraKeL build dependency
-  "Cython>=0.27.3"      # GraKeL build dependency
+  "setuptools>=61.0",
+  "wheel",
+  "uv_build>=0.7.20,<0.8.0", 
+  "pip",               # ensure pip is bootstrapped
+  "numpy>=1.26.4",     # make NumPy available at build time
+  "Cython>=0.27.3",
+  "scipy==1.13.0 ; platform_machine=='arm64'",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "uv_build"
 # Had to switch to setuptools to build GraKeL to support building C/C++ extensions which uv_build only supports pure python extensions
 
 [project]
@@ -21,11 +22,13 @@ requires-python = ">=3.11,<3.12"
 
 dependencies = [
   "click>=8.0",
-  "msgspec>=0.18.0,<0.20.0",
+  "msgspec==0.19.0",
   "loguru>=0.7.2",
   "spacy==3.7.4",
   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz",
-  "sentencepiece==0.2.0",
+  "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz",
+  "sentencepiece>=0.1.97",
+  "bpemb>=0.3.3",
   "catalogue>=2.0.8",
   "blis==0.7.9",
   "confection>=0.0.3",
@@ -66,7 +69,6 @@ dependencies = [
   "textacy",
   "tensorflow>=2.18.1,<2.19.0",
   "tf-keras",
-  "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.5.0/en_core_web_lg-3.5.0.tar.gz",
   "notebook",
   "nbformat",
   "seaborn",
@@ -83,7 +85,6 @@ dependencies = [
   "thinc>=8.1.0,<9.0.0",
   "python-dotenv>=1.0.0",
   "grakel>=0.1.10",     
-  "graphkernels==0.2.1",
   "scipy==1.13.0",
   "orjson>=3.10",
   "networkx",
@@ -97,7 +98,7 @@ dependencies = [
   "threadpoolctl>=3.1.0",
   "future>=0.18.3",
   "six>=1.16.0",
-  "coreferee==1.4.1",
+  "fastcoref",
 ]
 
 
@@ -111,6 +112,15 @@ dev = [
   "pytest>=8.4.1",
   "pytest-asyncio",
 ]
+
+
+[tool.uv]
+dev-dependencies = [
+  "pytest>=8.4.1",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio",
+]
+
 # Optional: For transformer fallback in Attributor
 # transformers = [
 #  "onnxruntime",
@@ -145,3 +155,8 @@ python_paths = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[tool.setuptools]
+# universal2 wheels if you're going to publish on PyPI
+plat-name = "macosx-11.0-arm64"

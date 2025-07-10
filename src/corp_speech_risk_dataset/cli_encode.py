@@ -1,16 +1,13 @@
 import json
 from pathlib import Path
 import click
-import msgspec
 from loguru import logger
 from src.corp_speech_risk_dataset.encoding.tokenizer import SentencePieceTokenizer
 from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
 from src.corp_speech_risk_dataset.encoding.wl_features import wl_vector
-from src.corp_speech_risk_dataset.models.quote_embedding import QuoteRow
 
-# TODO: point to your trained SentencePiece model
-SP_MODEL_PATH = "spiece.model"
-tokenizer = SentencePieceTokenizer(SP_MODEL_PATH)
+# Will look under data/models/en.wiki.bpe.vs32000.model by default
+tokenizer = SentencePieceTokenizer()
 
 def encode_file(in_path: Path, extracted_root: Path, tokenized_root: Path):
     """Helper: encode one file, writing into mirrored structure."""
@@ -22,14 +19,23 @@ def encode_file(in_path: Path, extracted_root: Path, tokenized_root: Path):
         for line in in_path.open():
             row = json.loads(line)
             vec = wl_vector(row["text"])
-            new_row = QuoteRow(
+            # capture fallback info too
+            sp_ids, used_fallback, fallback_chars = tokenizer.encode_with_flag(row["text"])
+            if used_fallback:
+                logger.warning(f"Byte-fallback for chars: {fallback_chars}")
+            enriched = {
                 **row,
-                sp_ids=tokenizer.encode(row["text"]),
-                deps=[(h, t, l) for h, t, l in to_dependency_graph(row["text"]).edges.data("dep")],
-                wl_indices=vec.indices.tolist(),
-                wl_counts=vec.data.tolist(),
-            )
-            fout.write(msgspec.json.encode(new_row.dict()) + b"\n")
+                "sp_ids": sp_ids,
+                "byte_fallback": used_fallback,
+                "fallback_chars": fallback_chars,
+                "deps": [
+                    (h, t, l)
+                    for h, t, l in to_dependency_graph(row["text"]).edges.data("dep")
+                ],
+                "wl_indices": vec.indices.tolist(),
+                "wl_counts": vec.data.tolist(),
+            }
+            fout.write((json.dumps(enriched, ensure_ascii=False) + "\n").encode())
     logger.success(f"✔ Written tokenized output to {out_path}")
 
 @click.command(context_settings={"show_default": True})

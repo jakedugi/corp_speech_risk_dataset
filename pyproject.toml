@@ -99,6 +99,8 @@ dependencies = [
   "future>=0.18.3",
   "six>=1.16.0",
   "fastcoref",
+  "transformers>=4.41",
+  "tokenizers>=0.20",
 ]
 
 

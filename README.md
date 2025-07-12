@@ -1,5 +1,8 @@
 # Corporate Speech Risk Dataset
 
+! Work in Progress: This repository is under active development. Some modules are still being tested and refactored. !
+
+
 This repository contains code and data for analyzing corporate speech risk across multiple regulatory and legal sources, including FTC, SEC, and CourtListener data.
 
 ## Project Structure
@@ -60,7 +63,7 @@ A Python client for batch searching CourtListener's RECAP database for corporate
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/courtlistener-client.git
+git clone https://github.com/jakedugi/corp_speech_risk_dataset
 cd courtlistener-client
 ```
 

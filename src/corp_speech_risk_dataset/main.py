@@ -4,7 +4,7 @@ from pathlib import Path
 
 from corp_speech_risk_dataset.api.ftc_client import FTCClient
 from corp_speech_risk_dataset.api.sec_client import SECClient
-from corp_speech_risk_dataset.api.courtlistener_client import CourtListenerClient
+from corp_speech_risk_dataset.api.courtlistener import CourtListenerClient
 from corp_speech_risk_dataset.extractors.quote_extractor import QuoteExtractor
 from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
 from corp_speech_risk_dataset.orchestrators.run_pipeline import PipelineOrchestrator
@@ -42,6 +42,7 @@ async def main():
     except Exception as e:
         logger.error(f"Application failed: {str(e)}")
         raise
+
 
 if __name__ == "__main__":
     asyncio.run(main())

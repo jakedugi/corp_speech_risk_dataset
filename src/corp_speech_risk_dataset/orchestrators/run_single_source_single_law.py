@@ -1,20 +1,21 @@
-"""Law-specific pipeline orchestration for the corporate speech risk dataset.
+"""Single source single law orchestrator for the corporate speech risk dataset.
 
-This module handles the collection and processing of data for individual statutes
-or legal provisions.
+This module coordinates the execution of data collection and processing for a specific
+legal source and statute combination.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Dict, Any
+import asyncio
 
 from loguru import logger
 
-from corp_speech_risk_dataset.api.courtlistener_client import CourtListenerClient
+from corp_speech_risk_dataset.api.courtlistener import CourtListenerClient
 from corp_speech_risk_dataset.config import load_config
 from corp_speech_risk_dataset.extractors.quote_extractor import QuoteExtractor
 from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
-from corp_speech_risk_dataset.utils.logging_utils import setup_logging
-from corp_speech_risk_dataset.utils.file_io import ensure_dir
+from corp_speech_risk_dataset.shared.logging_utils import setup_logging
+from corp_speech_risk_dataset.infrastructure.file_io import ensure_dir
 
 def run_law_pipeline(
     statute: str,

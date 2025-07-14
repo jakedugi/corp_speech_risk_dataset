@@ -1,11 +1,12 @@
-"""Main pipeline orchestration for the corporate speech risk dataset.
+"""Async pipeline orchestration for the corporate speech risk dataset.
 
 This module coordinates the execution of multiple data collection and processing steps
-across different legal sources and statutes.
+across different legal sources and statutes using async operations.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+import asyncio
 
 from loguru import logger
 
@@ -13,8 +14,10 @@ from corp_speech_risk_dataset.api.courtlistener import CourtListenerClient
 from corp_speech_risk_dataset.config import load_config
 from corp_speech_risk_dataset.extractors.quote_extractor import QuoteExtractor
 from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
-from corp_speech_risk_dataset.utils.logging_utils import setup_logging
-from corp_speech_risk_dataset.utils.file_io import ensure_dir
+from corp_speech_risk_dataset.shared.logging_utils import setup_logging
+from corp_speech_risk_dataset.infrastructure.file_io import ensure_dir
+from corp_speech_risk_dataset.api.base_api_client import BaseAPIClient
+from corp_speech_risk_dataset.extractors.base_extractor import BaseExtractor
 
 class PipelineOrchestrator:
     def __init__(self, api_clients=None, extractors=None, output_path=None):

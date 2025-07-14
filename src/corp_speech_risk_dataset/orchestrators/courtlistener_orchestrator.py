@@ -11,7 +11,7 @@ import random
 from corp_speech_risk_dataset.api.courtlistener.client import CourtListenerClient, AsyncCourtListenerClient
 from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES, build_queries
 from corp_speech_risk_dataset.api.courtlistener.core import process_full_docket, process_and_save, process_docket_entries, process_recap_fetch
-from corp_speech_risk_dataset.utils.file_io import download, needs_recap_fetch, download_missing_pdfs, load_json, ensure_dir
+from corp_speech_risk_dataset.infrastructure.file_io import download, needs_recap_fetch, download_missing_pdfs, load_json, ensure_dir
 
 """
 Main orchestration workflow for CourtListener multi-step process.

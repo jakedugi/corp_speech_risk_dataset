@@ -1,10 +1,12 @@
+"""Integration tests for the quote extraction pipeline."""
+
 import json
 import pytest
 import logging
 import os
 logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 from corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline import QuoteExtractionPipeline
-from corp_speech_risk_dataset.utils.nltk_setup import ensure_nltk_resources
+from corp_speech_risk_dataset.infrastructure.nltk_setup import ensure_nltk_resources
 
 @pytest.fixture(autouse=True)
 def setup_pipeline_dirs_and_config(tmp_path, monkeypatch):

@@ -1,5 +1,11 @@
-import nbformat as nbf
+"""Create a Jupyter notebook from pipeline stage data."""
+
+import argparse
 from pathlib import Path
+from typing import Dict, List
+import json
+
+import nbformat as nbf
 import polars as pl
 import duckdb
 import holoviews as hv, hvplot.pandas
@@ -15,13 +21,49 @@ STAGE_MAP = {
     4: ["../../data/stage4_reranker.jsonl"]
 }
 
-def create_notebook(data_root: Path, notebook_path: Path):
+def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
+    """Create a Jupyter notebook from stage data.
+    
+    Args:
+        stage_dir: Directory containing stage*.jsonl files
+        output_file: Output notebook path (default: pipeline_report.ipynb)
     """
-    Programmatically generates the pipeline visualization Jupyter notebook.
-    This approach is more robust than trying to write the complex JSON manually.
-    """
-    data_root = data_root.expanduser().resolve()  # Always use absolute path
-    nb = nbf.v4.new_notebook()
+    if output_file is None:
+        output_file = stage_dir / "pipeline_report.ipynb"
+    
+    # Notebook structure
+    notebook = {
+        "cells": [
+            {
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [
+                    "# Pipeline Analysis Report\n\n",
+                    "This notebook was auto-generated from pipeline stage data.\n\n"
+                ]
+            },
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "source": [
+                    "import json\n",
+                    "import pandas as pd\n",
+                    "from pathlib import Path\n",
+                    "from corp_speech_risk_dataset.shared.discovery import find_stage_files\n\n"
+                ]
+            }
+        ],
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3"
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 4
+    }
 
     # --- Papermill parameters cell (always first) ---
     param_cell = nbf.v4.new_code_cell(

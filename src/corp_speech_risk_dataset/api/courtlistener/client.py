@@ -17,7 +17,7 @@ from httpx import AsyncClient, Limits, AsyncHTTPTransport
 
 from corp_speech_risk_dataset.api.base_api_client import BaseAPIClient
 from corp_speech_risk_dataset.custom_types.base_types import APIConfig
-from corp_speech_risk_dataset.utils.http_utils import safe_sync_get, safe_async_get
+from corp_speech_risk_dataset.infrastructure.http_utils import safe_sync_get, safe_async_get
 
 # API endpoint configurations
 API_ENDPOINTS = {

@@ -18,7 +18,7 @@ from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
 from corp_speech_risk_dataset.config import load_config
 from corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator import CourtListenerOrchestrator
 from corp_speech_risk_dataset.workflows.legacy_multistep import LegacyCourtListenerWorkflow
-from corp_speech_risk_dataset.utils.logging_utils import setup_logging
+from corp_speech_risk_dataset.shared.logging_utils import setup_logging
 
 load_dotenv()  # Load environment variables from .env if present
 

@@ -5,125 +5,132 @@
 
 This repository contains code and data for analyzing corporate speech risk across multiple regulatory and legal sources, including FTC, SEC, and CourtListener data.
 
-## Project Structure
+This project follows **Clean Architecture** with Domain-Driven Design patterns:
 
 ```
-corp_speech_risk_dataset/
-├── data/               # Data storage
-│   ├── raw/           # Raw data from sources
-│   ├── processed/     # Processed and transformed data
-│   └── metadata.jsonl # Dataset metadata
-├── notebooks/         # Jupyter notebooks for exploration and analysis
-├── src/              # Source code
-│   ├── api/          # API clients for data sources
-│   ├── extractors/   # Data extraction and processing
-│   ├── orchestrators/# Pipeline orchestration
-│   ├── utils/        # Utility functions
-│   └── types/        # Type definitions
-├── tests/            # Test suite
-└── logs/             # Log files
+📁 Project Root
+├── 📁 src/corp_speech_risk_dataset/     # Main source code (Clean Architecture)
+│   ├── 📁 domain/                       # Business logic (innermost layer)
+│   ├── 📁 application/                  # Use cases and services  
+│   ├── 📁 adapters/                     # Interface adapters
+│   ├── 📁 infrastructure/               # External frameworks/tools
+│   ├── 📁 shared/                       # Cross-cutting utilities
+│   ├── 📁 api/                          # External API clients
+│   ├── 📁 extractors/                   # Text processing pipeline
+│   ├── 📁 orchestrators/                # Workflow coordination
+│   └── 📁 workflows/                    # Business workflows
+├── 📁 data/                             # Data organization
+│   ├── 📁 raw/                          # Original source data
+│   ├── 📁 processed/                    # Cleaned/transformed data
+│   └── 📁 output/                       # Final results
+├── 📁 tests/                            # Test suite
+│   ├── 📁 unit/                         # Unit tests
+│   └── 📁 integration/                  # Integration tests
+├── 📁 scripts/                          # Utility scripts
+├── 📁 docs/                             # Documentation and diagrams
+├── 📁 logs/                             # Application logs
+├── 📁 temp/                             # Temporary files
+└── 📁 artifacts/                        # Historical data and builds
 ```
 
-## Setup
+## 🎯 Core Features
 
-1. Create a virtual environment:
+### Data Sources
+- **CourtListener API**: Legal case data and court documents
+- **FTC/SEC APIs**: Regulatory filings and enforcement actions (planned)
+- **S&P 500 Scraper**: Company metadata and executive information
+
+### Text Processing Pipeline
+1. **Quote Extraction**: Multi-sieve attribution system using regex, NLP, and semantic analysis
+2. **Speaker Attribution**: Identifies corporate speakers using company aliases and role keywords
+3. **Risk Encoding**: Converts text to 2048-dimension Weisfeiler-Lehman feature vectors
+4. **Semantic Reranking**: Filters quotes by similarity to seed examples
+
+### Architecture Benefits
+- **Clean separation of concerns** between business logic and infrastructure
+- **Testable components** with dependency injection
+- **Modular design** enabling easy extension and modification
+- **Modern Python patterns** with type hints and async/await
+
+## 🚀 Quick Start
+
+### Installation
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-1. Configure API credentials in the appropriate client files
-2. Run the data pipeline:
-```bash
-python src/main.py
-```
-
-## Development
-
-- Follow PEP 8 style guide
-- Write tests for new features
-- Update documentation as needed
-
-## License
-
-[License details here]
-
-# CourtListener API Client
-
-A Python client for batch searching CourtListener's RECAP database for corporate speech cases.
-
-## Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/jakedugi/corp_speech_risk_dataset
-cd courtlistener-client
-```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
-
-3. Install dependencies:
- deactivate                                          
-rm -rf .venv                            
-uv venv --python 3.11
-source .venv/bin/activate
+# Install dependencies
 uv sync
 
-4. Configure your API token:
-   - Copy `.env.example` to `.env`:
-     ```bash
-     cp .env.example .env
-     ```
-   - Edit `.env` and add your CourtListener API token:
-     ```
-     COURTLISTENER_API_TOKEN=your_token_here
-     ```
-
-## Usage
-
-Run a search for specific statutes:
-```bash
-python -m src.cli search --statutes "FTC Section 5" "SEC Rule 10b-5" --pages 4 --page-size 50
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your API tokens
 ```
 
-Or use all default statutes:
+### Basic Usage
 ```bash
-python -m src.cli search
+# Run quote extraction pipeline
+python -m corp_speech_risk_dataset.cli orchestrate \
+  --statutes "FTC Section 5" \
+  --pages 5 \
+  --outdir data/raw/courtlistener
+
+# Extract and process quotes
+python scripts/run_extraction.py
+
+# Run tests
+pytest tests/ -v
 ```
 
-## Configuration
+## 🧪 Testing
 
-The client can be configured through:
-1. Environment variables (prefixed with `COURTLISTENER_`)
-2. `.env` file
-3. Command-line arguments
+The project includes comprehensive test coverage:
 
-See `.env.example` for all available options.
+```bash
+# Run all tests
+pytest tests/ -v --cov=src/corp_speech_risk_dataset
 
-## Output
+# Run specific test categories
+pytest tests/unit/ -v                    # Unit tests
+pytest tests/integration/ -v             # Integration tests
+```
 
-Results are saved to `data/raw/courtlistener/YYYY-MM-DD/<statute-slug>/`:
-- `dockets.json`: Case metadata
-- `opinions.json`: Full opinion texts (if `--opinions` flag used)
+## 📊 Data Flow
 
-## Development
+1. **Collection**: Legal cases from CourtListener API
+2. **Processing**: Quote extraction and speaker attribution  
+3. **Encoding**: Text → vector representations for analysis
+4. **Storage**: Organized in `data/` with versioning
 
-- Add new statutes by editing `STATUTE_QUERIES` in `src/courtlistener.py`
-- Run tests: `pytest tests/`
-- Format code: `black src/ tests/`
-- Type check: `mypy src/ tests/`
+## 🔧 Configuration
 
-## Company Name Chunking
+- **API tokens**: Set in `.env` file
+- **Pipeline config**: `src/corp_speech_risk_dataset/orchestrators/quote_extraction_config.py`
+- **Layer boundaries**: Enforced via `.importlinter` configuration
 
-When you use the `--company-file` option, the CLI will automatically split your company list into safe-size chunks (about 200 names per chunk) to avoid exceeding the CourtListener server's URL length limit. Each chunk is queried separately, and results are saved in subdirectories (e.g., `chunk_1`, `chunk_2`, ...). This ensures you only download the opinions you need, without hitting server errors or wasting disk space.
+## 📈 Development
+
+### Code Quality
+- **Type checking**: `mypy src/`
+- **Linting**: `flake8 src/`
+- **Import boundaries**: `import-linter` (when available)
+- **Pre-commit hooks**: Automated formatting and checks
+
+### Architecture Principles
+- Domain layer has **zero external dependencies**
+- Application layer orchestrates **pure business logic**
+- Adapters translate between **external formats and domain objects**
+- Infrastructure handles **framework-specific implementations**
+
+## 📝 License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
+
+---
+
+## Recent Improvements (July 2024)
+
+✅ **Eliminated duplicate code** - Removed 8+ duplicate files across extractors, utilities, and workflows
+✅ **Organized file structure** - Moved data, logs, and artifacts to proper directories  
+✅ **Modernized imports** - Consolidated utilities in shared layer following Clean Architecture
+✅ **Enhanced testing** - Fixed and improved test suite for better reliability
+✅ **Improved navigation** - Clear separation between source code, data, and temporary files
+
+This reorganization improves maintainability, reduces confusion, and follows modern Python project patterns.

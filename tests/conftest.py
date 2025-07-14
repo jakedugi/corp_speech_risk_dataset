@@ -1,6 +1,10 @@
+# conftest.py  (at project root)
 import sys
 from pathlib import Path
 
-# Add the project root to the Python path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root)) 
+ROOT = Path(__file__).parent.resolve()
+SRC = ROOT / "src"
+
+# Add src directory to Python path for proper imports
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))

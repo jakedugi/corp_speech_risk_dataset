@@ -2,38 +2,37 @@
 
 ! Work in Progress: This repository is under active development. Some modules are still being tested and refactored. !
 
-
 This repository contains code and data for analyzing corporate speech risk across multiple regulatory and legal sources, including FTC, SEC, and CourtListener data.
 
 This project follows **Clean Architecture** with Domain-Driven Design patterns:
 
 ```
-📁 Project Root
-├── 📁 src/corp_speech_risk_dataset/     # Main source code (Clean Architecture)
-│   ├── 📁 domain/                       # Business logic (innermost layer)
-│   ├── 📁 application/                  # Use cases and services  
-│   ├── 📁 adapters/                     # Interface adapters
-│   ├── 📁 infrastructure/               # External frameworks/tools
-│   ├── 📁 shared/                       # Cross-cutting utilities
-│   ├── 📁 api/                          # External API clients
-│   ├── 📁 extractors/                   # Text processing pipeline
-│   ├── 📁 orchestrators/                # Workflow coordination
-│   └── 📁 workflows/                    # Business workflows
-├── 📁 data/                             # Data organization
-│   ├── 📁 raw/                          # Original source data
-│   ├── 📁 processed/                    # Cleaned/transformed data
-│   └── 📁 output/                       # Final results
-├── 📁 tests/                            # Test suite
-│   ├── 📁 unit/                         # Unit tests
-│   └── 📁 integration/                  # Integration tests
-├── 📁 scripts/                          # Utility scripts
-├── 📁 docs/                             # Documentation and diagrams
-├── 📁 logs/                             # Application logs
-├── 📁 temp/                             # Temporary files
-└── 📁 artifacts/                        # Historical data and builds
+ Project Root
+├── src/corp_speech_risk_dataset/     # Main source code (Clean Architecture)
+│   ├── domain/                       # Business logic (innermost layer)
+│   ├── application/                  # Use cases and services  
+│   ├── adapters/                     # Interface adapters
+│   ├── infrastructure/               # External frameworks/tools
+│   ├── shared/                       # Cross-cutting utilities
+│   ├── api/                          # External API clients
+│   ├── extractors/                   # Text processing pipeline
+│   ├── orchestrators/                # Workflow coordination
+│   └── workflows/                    # Business workflows
+├── data/                             # Data organization
+│   ├── raw/                          # Original source data
+│   ├── processed/                    # Cleaned/transformed data
+│   └── output/                       # Final results
+├── tests/                            # Test suite
+│   ├── unit/                         # Unit tests
+│   └── integration/                  # Integration tests
+├── scripts/                          # Utility scripts
+├── docs/                             # Documentation and diagrams
+├── logs/                             # Application logs
+├── temp/                             # Temporary files
+└── artifacts/                        # Historical data and builds
 ```
 
-## 🎯 Core Features
+## Core Features
 
 ### Data Sources
 - **CourtListener API**: Legal case data and court documents
@@ -52,7 +51,7 @@ This project follows **Clean Architecture** with Domain-Driven Design patterns:
 - **Modular design** enabling easy extension and modification
 - **Modern Python patterns** with type hints and async/await
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 ```bash
@@ -79,9 +78,9 @@ python scripts/run_extraction.py
 pytest tests/ -v
 ```
 
-## 🧪 Testing
+## Testing
 
-The project includes comprehensive test coverage:
+The project includes comprehensive test coverage with **46 out of 49 tests currently passing**:
 
 ```bash
 # Run all tests
@@ -92,20 +91,25 @@ pytest tests/unit/ -v                    # Unit tests
 pytest tests/integration/ -v             # Integration tests
 ```
 
-## 📊 Data Flow
+### Test Status
+- **46 tests passing** - Core functionality is working
+- **3 tests failing** - Minor configuration and test data issues
+- **Import issues resolved** - Fixed missing infrastructure.nlp module references
+
+## Data Flow
 
 1. **Collection**: Legal cases from CourtListener API
 2. **Processing**: Quote extraction and speaker attribution  
 3. **Encoding**: Text → vector representations for analysis
 4. **Storage**: Organized in `data/` with versioning
 
-## 🔧 Configuration
+## Configuration
 
 - **API tokens**: Set in `.env` file
 - **Pipeline config**: `src/corp_speech_risk_dataset/orchestrators/quote_extraction_config.py`
 - **Layer boundaries**: Enforced via `.importlinter` configuration
 
-## 📈 Development
+## Development
 
 ### Code Quality
 - **Type checking**: `mypy src/`
@@ -119,18 +123,10 @@ pytest tests/integration/ -v             # Integration tests
 - Adapters translate between **external formats and domain objects**
 - Infrastructure handles **framework-specific implementations**
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
 ---
-
-## Recent Improvements (July 2024)
-
-✅ **Eliminated duplicate code** - Removed 8+ duplicate files across extractors, utilities, and workflows
-✅ **Organized file structure** - Moved data, logs, and artifacts to proper directories  
-✅ **Modernized imports** - Consolidated utilities in shared layer following Clean Architecture
-✅ **Enhanced testing** - Fixed and improved test suite for better reliability
-✅ **Improved navigation** - Clear separation between source code, data, and temporary files
 
 This reorganization improves maintainability, reduces confusion, and follows modern Python project patterns.

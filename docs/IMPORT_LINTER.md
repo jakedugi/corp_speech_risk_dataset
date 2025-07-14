@@ -16,14 +16,14 @@ The layers are organized from most permissive (outer) to most restrictive (inner
 
 ## Dependency Rules
 
-✅ **Allowed imports:**
+**Allowed imports:**
 - `infrastructure` → `adapters`, `application`, `domain`, `shared`
 - `adapters` → `application`, `domain`, `shared`
 - `application` → `domain`, `shared`
 - `domain` → `shared` only
 - `shared` → no internal dependencies
 
-❌ **Forbidden imports:**
+**Forbidden imports:**
 - Any inner layer importing from outer layers
 - `domain` importing from `application`, `adapters`, or `infrastructure`
 - `application` importing from `adapters` or `infrastructure`
@@ -74,7 +74,7 @@ exhaustive = False
 
 ## Benefits
 
-- 🛡️ **Prevents architecture erosion** - Catches violations early
-- 📦 **Enforces separation of concerns** - Keeps business logic isolated
-- 🧪 **Improves testability** - Domain logic can be tested without dependencies
-- 📚 **Documents architecture** - Makes layer boundaries explicit
+- **Prevents architecture erosion** - Catches violations early
+- **Enforces separation of concerns** - Keeps business logic isolated
+- **Improves testability** - Domain logic can be tested without dependencies
+- **Documents architecture** - Makes layer boundaries explicit

@@ -10,7 +10,7 @@ from pathlib import Path
 import re
 from spacy.pipeline import EntityRuler
 
-from ..utils.nlp import get_nlp
+from ..infrastructure.nlp import get_nlp
 from ..models.quote_candidate import QuoteCandidate
 from ..domain.ports import QuoteAttributor
 from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS

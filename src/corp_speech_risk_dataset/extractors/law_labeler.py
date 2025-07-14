@@ -1,11 +1,10 @@
-"""Law labeling for legal documents."""
+"""Legal statute labeling for extracted quotes."""
 
 from pathlib import Path
-from typing import Dict, List, Optional
-
+from typing import List, Dict
 from loguru import logger
 
-from corp_speech_risk_dataset.utils.file_io import load_json, save_json, list_json_files
+from corp_speech_risk_dataset.infrastructure.file_io import load_json, save_json, list_json_files
 
 class LawLabeler:
     """Labels legal documents with relevant laws and regulations."""

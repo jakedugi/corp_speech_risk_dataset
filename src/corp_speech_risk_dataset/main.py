@@ -8,7 +8,7 @@ from corp_speech_risk_dataset.api.courtlistener_client import CourtListenerClien
 from corp_speech_risk_dataset.extractors.quote_extractor import QuoteExtractor
 from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
 from corp_speech_risk_dataset.orchestrators.run_pipeline import PipelineOrchestrator
-from corp_speech_risk_dataset.utils.logging_utils import setup_logging
+from corp_speech_risk_dataset.shared.logging_utils import setup_logging
 
 logger = setup_logging()
 

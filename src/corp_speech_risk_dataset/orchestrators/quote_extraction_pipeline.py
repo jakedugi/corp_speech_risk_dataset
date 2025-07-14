@@ -12,7 +12,7 @@ from ..extractors.rerank import SemanticReranker
 from ..models.quote_candidate import QuoteCandidate
 from ..extractors.cleaner import TextCleaner
 from enum import Enum
-from ..utils.stage_writer import StageWriter
+from ..shared.stage_writer import StageWriter
 from pathlib import Path
 
 class Stage(Enum):

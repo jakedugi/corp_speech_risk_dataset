@@ -1,14 +1,30 @@
-# -----------------------------
-# Python bytecode & extensions
-# -----------------------------
+# --- IDEs & Editors ---
+.vscode/
+.idea/
+*.iml
+*.sublime-*
+*.code-workspace
+*.nbproject/
+*.tmproj
+*.project
+*.DS_Store
+*.AppleDouble
+*.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Python Bytecode & Caches ---
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyo
+*.pyd
+*.pyc
 
-# -----------------------------
-# Virtual environments & Python packaging
-# -----------------------------
+# --- Virtual Environments & Packaging ---
 .venv/
 venv/
 env/
@@ -24,17 +40,13 @@ wheels/
 *.egg
 share/python-wheels/
 
-# -----------------------------
-# Installer & build artifacts
-# -----------------------------
+# --- Installer & Build Artifacts ---
 pip-log.txt
 pip-delete-this-directory.txt
 *.manifest
 *.spec
 
-# -----------------------------
-# Test, coverage & typechecker
-# -----------------------------
+# --- Test, Coverage, & Typechecker ---
 .pytest_cache/
 .coverage
 .coverage.*
@@ -51,50 +63,68 @@ coverage.xml
 .dmypy.json
 .pyre/
 .ruff_cache/
+.prof
+.profraw
 
-# -----------------------------
-# IDE & editor
-# -----------------------------
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-*.swp
-*.swo
-.DS_Store
-
-# -----------------------------
-# Jupyter Notebooks
-# -----------------------------
+# --- Jupyter & IPython ---
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
+.ipython/
+*.nbconvert.ipynb
 
-# -----------------------------
-# Logs (keep empty folder)
-# -----------------------------
-logs/
-!logs/.gitkeep
-
-# -----------------------------
-# Data directories (keep structure)
-# -----------------------------
-data/raw/
-!data/raw/.gitkeep
-data/processed/
-!data/processed/.gitkeep
-data/transformed/
-data/models/
-
-# -----------------------------
-# Environment variables
-# -----------------------------
-.env*
-!.env.example
-.cursorconfig.yaml
-
-# -----------------------------
-# Miscellaneous
-# -----------------------------
+# --- Data Science Artifacts ---
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.joblib
+*.sav
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.mlmodel
+*.pb
+*.tflite
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.xlsm
+*.ods
+*.db
+*.sqlite*
+*.arrow
+*.orc
+*.avro
+*.rds
+*.sas7bdat
+*.dta
+*.sav
+*.mat
+*.arff
+*.json
+*.jsonl
+*.yaml
+*.yml
+*.xml
+*.html
+*.pdf
+*.docx
+*.pptx
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.gz
+*.bz2
+*.xz
+*.lzma
 *.log
 *.bak
 *.tmp
@@ -103,43 +133,60 @@ data/models/
 *.pem
 *.key
 
-# -----------------------------
-# Temporary & output files
-# -----------------------------
-*.json
-*.jsonl
-*.txt
-*.csv
-*.pdf
-*.docx
-*.xls
-*.xlsx
-*.pptx
-tmp_txt/
-tmp_json/
+# --- Data, Output, & Artifacts ---
+data/
+temp/
+artifacts/
+logs/*.log
+output/
+results/
+models/
+checkpoints/
+experiments/
 
-# -----------------------------
-# Cursor AI Editor
-# -----------------------------
+# --- Node/npm (if any JS tooling) ---
+node_modules/
+package-lock.json
+yarn.lock
+
+# --- Diagrams & Generated Docs ---
+docs/_build/
+docs/diagrams/
+
+# --- Cursor AI Editor ---
 .cursor/
 .cursorignore
 .cursorindexingignore
 
-# -----------------------------
-# Abstra, mkdocs, Rope, PyBuilder
-# -----------------------------
-.abstra/
-.site/
-.ropeproject/
-.pybuilder/
-target/
+# --- Miscellaneous ---
+*.swp
+*.swo
+*.bak
+*.tmp
+*.temp
+*.orig
+*.pem
+*.key
+*.lock
+*.pid
+*.seed
+*.out
+*.err
+*.log
+*.gz
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.bz2
+*.xz
+*.lzma
 
-# -----------------------------
-# Sphinx docs
-# -----------------------------
-docs/_build/
-
-# -----------------------------
-# Exclude CourtListener chunks
-# -----------------------------
+# --- Exclude CourtListener chunks ---
 data/raw/courtlistener/**/chunk_*/
+
+# --- Keep structure for empty folders ---
+!logs/.gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep

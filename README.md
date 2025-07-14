@@ -127,6 +127,3 @@ pytest tests/integration/ -v             # Integration tests
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
----
-
-This reorganization improves maintainability, reduces confusion, and follows modern Python project patterns.

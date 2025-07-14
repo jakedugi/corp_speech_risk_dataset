@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [pre-commit]
+        args:
+          - --all-files
+          - --show-diff-on-failure
+          - --auto-stage
+
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+        args:
+          - --all-files
+          - --show-diff-on-failure
+          - --auto-stage

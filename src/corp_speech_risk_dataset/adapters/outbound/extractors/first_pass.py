@@ -10,7 +10,6 @@ from typing import List, Iterator, Set
 import nltk
 from loguru import logger
 from ..models.quote_candidate import QuoteCandidate
-from ..domain.ports import QuoteExtractor
 
 # optional spaCy sentence splitter
 try:
@@ -21,7 +20,7 @@ try:
 except ImportError:
     _spacy_nlp = None
 
-class FirstPassExtractor(QuoteExtractor):
+class FirstPassExtractor:
     # ───────────── configurable constants ─────────
     MAX_SENT_WINDOW   = 10           # window = ± this many sentences (increased for test)
     MIN_QUOTE_CHARS   = 20          # ignore ultra-short matches ("hi" etc.)
@@ -57,44 +56,33 @@ class FirstPassExtractor(QuoteExtractor):
     STOP_RE = re.compile("|".join(STOP_PHRASES), re.I) if STOP_PHRASES else re.compile(r'^\b$')  # dummy fallback
 
     def __init__(self, keywords: List[str], cleaner):
-        """
-        Initializes the extractor with keywords and a text cleaner.
-
-        Args:
-            keywords: List of keywords to filter for relevant content
-            cleaner: Text cleaning utility instance
-        """
-        self.keywords = set(k.lower() for k in keywords)
+        self.keywords: Set[str] = {k.lower() for k in keywords}
+        self._seen_hashes: deque[int] = deque(maxlen=8000)
         self.cleaner = cleaner
-        self.seen_hashes: deque = deque(maxlen=10_000)
+        try:
+            nltk.data.find("tokenizers/punkt")
+        except LookupError:
+            nltk.download("punkt")
 
-    def _is_near_duplicate(self, quote: str) -> bool:
-        """Simple SimHash-based deduplication."""
-        h = self._simhash(quote)
-        for seen in self.seen_hashes:
-            if self._hamming_distance(h, seen) <= self.MAX_DUP_HAMMING:
-                return True
-        self.seen_hashes.append(h)
-        return False
-
-    def _simhash(self, text: str, bits: int = 64) -> int:
-        """Simplified SimHash implementation."""
-        words = text.lower().split()
-        if not words:
-            return 0
-        vec = [0] * bits
-        for word in words:
-            h = hash(word) % (2**32)
+    @staticmethod
+    def _simhash(text: str, bits: int = 64) -> int:
+        """
+        SimHash implementation for approximate duplicate detection.
+        """
+        v = [0] * bits
+        for token in re.findall(r'\w+', text.lower()):
+            h = int(hashlib.md5(token.encode()).hexdigest(), 16)
             for i in range(bits):
-                if h & (1 << i):
-                    vec[i] += 1
-                else:
-                    vec[i] -= 1
-        return sum(1 << i for i, v in enumerate(vec) if v > 0)
+                v[i] += 1 if h >> i & 1 else -1
+        return sum(1 << i for i, x in enumerate(v) if x > 0)
 
-    def _hamming_distance(self, h1: int, h2: int) -> int:
-        """Count differing bits."""
-        return bin(h1 ^ h2).count('1')
+    def _is_near_duplicate(self, text: str) -> bool:
+        h = self._simhash(text)
+        for prev in self._seen_hashes:
+            if bin(h ^ prev).count("1") <= self.MAX_DUP_HAMMING:
+                return True
+        self._seen_hashes.append(h)
+        return False
 
     def extract(self, doc_text: str) -> Iterator[QuoteCandidate]:
         # Scan per-paragraph to avoid page headers & stray lines

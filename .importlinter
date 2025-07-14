@@ -1,0 +1,23 @@
+[importlinter]
+# Point at your main package
+root_package = corp_speech_risk_dataset
+
+# Optional: avoid treating TYPE_CHECKING imports as real imports
+exclude_type_checking_imports = True
+
+[importlinter:contract:layers]
+# A human-readable name for CI output
+name = Corporate Speech Risk Dataset Layered Architecture
+type = layers
+
+# List layers from highest (most permissive) to lowest (most restrictive)
+# Following Clean Architecture dependency rules: outer layers can import inner layers only
+layers =
+    corp_speech_risk_dataset.shared
+    corp_speech_risk_dataset.infrastructure
+    corp_speech_risk_dataset.adapters
+    corp_speech_risk_dataset.application
+    corp_speech_risk_dataset.domain
+
+# Don't fail on unrecognized packages for simplicity
+exhaustive = False

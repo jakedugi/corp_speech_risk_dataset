@@ -12,14 +12,13 @@ from spacy.pipeline import EntityRuler
 
 from ..utils.nlp import get_nlp
 from ..models.quote_candidate import QuoteCandidate
-from ..domain.ports import QuoteAttributor
 from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS
 
 # Optional transformer imports (commented out)
 # import onnxruntime as ort
 # from transformers import DistilBertTokenizerFast
 
-class Attributor(QuoteAttributor):
+class Attributor:
     """
     Multi-sieve quote attribution:
       1) Rule-based cue regex
@@ -49,22 +48,27 @@ class Attributor(QuoteAttributor):
         # self.ort_sess = ort.InferenceSession("distilbert_cpu_quant.onnx")
 
     def _add_alias_ruler(self):
-        """Add custom entity ruler with our aliases (company + role keywords)."""
+        """Adds _all_ names into an EntityRuler under label 'COMPANY'."""
+        patterns = [
+            {"label": "COMPANY", "pattern": name}
+            for name in self.aliases
+        ]
         if "entity_ruler" not in self.nlp.pipe_names:
-            ruler = self.nlp.add_pipe("entity_ruler", before="ner")
-            patterns = []
-            for alias in self.aliases:
-                patterns.append({"label": "CUSTOM_ENTITY", "pattern": alias})
-            for keyword in ROLE_KEYWORDS:
-                patterns.append({"label": "CUSTOM_ENTITY", "pattern": keyword})
-            ruler.add_patterns(patterns)
+            self.nlp.add_pipe("entity_ruler", before="ner")
+        ruler = self.nlp.get_pipe("entity_ruler")
+        ruler.add_patterns(patterns)
 
     def filter(self, candidates: List[QuoteCandidate]) -> Iterable[QuoteCandidate]:
         """
-        Applies all sieves in order. If any sieve finds a valid attribution,
-        we break and yield that result. Otherwise, discard the candidate.
-        """
+        Filters a list of candidates, keeping only those attributed to
+        a known alias.
 
+        Args:
+            candidates: A list of QuoteCandidate objects from the first pass.
+
+        Yields:
+            Enriched QuoteCandidate objects with the speaker identified.
+        """
         for qc in candidates:
             # 0) Sanitize unbalanced quotes
             ctx = qc.context
@@ -122,30 +126,41 @@ class Attributor(QuoteAttributor):
                 yield qc
                 continue
 
-            # 4) Alias-enhanced NER via EntityRuler
-            entities = [ent for ent in doc.ents if ent.label_ in {"PERSON", "ORG", "CUSTOM_ENTITY"}]
-            for ent in entities:
-                if ent.text.lower() in aliases:
+            # 4) Alias-enhanced NER/EntityRuler
+            for ent in doc.ents:
+                if ent.label_ in {"PERSON","ORG","COMPANY"} and ent.text.lower() in low_ctx:
                     qc.speaker = ent.text
                     yield qc
                     break
             if getattr(qc, "speaker", None):
                 continue
 
-            # 5) Optional quantized DistilBERT pipeline (disabled)
-            # if hasattr(self, 'ort_sess'):
-            #     inputs = self.tokenizer(ctx, return_tensors="np", truncation=True, max_length=512)
-            #     outputs = self.ort_sess.run(None, {"input_ids": inputs["input_ids"], "attention_mask": inputs["attention_mask"]})
-            #     ...
+            # 5) Optional quantized DistilBERT fallback (commented out)
+            # inputs = self.tokenizer(qc.quote, ctx, return_tensors="np")
+            # outs   = self.ort_sess.run(None, inputs)
+            # pred   = outs[0].argmax(-1)[0]
+            # qc.speaker = id2label[pred]
+            # yield qc
+            # continue
 
-            # 6) Final alias & role fallbacks
+            # 6) Commented-out heavy sieves
+            # (coreference, LLM prompts)
+
+            # 7) Final alias & role fallbacks
             for alias in aliases:
-                if alias in low_ctx:
+                # skip 1-letter tickers *and* pronoun/ticker "it" (ticker=IT)
+                if len(alias) < 2 or alias in {"it","he","she","they","we","i","you","its","their"}:
+                    continue
+                pat = re.compile(rf'\b{re.escape(alias)}\b')
+                if pat.search(low_ctx) or pat.search(low_quote):
                     qc.speaker = alias.title()
-                    yield qc
                     break
-            if getattr(qc, "speaker", None):
-                continue
+            else:
+                for role in ROLE_KEYWORDS:
+                    if role in low_ctx or role in low_quote:
+                        qc.speaker = role.title()
+                        break
+                else:
+                    qc.speaker = "Unknown"
 
-            # If no attribution found, discard this candidate
-            # (do not yield)
+            yield qc

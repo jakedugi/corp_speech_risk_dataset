@@ -5,9 +5,8 @@ similarity to a set of seed quotes.
 from sentence_transformers import SentenceTransformer, util
 from typing import List, Iterator
 from ..models.quote_candidate import QuoteCandidate
-from ..domain.ports import QuoteReranker
 
-class SemanticReranker(QuoteReranker):
+class SemanticReranker:
     """
     Uses a SentenceTransformer model to encode quotes and score them against
     seed examples, filtering out those below a given threshold.

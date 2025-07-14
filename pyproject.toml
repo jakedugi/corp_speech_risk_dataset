@@ -2,7 +2,7 @@
 requires = [
   "setuptools>=61.0",
   "wheel",
-  "uv_build>=0.7.20,<0.8.0", 
+  "uv_build>=0.7.20,<0.8.0",
   "pip",               # ensure pip is bootstrapped
   "numpy>=1.26.4",     # make NumPy available at build time
   "Cython>=0.27.3",
@@ -84,7 +84,7 @@ dependencies = [
   "urllib3==2.5.0",
   "thinc>=8.1.0,<9.0.0",
   "python-dotenv>=1.0.0",
-  "grakel>=0.1.10",     
+  "grakel>=0.1.10",
   "scipy==1.13.0",
   "orjson>=3.10",
   "networkx",
@@ -101,6 +101,13 @@ dependencies = [
   "fastcoref",
   "transformers>=4.41",
   "tokenizers>=0.20",
+  "radon>=6.0.1",
+  "flake8>=7.3.0",
+  "pylint>=3.3.7",
+  "bandit>=1.8.6",
+  "pydeps>=3.0.1",
+  "libcst>=1.8.2",
+  "import-linter>=2.3",
 ]
 
 

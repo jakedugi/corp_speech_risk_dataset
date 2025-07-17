@@ -3,6 +3,7 @@ from typing import List, Tuple
 from transformers import GPT2TokenizerFast
 from loguru import logger
 
+
 class SentencePieceTokenizer:
     """
     Byte-level BPE tokenizer using GPT-2's vocabulary.

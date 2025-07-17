@@ -2,6 +2,7 @@
 Abstract base classes and ports for the extraction domain.
 Defines the core interfaces that all extractors must implement.
 """
+
 from abc import ABC, abstractmethod
 from typing import Iterator, List
 from ..models.quote_candidate import QuoteCandidate

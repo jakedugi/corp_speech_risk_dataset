@@ -8,10 +8,27 @@ from httpx import HTTPStatusError
 import asyncio
 import random
 
-from corp_speech_risk_dataset.api.courtlistener.client import CourtListenerClient, AsyncCourtListenerClient
-from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES, build_queries
-from corp_speech_risk_dataset.api.courtlistener.core import process_full_docket, process_and_save, process_docket_entries, process_recap_fetch
-from corp_speech_risk_dataset.infrastructure.file_io import download, needs_recap_fetch, download_missing_pdfs, load_json, ensure_dir
+from corp_speech_risk_dataset.api.courtlistener.client import (
+    CourtListenerClient,
+    AsyncCourtListenerClient,
+)
+from corp_speech_risk_dataset.api.courtlistener.queries import (
+    STATUTE_QUERIES,
+    build_queries,
+)
+from corp_speech_risk_dataset.api.courtlistener.core import (
+    process_full_docket,
+    process_and_save,
+    process_docket_entries,
+    process_recap_fetch,
+)
+from corp_speech_risk_dataset.infrastructure.file_io import (
+    download,
+    needs_recap_fetch,
+    download_missing_pdfs,
+    load_json,
+    ensure_dir,
+)
 
 """
 Main orchestration workflow for CourtListener multi-step process.
@@ -20,6 +37,8 @@ This class coordinates the multi-step download and processing of dockets, opinio
 
 Refactored to call the API client and process_* functions directly, avoiding any import from the CLI or cli_helpers.
 """
+
+
 class CourtListenerOrchestrator:
     def __init__(
         self,
@@ -47,7 +66,9 @@ class CourtListenerOrchestrator:
         self.chunk_size = chunk_size
         self.async_mode = async_mode
         self.client = CourtListenerClient(config, api_mode=api_mode)
-        self.async_client = AsyncCourtListenerClient(self.token, max_concurrency=2, rate_limit=3.0)
+        self.async_client = AsyncCourtListenerClient(
+            self.token, max_concurrency=2, rate_limit=3.0
+        )
 
     def run(self):
         """
@@ -57,9 +78,13 @@ class CourtListenerOrchestrator:
         if self.async_mode:
             asyncio.run(self.run_async())
             return
-        logger.info("Starting legacy-compatible CourtListener orchestration (search + full hydrate)")
+        logger.info(
+            "Starting legacy-compatible CourtListener orchestration (search + full hydrate)"
+        )
         for statute in self.statutes:
-            queries = build_queries(statute, self.company_file, chunk_size=self.chunk_size)
+            queries = build_queries(
+                statute, self.company_file, chunk_size=self.chunk_size
+            )
             for query in queries:
                 search_dir = self.outdir / "search"
                 self._search_and_hydrate(query, search_dir)
@@ -69,9 +94,13 @@ class CourtListenerOrchestrator:
         """
         Async version: hydrates dockets in parallel using AsyncCourtListenerClient for doc fetching.
         """
-        logger.info("Starting ASYNC CourtListener orchestration (search + full hydrate)")
+        logger.info(
+            "Starting ASYNC CourtListener orchestration (search + full hydrate)"
+        )
         for statute in self.statutes:
-            queries = build_queries(statute, self.company_file, chunk_size=self.chunk_size)
+            queries = build_queries(
+                statute, self.company_file, chunk_size=self.chunk_size
+            )
             for query in queries:
                 search_dir = self.outdir / "search"
                 await self._search_and_hydrate_async(query, search_dir)
@@ -104,7 +133,9 @@ class CourtListenerOrchestrator:
             json.dump(data, f, indent=2)
         logger.info(f"Saved search results to {search_path}")
         # Hydrate dockets in parallel
-        await asyncio.gather(*(self._hydrate_docket_async(dk) for dk in data.get("results", [])))
+        await asyncio.gather(
+            *(self._hydrate_docket_async(dk) for dk in data.get("results", []))
+        )
 
     def _hydrate_docket(self, dk: dict):
         """
@@ -145,13 +176,15 @@ class CourtListenerOrchestrator:
                 "request_type": 3,
                 "docket": str(dk_id),  # Use internal docket ID for v4
                 "pacer_username": os.getenv("PACER_USER"),
-                "pacer_password": os.getenv("PACER_PASS")
+                "pacer_password": os.getenv("PACER_PASS"),
             }
             try:
                 process_recap_fetch(self.config, payload)
             except HTTPStatusError as e:
                 if e.response.status_code == 400:
-                    logger.warning(f"No free RECAP attachments for {slug}; skipping. ({e})")
+                    logger.warning(
+                        f"No free RECAP attachments for {slug}; skipping. ({e})"
+                    )
                 else:
                     raise
 
@@ -164,7 +197,7 @@ class CourtListenerOrchestrator:
             pages=1,
             page_size=100,
             output_dir=entries_dir,
-            api_mode="recap"
+            api_mode="recap",
         )
 
         # --- Patch: fetch recap-document metadata and PDFs for each entry ---
@@ -179,7 +212,9 @@ class CourtListenerOrchestrator:
                         doc = self.client._get(resource)
                     except HTTPStatusError as e:
                         if e.response.status_code == 503:
-                            logger.warning(f"Recap-document {resource} temporarily unavailable—skipping.")
+                            logger.warning(
+                                f"Recap-document {resource} temporarily unavailable—skipping."
+                            )
                             continue
                         else:
                             raise
@@ -189,9 +224,13 @@ class CourtListenerOrchestrator:
                     # Download PDF if available and allowed
                     if doc.get("filepath_local"):
                         if doc.get("is_available") is False:
-                            logger.warning(f"PDF {doc['id']} is marked unavailable—skipping.")
+                            logger.warning(
+                                f"PDF {doc['id']} is marked unavailable—skipping."
+                            )
                             continue
-                        pdf_url = urljoin("https://www.courtlistener.com/", doc["filepath_local"])
+                        pdf_url = urljoin(
+                            "https://www.courtlistener.com/", doc["filepath_local"]
+                        )
                         pdf_dest = filings_dir / f"{doc['id']}.pdf"
                         if not pdf_dest.exists():
                             if not pdf_url.startswith("http"):
@@ -202,20 +241,28 @@ class CourtListenerOrchestrator:
                                 except HTTPStatusError as e:
                                     code = e.response.status_code
                                     if code in (403, 429):
-                                        logger.warning(f"PDF {doc['id']} returned HTTP {code}—skipping.")
+                                        logger.warning(
+                                            f"PDF {doc['id']} returned HTTP {code}—skipping."
+                                        )
                                     else:
                                         raise
                                 except Exception as e:
-                                    logger.warning(f"Failed to download PDF for doc {doc['id']}: {e}")
+                                    logger.warning(
+                                        f"Failed to download PDF for doc {doc['id']}: {e}"
+                                    )
 
         # 6️⃣ Clusters → Opinions
         clusters_dir = case_dir / "clusters"
-        process_and_save(self.client, "clusters", {"docket": dk_id}, clusters_dir, limit=100)
+        process_and_save(
+            self.client, "clusters", {"docket": dk_id}, clusters_dir, limit=100
+        )
         opinions_dir = case_dir / "opinions"
         ensure_dir(opinions_dir)
         for cluster_path in clusters_dir.glob("*.json"):
             cl_id = load_json(cluster_path)["id"]
-            process_and_save(self.client, "opinions", {"cluster": cl_id}, opinions_dir, limit=100)
+            process_and_save(
+                self.client, "opinions", {"cluster": cl_id}, opinions_dir, limit=100
+            )
 
     async def _hydrate_docket_async(self, dk: dict):
         """
@@ -251,13 +298,15 @@ class CourtListenerOrchestrator:
                 "request_type": 3,
                 "docket": str(dk_id),
                 "pacer_username": os.getenv("PACER_USER"),
-                "pacer_password": os.getenv("PACER_PASS")
+                "pacer_password": os.getenv("PACER_PASS"),
             }
             try:
                 process_recap_fetch(self.config, payload)
             except HTTPStatusError as e:
                 if e.response.status_code == 400:
-                    logger.warning(f"No free RECAP attachments for {slug}; skipping. ({e})")
+                    logger.warning(
+                        f"No free RECAP attachments for {slug}; skipping. ({e})"
+                    )
                 else:
                     raise
         # 5️⃣ Entries (RECAP mode gives nested docs)
@@ -269,7 +318,7 @@ class CourtListenerOrchestrator:
             pages=1,
             page_size=100,
             output_dir=entries_dir,
-            api_mode="recap"
+            api_mode="recap",
         )
         # --- Async: fetch recap-document metadata and PDFs in parallel ---
         filings_dir = case_dir / "filings"
@@ -295,8 +344,10 @@ class CourtListenerOrchestrator:
             # small sleep with jitter to avoid bursts
             await asyncio.sleep(self.async_client.rate_limit + random.random() * 0.5)
         for resource, doc in zip(doc_uris, results):
-            if not isinstance(doc, dict) or 'id' not in doc:
-                logger.warning(f"Skipping document without id for {resource!r}: {doc!r}")
+            if not isinstance(doc, dict) or "id" not in doc:
+                logger.warning(
+                    f"Skipping document without id for {resource!r}: {doc!r}"
+                )
                 continue
             entry_file, doc_meta = entry_map[resource]
             doc_path = entries_dir / f"doc_{doc['id']}.json"
@@ -307,7 +358,9 @@ class CourtListenerOrchestrator:
                 if doc.get("is_available") is False:
                     logger.warning(f"PDF {doc['id']} is marked unavailable—skipping.")
                     continue
-                pdf_url = urljoin("https://www.courtlistener.com/", doc["filepath_local"])
+                pdf_url = urljoin(
+                    "https://www.courtlistener.com/", doc["filepath_local"]
+                )
                 pdf_dest = filings_dir / f"{doc['id']}.pdf"
                 if not pdf_dest.exists():
                     if not pdf_url.startswith("http"):
@@ -318,19 +371,27 @@ class CourtListenerOrchestrator:
                         except HTTPStatusError as e:
                             code = e.response.status_code
                             if code in (403, 429):
-                                logger.warning(f"PDF {doc['id']} returned HTTP {code}—skipping.")
+                                logger.warning(
+                                    f"PDF {doc['id']} returned HTTP {code}—skipping."
+                                )
                             else:
                                 raise
                         except Exception as e:
-                            logger.warning(f"Failed to download PDF for doc {doc['id']}: {e}")
+                            logger.warning(
+                                f"Failed to download PDF for doc {doc['id']}: {e}"
+                            )
         # 6️⃣ Clusters → Opinions (sync for now)
         clusters_dir = case_dir / "clusters"
-        process_and_save(self.client, "clusters", {"docket": dk_id}, clusters_dir, limit=100)
+        process_and_save(
+            self.client, "clusters", {"docket": dk_id}, clusters_dir, limit=100
+        )
         opinions_dir = case_dir / "opinions"
         ensure_dir(opinions_dir)
         for cluster_path in clusters_dir.glob("*.json"):
             cl_id = load_json(cluster_path)["id"]
-            process_and_save(self.client, "opinions", {"cluster": cl_id}, opinions_dir, limit=100)
+            process_and_save(
+                self.client, "opinions", {"cluster": cl_id}, opinions_dir, limit=100
+            )
 
     # --- tiny helper for reading JSON dumps -------------------------------
     @staticmethod

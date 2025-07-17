@@ -12,11 +12,12 @@ from src.corp_speech_risk_dataset.cli_encode import main as cli_encode_main
 # ---------------------------------------------------------------------------
 # Model initialisation
 # ---------------------------------------------------------------------------
-tokenizer = SentencePieceTokenizer()   # GPT-2 tokenizer, no fallback needed
+tokenizer = SentencePieceTokenizer()  # GPT-2 tokenizer, no fallback needed
 
 # ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
+
 
 def test_gpt2_roundtrip_basic():
     """Round-trip sanity check for the GPT-2 tokenizer."""
@@ -35,9 +36,9 @@ def test_gpt2_roundtrip_special_chars():
         "10-K filing § & ™ symbols",
         "UTF-8: 🏢 📊 💼",  # emoji
         "Café résumé naïve",  # accented chars
-        '"Smart quotes" and \'apostrophes\'',  # smart punctuation
+        "\"Smart quotes\" and 'apostrophes'",  # smart punctuation
     ]
-    
+
     for txt in test_cases:
         ids = tokenizer.encode(txt)
         decoded = tokenizer.decode(ids)
@@ -57,7 +58,7 @@ def test_no_fallback_ever():
         " ",  # whitespace only
         "\n\t\r",  # control chars
     ]
-    
+
     for txt in challenging_texts:
         ids, used_fallback, fallback_chars = tokenizer.encode_with_flag(txt)
         assert not used_fallback, f"Unexpected fallback for: {txt!r}"
@@ -68,10 +69,10 @@ def test_no_fallback_ever():
 def test_deterministic_encoding():
     """Verify that encoding is deterministic across multiple calls."""
     txt = "Corporate governance § compliance ™"
-    
+
     # Encode the same text multiple times
     encodings = [tokenizer.encode(txt) for _ in range(5)]
-    
+
     # All encodings should be identical
     first = encodings[0]
     for i, encoding in enumerate(encodings[1:], 1):
@@ -90,11 +91,11 @@ def test_empty_and_edge_cases():
         "   ",  # multiple spaces
         "\n\n\n",  # multiple newlines
     ]
-    
+
     for txt in edge_cases:
         ids = tokenizer.encode(txt)
         assert tokenizer.decode(ids) == txt
-        
+
         # Verify no fallback
         ids2, used_fallback, fallback_chars = tokenizer.encode_with_flag(txt)
         assert ids == ids2
@@ -116,20 +117,23 @@ def test_wl_replay():
 def test_performance_large_text():
     """Verify reasonable performance on larger corporate text."""
     # Simulate a paragraph from a 10-K filing
-    large_text = """
-    Our business is subject to various risks and uncertainties, including those described 
-    in "Risk Factors" in Item 1A of this Form 10-K. The forward-looking statements in this 
-    filing are based on our current expectations and assumptions regarding our business, 
-    the economy and other future conditions. We believe these expectations and assumptions 
-    are reasonable, but forward-looking statements are inherently uncertain. Accordingly, 
+    large_text = (
+        """
+    Our business is subject to various risks and uncertainties, including those described
+    in "Risk Factors" in Item 1A of this Form 10-K. The forward-looking statements in this
+    filing are based on our current expectations and assumptions regarding our business,
+    the economy and other future conditions. We believe these expectations and assumptions
+    are reasonable, but forward-looking statements are inherently uncertain. Accordingly,
     actual results may differ materially from those expressed in the forward-looking statements.
-    """ * 10  # Repeat to make it larger
-    
+    """
+        * 10
+    )  # Repeat to make it larger
+
     # Should complete quickly and be lossless
     ids = tokenizer.encode(large_text)
     decoded = tokenizer.decode(ids)
     assert decoded == large_text
-    
+
     # Should never need fallback
     ids2, used_fallback, fallback_chars = tokenizer.encode_with_flag(large_text)
     assert ids == ids2
@@ -140,6 +144,7 @@ def test_performance_large_text():
 # ---------------------------------------------------------------------------
 # CLI integration tests
 # ---------------------------------------------------------------------------
+
 
 def _write_sample(path: Path, text: str = "Hello, world!") -> None:
     """Write a minimal one-row JSONL file required by the CLI."""
@@ -172,8 +177,10 @@ def test_cli_encode_single(temp_dataset):
     assert out.exists()
     out_json = json.loads(out.read_bytes().splitlines()[0])
     assert out_json["text"] == "Corporate governance § compliance ™"
-    assert isinstance(out_json["sp_ids"], list) and out_json["sp_ids"], "sp_ids missing or empty"
-    
+    assert (
+        isinstance(out_json["sp_ids"], list) and out_json["sp_ids"]
+    ), "sp_ids missing or empty"
+
     # Verify no fallback was used
     assert out_json["byte_fallback"] is False
     assert out_json["fallback_chars"] == []
@@ -193,7 +200,7 @@ def test_cli_encode_recursive(temp_dataset):
 
     for fname in ["one_stage4.jsonl", "two_stage4.jsonl"]:
         assert (tokenized_root / "sub" / fname).exists()
-        
+
         # Verify content and no fallback
         out_file = tokenized_root / "sub" / fname
         out_json = json.loads(out_file.read_bytes().splitlines()[0])
@@ -205,7 +212,7 @@ def test_cli_output_format_unchanged(temp_dataset):
     """Verify that CLI output format remains compatible with existing pipeline."""
     extracted_root, tokenized_root = temp_dataset
     input_file = extracted_root / "format_test_stage4.jsonl"
-    
+
     # Test with challenging text that would have triggered fallback before
     test_text = "SEC § compliance ™ requirements © 2024"
     _write_sample(input_file, test_text)
@@ -216,21 +223,27 @@ def test_cli_output_format_unchanged(temp_dataset):
 
     out_file = tokenized_root / "format_test_stage4.jsonl"
     out_json = json.loads(out_file.read_bytes().splitlines()[0])
-    
+
     # All expected fields should be present
     required_fields = [
-        "id", "text", "speaker",  # original fields
-        "sp_ids", "byte_fallback", "fallback_chars",  # tokenizer fields
-        "deps", "wl_indices", "wl_counts"  # feature fields
+        "id",
+        "text",
+        "speaker",  # original fields
+        "sp_ids",
+        "byte_fallback",
+        "fallback_chars",  # tokenizer fields
+        "deps",
+        "wl_indices",
+        "wl_counts",  # feature fields
     ]
-    
+
     for field in required_fields:
         assert field in out_json, f"Missing field: {field}"
-    
+
     # Verify tokenizer fields have expected values
     assert isinstance(out_json["sp_ids"], list)
     assert out_json["byte_fallback"] is False
     assert out_json["fallback_chars"] == []
-    
+
     # Verify text is preserved exactly
     assert out_json["text"] == test_text

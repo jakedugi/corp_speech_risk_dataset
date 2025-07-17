@@ -2,6 +2,7 @@
 Revised first-pass extractor that keeps the net wide – so we don't miss
 important quotes – but adds just-enough hygiene to reduce obvious noise.
 """
+
 import re
 import hashlib
 from collections import deque
@@ -16,34 +17,40 @@ from ..domain.ports import QuoteExtractor
 try:
     import spacy
     from spacy.lang.en import English
+
     _spacy_nlp = English()
-    _spacy_nlp.add_pipe('sentencizer')
+    _spacy_nlp.add_pipe("sentencizer")
 except ImportError:
     _spacy_nlp = None
 
+
 class FirstPassExtractor(QuoteExtractor):
     # ───────────── configurable constants ─────────
-    MAX_SENT_WINDOW   = 10           # window = ± this many sentences (increased for test)
-    MIN_QUOTE_CHARS   = 20          # ignore ultra-short matches ("hi" etc.)
-    MAX_QUOTE_CHARS   = 600         # ignore page-long extracts
-    MAX_DUP_HAMMING   = 3           # SimHash distance threshold for near-dupes
-    BULLET            = re.compile(r'^\s*(?:[\*\-–‣•]|[0-9]+[.)])\s+')
-    BLOCK_QUOTE       = re.compile(r'^\s*[>│▏▕▍▌▊]+')
+    MAX_SENT_WINDOW = 10  # window = ± this many sentences (increased for test)
+    MIN_QUOTE_CHARS = 20  # ignore ultra-short matches ("hi" etc.)
+    MAX_QUOTE_CHARS = 600  # ignore page-long extracts
+    MAX_DUP_HAMMING = 3  # SimHash distance threshold for near-dupes
+    BULLET = re.compile(r"^\s*(?:[\*\-–‣•]|[0-9]+[.)])\s+")
+    BLOCK_QUOTE = re.compile(r"^\s*[>│▏▕▍▌▊]+")
     # DOTALL makes "..." match newlines
-    QUOTE = re.compile(r'''
+    QUOTE = re.compile(
+        r"""
         (?s)                                # DOTALL: allow multiline
         (?:
           “(.*?)”                          # curly quotes
          |"(.*?)"                          # straight quotes
         )
-    ''', re.X)
-    ANC = re.compile(
-        r'\b(?:said|testif(?:y|ied)|deposed|swor(?:e|n)|submitted|'
-        r'annonce(?:d|ment)|blog(?:ged)?|posted|wrote|quoted|'
-        r'according to|stated?|notes?|privacy policy|exhibit(?:s)?|'
-        r'factual background|public statements?)\b', re.I
+    """,
+        re.X,
     )
-    URL               = re.compile(r'https?://\S+')
+    ANC = re.compile(
+        r"\b(?:said|testif(?:y|ied)|deposed|swor(?:e|n)|submitted|"
+        r"annonce(?:d|ment)|blog(?:ged)?|posted|wrote|quoted|"
+        r"according to|stated?|notes?|privacy policy|exhibit(?:s)?|"
+        r"factual background|public statements?)\b",
+        re.I,
+    )
+    URL = re.compile(r"https?://\S+")
 
     # stop-phrase blacklist (boiler-plate)
     STOP_PHRASES = [
@@ -54,7 +61,11 @@ class FirstPassExtractor(QuoteExtractor):
         # r'for internal use only',
         # r'no(?:t)? intended as legal advice',
     ]
-    STOP_RE = re.compile("|".join(STOP_PHRASES), re.I) if STOP_PHRASES else re.compile(r'^\b$')  # dummy fallback
+    STOP_RE = (
+        re.compile("|".join(STOP_PHRASES), re.I)
+        if STOP_PHRASES
+        else re.compile(r"^\b$")
+    )  # dummy fallback
 
     def __init__(self, keywords: List[str], cleaner):
         """
@@ -94,11 +105,11 @@ class FirstPassExtractor(QuoteExtractor):
 
     def _hamming_distance(self, h1: int, h2: int) -> int:
         """Count differing bits."""
-        return bin(h1 ^ h2).count('1')
+        return bin(h1 ^ h2).count("1")
 
     def extract(self, doc_text: str) -> Iterator[QuoteCandidate]:
         # Scan per-paragraph to avoid page headers & stray lines
-        for para in doc_text.split('\n\n'):
+        for para in doc_text.split("\n\n"):
             para = para.strip()
             if not para:
                 continue
@@ -109,13 +120,13 @@ class FirstPassExtractor(QuoteExtractor):
                 if not (self.MIN_QUOTE_CHARS <= len(raw_quote) <= self.MAX_QUOTE_CHARS):
                     continue
                 # 2) skip if it's just numbers or starts with a number
-                if re.match(r'^[\d\W]+$', raw_quote) or re.match(r'^\d', raw_quote):
+                if re.match(r"^[\d\W]+$", raw_quote) or re.match(r"^\d", raw_quote):
                     continue
                 # 3) near-duplicate, stop-phrases, etc.
                 if self._is_near_duplicate(raw_quote) or self.STOP_RE.search(raw_quote):
                     continue
                 # Clean context using the provided cleaner (already cleaned doc, but context may need normalization)
-                context = self.cleaner.clean(' '.join(para.split()))
-                urls    = self.URL.findall(context)
+                context = self.cleaner.clean(" ".join(para.split()))
+                urls = self.URL.findall(context)
                 quote_text = self.URL.sub("", raw_quote).strip()
                 yield QuoteCandidate(quote=quote_text, context=context, urls=urls)

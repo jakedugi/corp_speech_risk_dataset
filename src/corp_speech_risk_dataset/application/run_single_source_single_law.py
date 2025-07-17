@@ -17,10 +17,9 @@ from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
 from corp_speech_risk_dataset.shared.logging_utils import setup_logging
 from corp_speech_risk_dataset.infrastructure.file_io import ensure_dir
 
+
 def run_law_pipeline(
-    statute: str,
-    output_dir: Optional[Path] = None,
-    save_opinions: bool = True
+    statute: str, output_dir: Optional[Path] = None, save_opinions: bool = True
 ) -> None:
     """Run the pipeline for a single statute.
 
@@ -71,6 +70,7 @@ def run_law_pipeline(
         logger.exception(f"Pipeline failed for {statute}")
         raise
 
+
 if __name__ == "__main__":
     import typer
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     def main(
         statute: str = typer.Argument(..., help="Statute to process"),
         output_dir: Optional[Path] = typer.Option(None, help="Custom output directory"),
-        save_opinions: bool = typer.Option(True, help="Save full opinion texts")
+        save_opinions: bool = typer.Option(True, help="Save full opinion texts"),
     ):
         run_law_pipeline(statute, output_dir, save_opinions)
 

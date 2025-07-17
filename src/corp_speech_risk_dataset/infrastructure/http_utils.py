@@ -5,6 +5,7 @@ import time
 import asyncio
 import random
 
+
 def safe_sync_get(
     session: httpx.Client,
     url: str,
@@ -21,13 +22,16 @@ def safe_sync_get(
             return resp.json()
         except (httpx.ReadTimeout, httpx.HTTPStatusError) as e:
             code = getattr(e.response, "status_code", None)
-            logger.warning(f"[{attempt}/{max_attempts}] HTTP {code} on {url}; {'timeout' if isinstance(e, httpx.ReadTimeout) else 'error'}.")
+            logger.warning(
+                f"[{attempt}/{max_attempts}] HTTP {code} on {url}; {'timeout' if isinstance(e, httpx.ReadTimeout) else 'error'}."
+            )
             if attempt == max_attempts:
                 logger.error(f"Giving up on {url} after {max_attempts} attempts.")
                 return None if code and code >= 400 else {}
             time.sleep(backoff)
             backoff = min(backoff * 2, 10)
     return None
+
 
 async def safe_async_get(
     client: httpx.AsyncClient,
@@ -48,7 +52,9 @@ async def safe_async_get(
                 return resp.json()
             except (httpx.ReadTimeout, httpx.HTTPStatusError) as e:
                 code = getattr(e.response, "status_code", None)
-                logger.warning(f"[{attempt}/{max_attempts}] HTTP {code} on {url}; error.")
+                logger.warning(
+                    f"[{attempt}/{max_attempts}] HTTP {code} on {url}; error."
+                )
                 if attempt == max_attempts:
                     logger.error(f"Giving up on {url} after {max_attempts} attempts.")
                     return None

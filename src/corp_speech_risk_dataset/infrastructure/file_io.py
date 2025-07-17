@@ -9,6 +9,7 @@ import random
 
 from loguru import logger
 
+
 def ensure_dir(path: Path) -> None:
     """Ensure a directory exists, creating it if necessary.
 
@@ -16,6 +17,7 @@ def ensure_dir(path: Path) -> None:
         path: Directory path to ensure
     """
     path.mkdir(parents=True, exist_ok=True)
+
 
 def save_json(data: Any, path: Path, indent: int = 2) -> None:
     """Save data to a JSON file.
@@ -26,9 +28,10 @@ def save_json(data: Any, path: Path, indent: int = 2) -> None:
         indent: JSON indentation level
     """
     ensure_dir(path.parent)
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         json.dump(data, f, indent=indent)
     logger.debug(f"Saved JSON to {path}")
+
 
 def load_json(path: Path) -> Any:
     """Load data from a JSON file.
@@ -44,6 +47,7 @@ def load_json(path: Path) -> Any:
     logger.debug(f"Loaded JSON from {path}")
     return data
 
+
 def list_json_files(directory: Path, pattern: str = "*.json") -> List[Path]:
     """List all JSON files in a directory.
 
@@ -55,6 +59,7 @@ def list_json_files(directory: Path, pattern: str = "*.json") -> List[Path]:
         List of matching file paths
     """
     return sorted(directory.glob(pattern))
+
 
 def merge_json_files(files: List[Path], output_path: Path) -> None:
     """Merge multiple JSON files into one.
@@ -73,6 +78,7 @@ def merge_json_files(files: List[Path], output_path: Path) -> None:
 
     save_json(merged_data, output_path)
     logger.info(f"Merged {len(files)} files into {output_path}")
+
 
 # --- New helpers for legacy workflow support ---
 def download(url: str, path: Path, max_attempts: int = 3, sleep: float = 0.5) -> None:
@@ -105,12 +111,17 @@ def download(url: str, path: Path, max_attempts: int = 3, sleep: float = 0.5) ->
                 return
             raise
         except Exception as e:
-            logger.warning(f"[{attempt}/{effective_retries}] Failed to download {url}: {e}")
+            logger.warning(
+                f"[{attempt}/{effective_retries}] Failed to download {url}: {e}"
+            )
             time.sleep(sleep * attempt)
     if effective_retries == 1:
         logger.warning(f"Giving up on {url} after single attempt (recap PDF policy)")
     else:
-        raise RuntimeError(f"Failed to download {url} after {effective_retries} attempts")
+        raise RuntimeError(
+            f"Failed to download {url} after {effective_retries} attempts"
+        )
+
 
 def needs_recap_fetch(ia_json_path: Path) -> bool:
     """
@@ -133,6 +144,7 @@ def needs_recap_fetch(ia_json_path: Path) -> bool:
     except Exception as e:
         logger.error(f"Error reading {ia_json_path}: {e}")
         return False
+
 
 def download_missing_pdfs(entry_json: Path, filings_dir: Path) -> None:
     """

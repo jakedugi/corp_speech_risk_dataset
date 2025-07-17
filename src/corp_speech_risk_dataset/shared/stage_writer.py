@@ -1,10 +1,12 @@
 from pathlib import Path
 import json
 
+
 class StageWriter:
     """
     Write per-stage JSONL beside the source file, preserving tree structure under a mirrored output root.
     """
+
     def __init__(self, src_root: Path, dst_root: Path):
         self.src_root = src_root
         self.dst_root = dst_root

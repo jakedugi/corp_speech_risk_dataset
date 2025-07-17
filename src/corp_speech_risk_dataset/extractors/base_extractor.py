@@ -1,6 +1,7 @@
 """
 Base extractor abstract class for data processing.
 """
+
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 

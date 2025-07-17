@@ -26,11 +26,9 @@ from .risk_features import *
 __all__ = [
     # Quote entities
     "QuoteCandidate",
-
     # Risk calculations
     "calculate_risk_vector_counts",
     "counts_to_sparse_vector",
     "get_feature_dimension",
-
     # Base types (if any)
 ]

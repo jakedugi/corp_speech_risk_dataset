@@ -3,10 +3,13 @@
 from typing import Any, Dict, Optional
 from corp_speech_risk_dataset.custom_types.base_types import APIConfig
 
+
 class BaseAPIClient:
     """Base class for all API clients."""
+
     def __init__(self, config: APIConfig):
         self.config = config
+
     def _build_headers(self) -> Dict[str, str]:
         headers = {"Accept": "application/json"}
         if self.config.api_key:

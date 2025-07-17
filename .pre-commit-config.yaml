@@ -1,17 +1,16 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.6.0   # or whichever tag exists
     hooks:
       - id: trailing-whitespace
         stages: [pre-commit]
-        args:
-          - --all-files
-          - --show-diff-on-failure
-          - --auto-stage
-
       - id: end-of-file-fixer
         stages: [pre-commit]
-        args:
-          - --all-files
-          - --show-diff-on-failure
-          - --auto-stage
+
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3.10
+        stages: [pre-commit]
+        args: [--quiet]

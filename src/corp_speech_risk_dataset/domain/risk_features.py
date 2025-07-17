@@ -37,7 +37,9 @@ def _bucket(label: str) -> int:
     return int.from_bytes(h[:4], "little") % _DIM
 
 
-def calculate_risk_vector_counts(pos_tokens_deps: list[tuple[str, str, str]]) -> Dict[int, int]:
+def calculate_risk_vector_counts(
+    pos_tokens_deps: list[tuple[str, str, str]]
+) -> Dict[int, int]:
     """
     Calculate risk feature counts from POS/token/dependency triples.
 

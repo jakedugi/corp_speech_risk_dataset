@@ -2,16 +2,19 @@
 The SemanticReranker, which scores quote candidates based on their semantic
 similarity to a set of seed quotes.
 """
+
 from sentence_transformers import SentenceTransformer, util
 from typing import List, Iterator
 from ..models.quote_candidate import QuoteCandidate
 from ..domain.ports import QuoteReranker
+
 
 class SemanticReranker(QuoteReranker):
     """
     Uses a SentenceTransformer model to encode quotes and score them against
     seed examples, filtering out those below a given threshold.
     """
+
     def __init__(self, seed_quotes: List[str], threshold: float = 0.55):
         """
         Initializes the reranker with seed quotes and a similarity threshold.

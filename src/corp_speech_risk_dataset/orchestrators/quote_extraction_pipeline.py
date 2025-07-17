@@ -1,6 +1,7 @@
 """
 The main quote extraction pipeline, orchestrating extraction, attribution, and reranking.
 """
+
 import json
 from loguru import logger
 from typing import Iterator, Optional
@@ -15,6 +16,7 @@ from enum import Enum
 from ..shared.stage_writer import StageWriter
 from pathlib import Path
 
+
 class Stage(Enum):
     RAW = 0
     CLEAN = 1
@@ -22,12 +24,20 @@ class Stage(Enum):
     ATTRIB = 3
     RERANK = 4
 
+
 class QuoteExtractionPipeline:
     """
     Orchestrates the quote extraction workflow.
     Use `run()` to yield results and `save_results()` to write them to disk.
     """
-    def __init__(self, visualization_mode: bool = False, output_dir: Optional[str] = None, mirror_mode: bool = True, db_root: Path | None = None):
+
+    def __init__(
+        self,
+        visualization_mode: bool = False,
+        output_dir: Optional[str] = None,
+        mirror_mode: bool = True,
+        db_root: Path | None = None,
+    ):
         logger.info("Initializing Quote Extraction Pipeline...")
         self.visualization_mode = visualization_mode
         self.mirror_mode = mirror_mode
@@ -38,7 +48,9 @@ class QuoteExtractionPipeline:
         self.reranker = SemanticReranker(config.SEED_QUOTES, config.THRESHOLD)
         self.output_dir = output_dir or (config.ROOT / "data")
         if self.mirror_mode:
-            self.stage_writer = StageWriter(self.loader.source_root, config.MIRROR_OUT_DIR)
+            self.stage_writer = StageWriter(
+                self.loader.source_root, config.MIRROR_OUT_DIR
+            )
         if self.visualization_mode:
             self.DATA_DIR = self.output_dir
             self.DATA_DIR.mkdir(exist_ok=True, parents=True)
@@ -49,13 +61,17 @@ class QuoteExtractionPipeline:
                 3: self.DATA_DIR / "stage3_attributor.jsonl",
                 4: self.DATA_DIR / "stage4_reranker.jsonl",
             }
-            logger.info(f"Visualization mode is ON. Output will be saved to {self.DATA_DIR}")
+            logger.info(
+                f"Visualization mode is ON. Output will be saved to {self.DATA_DIR}"
+            )
             for path in self.file_paths.values():
                 path.open("w").close()
         logger.info("Pipeline initialized.")
 
     @classmethod
-    def from_config(cls, visualization_mode: bool = False, output_dir: Optional[str] = None):
+    def from_config(
+        cls, visualization_mode: bool = False, output_dir: Optional[str] = None
+    ):
         return cls(visualization_mode=visualization_mode, output_dir=output_dir)
 
     @staticmethod
@@ -63,9 +79,13 @@ class QuoteExtractionPipeline:
         merged = []
         prev = None
         for qc in candidates:
-            if prev and qc.context == prev.context and \
-               qc.quote.split() and qc.quote.startswith(prev.quote.split()[-1]):
-                prev.quote += ' ' + qc.quote
+            if (
+                prev
+                and qc.context == prev.context
+                and qc.quote.split()
+                and qc.quote.startswith(prev.quote.split()[-1])
+            ):
+                prev.quote += " " + qc.quote
             else:
                 if prev:
                     merged.append(prev)
@@ -91,7 +111,7 @@ class QuoteExtractionPipeline:
                 "speaker": None,
                 "score": None,
                 "urls": [],
-                "_src": str(doc.path)
+                "_src": str(doc.path),
             }
             if self.mirror_mode:
                 self.stage_writer.write(doc.path, Stage.RAW.value, rec)
@@ -100,11 +120,7 @@ class QuoteExtractionPipeline:
                     f0.write(json.dumps(rec) + "\n")
             # Stage 1: CLEAN
             cleaned_text = self.cleaner.clean(raw_text)
-            rec_clean = {
-                **rec,
-                "stage": Stage.CLEAN.value,
-                "text": cleaned_text
-            }
+            rec_clean = {**rec, "stage": Stage.CLEAN.value, "text": cleaned_text}
             if self.mirror_mode:
                 self.stage_writer.write(doc.path, Stage.CLEAN.value, rec_clean)
             if self.visualization_mode:
@@ -115,11 +131,25 @@ class QuoteExtractionPipeline:
             candidates = self.merge_adjacent(candidates)
             if self.mirror_mode and candidates:
                 for qc in candidates:
-                    self.stage_writer.write(doc.path, Stage.EXTRACT.value, {"doc_id": doc.doc_id, "stage": Stage.EXTRACT.value, **qc.to_dict(), "_src": str(doc.path)})
+                    self.stage_writer.write(
+                        doc.path,
+                        Stage.EXTRACT.value,
+                        {
+                            "doc_id": doc.doc_id,
+                            "stage": Stage.EXTRACT.value,
+                            **qc.to_dict(),
+                            "_src": str(doc.path),
+                        },
+                    )
             if self.visualization_mode and candidates:
                 with self.file_paths[2].open("a", encoding="utf8") as f2:
                     for qc in candidates:
-                        rec2 = {"doc_id": doc.doc_id, "stage": Stage.EXTRACT.value, **qc.to_dict(), "_src": str(doc.path)}
+                        rec2 = {
+                            "doc_id": doc.doc_id,
+                            "stage": Stage.EXTRACT.value,
+                            **qc.to_dict(),
+                            "_src": str(doc.path),
+                        }
                         f2.write(json.dumps(rec2) + "\n")
             if not candidates:
                 continue
@@ -128,11 +158,25 @@ class QuoteExtractionPipeline:
             vetted = list(self.attributor.filter(candidates))
             if self.mirror_mode and vetted:
                 for qc in vetted:
-                    self.stage_writer.write(doc.path, Stage.ATTRIB.value, {"doc_id": doc.doc_id, "stage": Stage.ATTRIB.value, **qc.to_dict(), "_src": str(doc.path)})
+                    self.stage_writer.write(
+                        doc.path,
+                        Stage.ATTRIB.value,
+                        {
+                            "doc_id": doc.doc_id,
+                            "stage": Stage.ATTRIB.value,
+                            **qc.to_dict(),
+                            "_src": str(doc.path),
+                        },
+                    )
             if self.visualization_mode and vetted:
                 with self.file_paths[3].open("a", encoding="utf8") as f3:
                     for qc in vetted:
-                        rec3 = {"doc_id": doc.doc_id, "stage": Stage.ATTRIB.value, **qc.to_dict(), "_src": str(doc.path)}
+                        rec3 = {
+                            "doc_id": doc.doc_id,
+                            "stage": Stage.ATTRIB.value,
+                            **qc.to_dict(),
+                            "_src": str(doc.path),
+                        }
                         f3.write(json.dumps(rec3) + "\n")
             if not vetted:
                 continue
@@ -141,14 +185,30 @@ class QuoteExtractionPipeline:
             final_quotes = list(self.reranker.rerank(vetted))
             if self.mirror_mode and final_quotes:
                 for qc in final_quotes:
-                    self.stage_writer.write(doc.path, Stage.RERANK.value, {"doc_id": doc.doc_id, "stage": Stage.RERANK.value, **qc.to_dict(), "_src": str(doc.path)})
+                    self.stage_writer.write(
+                        doc.path,
+                        Stage.RERANK.value,
+                        {
+                            "doc_id": doc.doc_id,
+                            "stage": Stage.RERANK.value,
+                            **qc.to_dict(),
+                            "_src": str(doc.path),
+                        },
+                    )
             if self.visualization_mode and final_quotes:
                 with self.file_paths[4].open("a", encoding="utf8") as f4:
                     for qc in final_quotes:
-                        rec4 = {"doc_id": doc.doc_id, "stage": Stage.RERANK.value, **qc.to_dict(), "_src": str(doc.path)}
+                        rec4 = {
+                            "doc_id": doc.doc_id,
+                            "stage": Stage.RERANK.value,
+                            **qc.to_dict(),
+                            "_src": str(doc.path),
+                        }
                         f4.write(json.dumps(rec4) + "\n")
             if final_quotes:
-                logger.debug(f"Yielding {len(final_quotes)} final quotes for {doc.doc_id}")
+                logger.debug(
+                    f"Yielding {len(final_quotes)} final quotes for {doc.doc_id}"
+                )
                 yield doc.doc_id, final_quotes
         logger.debug("Pipeline run finished.")
 
@@ -164,9 +224,6 @@ class QuoteExtractionPipeline:
         with open(output_file, "w", encoding="utf8") as out:
             for doc_id, quotes in results:
                 count += 1
-                rec = {
-                    "doc_id": doc_id,
-                    "quotes": [q.to_dict() for q in quotes]
-                }
+                rec = {"doc_id": doc_id, "quotes": [q.to_dict() for q in quotes]}
                 out.write(json.dumps(rec) + "\n")
-        logger.info(f"Saved {count} documents with quotes.") 
+        logger.info(f"Saved {count} documents with quotes.")

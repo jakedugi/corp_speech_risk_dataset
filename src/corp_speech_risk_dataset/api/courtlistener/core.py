@@ -22,16 +22,18 @@ from corp_speech_risk_dataset.custom_types.base_types import APIConfig
 from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
 from .client import CourtListenerClient
 
+
 def slugify(text: str) -> str:
     """Convert text to a filesystem-safe slug."""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
 
 def process_and_save(
     client: CourtListenerClient,
     resource_type: str,
     params: dict,
     output_dir: Path,
-    limit: int = 10
+    limit: int = 10,
 ):
     """Fetch resource and save results to output_dir."""
     results = client.fetch_resource(resource_type, params, limit=limit)
@@ -40,6 +42,7 @@ def process_and_save(
         with open(output_dir / f"{resource_type}_{i}.json", "w") as f:
             json.dump(item, f, indent=2)
     logger.info(f"Saved {len(results)} {resource_type} to {output_dir}")
+
 
 def process_statutes(
     statutes: List[str],
@@ -53,7 +56,7 @@ def process_statutes(
     chunk_size: int = 10,
 ) -> None:
     """Process a list of statutes and save the results.
-    
+
     Args:
         statutes: List of statute names to process
         config: API configuration containing token and settings
@@ -82,14 +85,18 @@ def process_statutes(
                 reader = csv.DictReader(f)
                 for row in reader:
                     names.append(row["official_name"].strip())
-            
+
             # Chunk the names
             total_chunks = math.ceil(len(names) / chunk_size)
             for chunk_idx in range(total_chunks):
                 chunk = names[chunk_idx * chunk_size : (chunk_idx + 1) * chunk_size]
-                company_filter = "(" + " OR ".join(f'"{n}"' for n in sorted(chunk)) + ")"
+                company_filter = (
+                    "(" + " OR ".join(f'"{n}"' for n in sorted(chunk)) + ")"
+                )
                 query = base_query + "\nAND\n" + company_filter
-                logger.info(f"Searching {statute} (chunk {chunk_idx+1}/{total_chunks}): {query}")
+                logger.info(
+                    f"Searching {statute} (chunk {chunk_idx+1}/{total_chunks}): {query}"
+                )
                 params = {
                     "search": query,
                     "date_filed_min": date_min,
@@ -97,19 +104,33 @@ def process_statutes(
                 }
                 max_results = pages * page_size
                 opinions = client.fetch_resource("opinions", params, limit=max_results)
-                logger.info(f"Retrieved {len(opinions)} opinions for chunk {chunk_idx+1}/{total_chunks}")
+                logger.info(
+                    f"Retrieved {len(opinions)} opinions for chunk {chunk_idx+1}/{total_chunks}"
+                )
                 # Save results in subdirectory or with chunk info
                 if output_dir is None:
-                    chunk_output_dir = Path("data") / "raw" / "courtlistener" / slugify(statute) / f"chunk_{chunk_idx+1}"
+                    chunk_output_dir = (
+                        Path("data")
+                        / "raw"
+                        / "courtlistener"
+                        / slugify(statute)
+                        / f"chunk_{chunk_idx+1}"
+                    )
                 else:
-                    chunk_output_dir = Path(output_dir) / slugify(statute) / f"chunk_{chunk_idx+1}"
+                    chunk_output_dir = (
+                        Path(output_dir) / slugify(statute) / f"chunk_{chunk_idx+1}"
+                    )
                 chunk_output_dir.mkdir(parents=True, exist_ok=True)
                 for opinion in opinions:
-                    metadata_path = chunk_output_dir / f"opinion_{opinion['id']}_metadata.json"
+                    metadata_path = (
+                        chunk_output_dir / f"opinion_{opinion['id']}_metadata.json"
+                    )
                     with open(metadata_path, "w") as f:
                         json.dump(opinion, f, indent=2)
                     if opinion.get("plain_text"):
-                        text_path = chunk_output_dir / f"opinion_{opinion['id']}_text.txt"
+                        text_path = (
+                            chunk_output_dir / f"opinion_{opinion['id']}_text.txt"
+                        )
                         with open(text_path, "w") as f:
                             f.write(opinion["plain_text"])
                 logger.info(f"Saved {len(opinions)} opinions to {chunk_output_dir}")
@@ -125,12 +146,16 @@ def process_statutes(
             opinions = client.fetch_resource("opinions", params, limit=max_results)
             logger.info(f"Retrieved {len(opinions)} opinions")
             if output_dir is None:
-                output_dir_final = Path("data") / "raw" / "courtlistener" / slugify(statute)
+                output_dir_final = (
+                    Path("data") / "raw" / "courtlistener" / slugify(statute)
+                )
             else:
                 output_dir_final = Path(output_dir) / slugify(statute)
             output_dir_final.mkdir(parents=True, exist_ok=True)
             for opinion in opinions:
-                metadata_path = output_dir_final / f"opinion_{opinion['id']}_metadata.json"
+                metadata_path = (
+                    output_dir_final / f"opinion_{opinion['id']}_metadata.json"
+                )
                 with open(metadata_path, "w") as f:
                     json.dump(opinion, f, indent=2)
                 if opinion.get("plain_text"):
@@ -141,6 +166,7 @@ def process_statutes(
 
     # NOTE: Company name chunking is required to avoid exceeding the CourtListener server's URL length limit (8,190 bytes). Each chunk is queried separately to ensure all company names are included without hitting the server's 413 error.
 
+
 def process_recap_data(
     config: APIConfig,
     query: str = None,
@@ -150,7 +176,7 @@ def process_recap_data(
     output_dir: Optional[str] = None,
 ) -> None:
     """Process RECAP data and save the results.
-    
+
     Args:
         config: API configuration containing token and settings
         query: Optional search query string
@@ -160,32 +186,31 @@ def process_recap_data(
         output_dir: Directory to save results to
     """
     client = CourtListenerClient(config, api_mode="recap")
-    
+
     logger.info(f"Fetching RECAP data with query: {query or 'all'}")
-    
+
     # Fetch RECAP data
-    recap_data = client.fetch_resource("recap", {
-        "page_size": page_size
-    })
-    
+    recap_data = client.fetch_resource("recap", {"page_size": page_size})
+
     logger.info(f"Retrieved {len(recap_data)} RECAP records")
-    
+
     # Create output directory
     if output_dir is None:
         output_dir = Path("data") / "raw" / "courtlistener" / "recap"
     else:
         output_dir = Path(output_dir) / "recap"
-        
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save RECAP data
     for i, record in enumerate(recap_data):
         # Save metadata
         metadata_path = output_dir / f"recap_{i}_metadata.json"
         with open(metadata_path, "w") as f:
             json.dump(record, f, indent=2)
-    
+
     logger.info(f"Saved {len(recap_data)} RECAP records to {output_dir}")
+
 
 def process_docket_entries(
     config: APIConfig,
@@ -195,10 +220,10 @@ def process_docket_entries(
     pages: int = 1,
     page_size: int = 20,
     output_dir: Optional[str] = None,
-    api_mode: str = "standard"
+    api_mode: str = "standard",
 ) -> None:
     """Process docket entries and save the results.
-    
+
     Args:
         config: API configuration containing token and settings
         docket_id: Specific docket ID to fetch entries for
@@ -211,8 +236,11 @@ def process_docket_entries(
     """
     import time
     import httpx
+
     client = CourtListenerClient(config, api_mode=api_mode)
-    logger.info(f"Fetching docket entries with docket_id: {docket_id}, query: {query or 'all'}")
+    logger.info(
+        f"Fetching docket entries with docket_id: {docket_id}, query: {query or 'all'}"
+    )
     url = client.endpoints["docket_entries"]
     params = {"docket": docket_id, "order_by": order_by, "page_size": page_size}
     all_entries = []
@@ -248,9 +276,17 @@ def process_docket_entries(
     # Create output directory
     if output_dir is None:
         if docket_id:
-            output_dir = Path("data") / "raw" / "courtlistener" / "docket_entries" / f"docket_{docket_id}"
+            output_dir = (
+                Path("data")
+                / "raw"
+                / "courtlistener"
+                / "docket_entries"
+                / f"docket_{docket_id}"
+            )
         else:
-            output_dir = Path("data") / "raw" / "courtlistener" / "docket_entries" / "search"
+            output_dir = (
+                Path("data") / "raw" / "courtlistener" / "docket_entries" / "search"
+            )
     else:
         output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -272,6 +308,7 @@ def process_docket_entries(
                         f.write(doc["plain_text"])
     logger.info(f"Saved {len(all_entries)} docket entries to {output_dir}")
 
+
 def process_recap_documents(
     config: APIConfig,
     docket_id: int = None,
@@ -282,10 +319,10 @@ def process_recap_documents(
     page_size: int = 100,
     include_plain_text: bool = True,
     output_dir: Optional[str] = None,
-    api_mode: str = "standard"
+    api_mode: str = "standard",
 ) -> None:
     """Process RECAP documents with full text content and save the results.
-    
+
     Args:
         config: API configuration containing token and settings
         docket_id: Docket ID to fetch all documents for
@@ -299,47 +336,67 @@ def process_recap_documents(
         api_mode: API mode to use
     """
     client = CourtListenerClient(config, api_mode=api_mode)
-    
-    logger.info(f"Fetching RECAP documents with docket_id: {docket_id}, entry_id: {docket_entry_id}, query: {query or 'all'}")
-    
+
+    logger.info(
+        f"Fetching RECAP documents with docket_id: {docket_id}, entry_id: {docket_entry_id}, query: {query or 'all'}"
+    )
+
     # Fetch RECAP documents
-    documents = client.fetch_resource("recap_docs", {
-        "docket_entry": docket_entry_id,
-        "docket_entry__docket": docket_id,
-        "search": query,
-        "order_by": order_by,
-        "page_size": page_size
-    })
-    
+    documents = client.fetch_resource(
+        "recap_docs",
+        {
+            "docket_entry": docket_entry_id,
+            "docket_entry__docket": docket_id,
+            "search": query,
+            "order_by": order_by,
+            "page_size": page_size,
+        },
+    )
+
     logger.info(f"Retrieved {len(documents)} RECAP documents")
-    
+
     # Create output directory
     if output_dir is None:
         if docket_id:
-            output_dir = Path("data") / "raw" / "courtlistener" / "recap_documents" / f"docket_{docket_id}"
+            output_dir = (
+                Path("data")
+                / "raw"
+                / "courtlistener"
+                / "recap_documents"
+                / f"docket_{docket_id}"
+            )
         elif docket_entry_id:
-            output_dir = Path("data") / "raw" / "courtlistener" / "recap_documents" / f"entry_{docket_entry_id}"
+            output_dir = (
+                Path("data")
+                / "raw"
+                / "courtlistener"
+                / "recap_documents"
+                / f"entry_{docket_entry_id}"
+            )
         else:
-            output_dir = Path("data") / "raw" / "courtlistener" / "recap_documents" / "search"
+            output_dir = (
+                Path("data") / "raw" / "courtlistener" / "recap_documents" / "search"
+            )
     else:
         output_dir = Path(output_dir)
-        
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save documents
     for i, doc in enumerate(documents):
         # Save document metadata
         doc_meta_path = output_dir / f"doc_{doc.get('id', i)}_metadata.json"
         with open(doc_meta_path, "w") as f:
             json.dump(doc, f, indent=2)
-        
+
         # Save plain text if available and requested
         if include_plain_text and doc.get("plain_text"):
             doc_text_path = output_dir / f"doc_{doc.get('id', i)}_text.txt"
             with open(doc_text_path, "w") as f:
                 f.write(doc["plain_text"])
-    
+
     logger.info(f"Saved {len(documents)} RECAP documents to {output_dir}")
+
 
 def process_full_docket(
     config,
@@ -366,12 +423,18 @@ def process_full_docket(
     entries = client.fetch_resource(
         "docket_entries",
         {"docket": docket_id, "order_by": order_by, "page_size": page_size},
-        limit=None
+        limit=None,
     )
 
     # 3. Save everything
     if output_dir is None:
-        output_dir = Path("data") / "raw" / "courtlistener" / "full_dockets" / f"docket_{docket_id}"
+        output_dir = (
+            Path("data")
+            / "raw"
+            / "courtlistener"
+            / "full_dockets"
+            / f"docket_{docket_id}"
+        )
     else:
         output_dir = Path(output_dir) / f"docket_{docket_id}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -394,7 +457,7 @@ def process_full_docket(
         "docket_id": docket_id,
         "entry_count": len(entries),
         "include_documents": include_documents,
-        "order_by": order_by
+        "order_by": order_by,
     }
     summary_path = output_dir / "summary.json"
     with open(summary_path, "w") as f:
@@ -402,13 +465,9 @@ def process_full_docket(
 
     logger.info(f"Saved complete docket {docket_id} to {output_dir}")
 
+
 def process_search_api(
-    config,
-    params,
-    output_dir=None,
-    limit=None,
-    show_url=False,
-    token=None
+    config, params, output_dir=None, limit=None, show_url=False, token=None
 ):
     """Process a direct search API query and print or save results."""
     import json
@@ -451,15 +510,12 @@ def process_search_api(
     else:
         print(json.dumps(data, indent=2))
 
-def process_recap_fetch(
-    config,
-    post_data,
-    show_url=False,
-    token=None
-):
+
+def process_recap_fetch(config, post_data, show_url=False, token=None):
     """POST to /api/rest/v4/recap-fetch/ to trigger a PACER fetch. Allows safe, credentialed, free attachment fetch (type=3)."""
     import json
     import httpx
+
     base_url = "https://www.courtlistener.com/api/rest/v4/recap-fetch/"
     url = base_url
     # Use token from config if not provided
@@ -474,10 +530,16 @@ def process_recap_fetch(
     if str(post_data.get("request_type")) != "3" and (
         "pacer_username" in post_data or "pacer_password" in post_data
     ):
-        print("[TEST MODE] Not sending real PACER credentials or purchase request except for request_type=3 (free attachment pages).")
+        print(
+            "[TEST MODE] Not sending real PACER credentials or purchase request except for request_type=3 (free attachment pages)."
+        )
         return
-    if str(post_data.get("request_type")) == "3" and ("pacer_username" in post_data and "pacer_password" in post_data):
-        print("[WARNING] You are sending PACER credentials to fetch free attachment pages. This will NOT purchase anything, but your credentials are required for authentication. They are not stored by CourtListener. Proceeding...")
+    if str(post_data.get("request_type")) == "3" and (
+        "pacer_username" in post_data and "pacer_password" in post_data
+    ):
+        print(
+            "[WARNING] You are sending PACER credentials to fetch free attachment pages. This will NOT purchase anything, but your credentials are required for authentication. They are not stored by CourtListener. Proceeding..."
+        )
     try:
         with httpx.Client(timeout=60) as client:
             resp = client.post(url, data=post_data, headers=headers)
@@ -486,4 +548,4 @@ def process_recap_fetch(
     except Exception as e:
         print(f"Error: {e}")
         raise
-    print(json.dumps(data, indent=2)) 
+    print(json.dumps(data, indent=2))

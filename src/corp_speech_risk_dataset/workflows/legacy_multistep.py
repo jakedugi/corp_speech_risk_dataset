@@ -5,21 +5,37 @@ Classic multi-step CourtListener download workflow
 The public entry point is LegacyCourtListenerWorkflow.run(queries, court, outdir).
 Nothing else has been altered – all seven steps are preserved verbatim.
 """
+
 import os
 import json
 from pathlib import Path
 from loguru import logger
 
-# Dummy imports for CLI helpers (to be replaced with real ones in integration)
-def search_api(*args, **kwargs): pass
-def fetch(*args, **kwargs): pass
-def recap_fetch(*args, **kwargs): pass
-def docket_entries(*args, **kwargs): pass
 
-def load_config(): return object()
+# Dummy imports for CLI helpers (to be replaced with real ones in integration)
+def search_api(*args, **kwargs):
+    pass
+
+
+def fetch(*args, **kwargs):
+    pass
+
+
+def recap_fetch(*args, **kwargs):
+    pass
+
+
+def docket_entries(*args, **kwargs):
+    pass
+
+
+def load_config():
+    return object()
+
 
 class LegacyCourtListenerWorkflow:
     """Performs the 7-stage docket download exactly like the original script."""
+
     def __init__(self, queries, court=None, outdir="CourtListener"):
         self.queries = queries
         self.court = court
@@ -83,4 +99,4 @@ class LegacyCourtListenerWorkflow:
                 self._step4_docket_entries(dk_id, entries_dir)
                 self._step5_download_missing_pdfs(entries_dir, case_dir)
                 self._step6_opinion_chain(dk_id, case_dir)
-                logger.info(f"Done: {case_dir}") 
+                logger.info(f"Done: {case_dir}")

@@ -2,8 +2,10 @@
 A candidate quote, containing the text, its surrounding context, and any metadata
 gathered during the extraction process.
 """
+
 from dataclasses import dataclass, field
 from typing import List, Optional
+
 
 @dataclass
 class QuoteCandidate:
@@ -11,6 +13,7 @@ class QuoteCandidate:
     Represents a potential quote. This object is passed through the pipeline,
     where it is enriched with speaker, score, and other metadata.
     """
+
     quote: str
     context: str
     urls: List[str] = field(default_factory=list)

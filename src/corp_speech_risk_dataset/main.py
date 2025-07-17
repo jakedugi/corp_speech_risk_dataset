@@ -12,6 +12,7 @@ from corp_speech_risk_dataset.shared.logging_utils import setup_logging
 
 logger = setup_logging()
 
+
 async def main():
     """Main entry point for the application."""
     try:
@@ -19,26 +20,21 @@ async def main():
         api_clients = [
             FTCClient(api_key=os.getenv("FTC_API_KEY")),
             SECClient(api_key=os.getenv("SEC_API_KEY")),
-            CourtListenerClient(api_key=os.getenv("COURTLISTENER_API_KEY"))
+            CourtListenerClient(api_key=os.getenv("COURTLISTENER_API_KEY")),
         ]
-        
+
         # Initialize extractors
-        extractors = [
-            QuoteExtractor(),
-            LawLabeler()
-        ]
-        
+        extractors = [QuoteExtractor(), LawLabeler()]
+
         # Set output path
         output_path = Path("data/processed")
         output_path.mkdir(parents=True, exist_ok=True)
-        
+
         # Run pipeline
         await PipelineOrchestrator.run_pipeline(
-            api_clients=api_clients,
-            extractors=extractors,
-            output_path=str(output_path)
+            api_clients=api_clients, extractors=extractors, output_path=str(output_path)
         )
-        
+
     except Exception as e:
         logger.error(f"Application failed: {str(e)}")
         raise
@@ -46,4 +42,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -19,4 +19,4 @@ visualize:
 	@echo "--- Launching notebook for $(DATA_DIR) ---"
 	uv run python3 scripts/create_notebook.py --data-root $(DATA_DIR) \
 	          --out notebooks/reports/pipeline_visualization.ipynb && \
-	uv run python3 -m notebook notebooks/reports/pipeline_visualization.ipynb 
+	uv run python3 -m notebook notebooks/reports/pipeline_visualization.ipynb

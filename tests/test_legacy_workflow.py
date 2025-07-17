@@ -1,6 +1,9 @@
 import pytest
 from pathlib import Path
-from corp_speech_risk_dataset.workflows.legacy_multistep import LegacyCourtListenerWorkflow
+from corp_speech_risk_dataset.workflows.legacy_multistep import (
+    LegacyCourtListenerWorkflow,
+)
+
 
 class DummyWorkflow(LegacyCourtListenerWorkflow):
     def __init__(self, *args, **kwargs):
@@ -26,8 +29,9 @@ class DummyWorkflow(LegacyCourtListenerWorkflow):
     def _step6_opinion_chain(self, dk_id, case_dir):
         self.called.append(("opinions", dk_id, case_dir))
 
+
 def test_legacy_workflow_steps(tmp_path):
     wf = DummyWorkflow(queries=["Q1"], court="CA", outdir=tmp_path / "out")
     wf.run()
     names = [c[0] for c in wf.called]
-    assert names == ["search", "shell", "entries", "pdfs", "opinions"] 
+    assert names == ["search", "shell", "entries", "pdfs", "opinions"]

@@ -4,6 +4,7 @@ from typing import Any
 
 _nlp = spacy.load("en_core_web_sm")
 
+
 def to_dependency_graph(text: str) -> nx.DiGraph:
     """
     Parse text with spaCy and return a NetworkX DiGraph representing the dependency tree.

@@ -1,8 +1,9 @@
 import pandas as pd
 import re
 
+
 # A helper to pull out every Name (Title) pair
-def extract_officers(raw: str) -> list[tuple[str,str]]:
+def extract_officers(raw: str) -> list[tuple[str, str]]:
     """Return list of (name, title) found in a messy raw string."""
     if not isinstance(raw, str):
         return []
@@ -31,9 +32,10 @@ def extract_officers(raw: str) -> list[tuple[str,str]]:
         name = re.sub(r"\s+", " ", name).strip()
 
         title = title.rstrip(" ,&").strip()
-        if name and title: # ensure we don't have empty names or titles
+        if name and title:  # ensure we don't have empty names or titles
             cleaned.append((name, title))
     return cleaned
+
 
 # Apply the helper across the DataFrame
 # 1. load
@@ -45,25 +47,24 @@ exec_cols = [col for col in df.columns if col.startswith("exec")]
 # 3. Fill NaNs in exec-cols with empty strings
 df[exec_cols] = df[exec_cols].fillna("")
 
+
 # 4. for each row, stitch together every execN, then extract officers in one shot
 def gather_officers(row):
     # now every row[col] is a str (possibly empty), so join will never see a float
     blob = " ".join(row[col] for col in exec_cols)
     return extract_officers(blob)
 
+
 # 5. build a new column of lists of tuples
 df["officers"] = df.apply(gather_officers, axis=1)
 
 # 6. If you want each officer on its own row, explode:
-rows = (df
-        .explode("officers")                       # one tuple per row
-        .dropna(subset=["officers"])
-        .assign(
-            name  = lambda d: d["officers"].str[0],
-            title = lambda d: d["officers"].str[1]
-        )
-        .drop(columns=exec_cols + ["officers"])
-       )
+rows = (
+    df.explode("officers")  # one tuple per row
+    .dropna(subset=["officers"])
+    .assign(name=lambda d: d["officers"].str[0], title=lambda d: d["officers"].str[1])
+    .drop(columns=exec_cols + ["officers"])
+)
 
 # 7. write out
-rows.to_csv("data/sp500_officers_cleaned.csv", index=False) 
+rows.to_csv("data/sp500_officers_cleaned.csv", index=False)

@@ -2,6 +2,7 @@
 The Attributor, responsible for identifying the speaker of a quote and
 filtering candidates based on company aliases.
 """
+
 from typing import Iterable, List, Set
 from loguru import logger
 import textacy.extract
@@ -19,6 +20,7 @@ from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS
 # import onnxruntime as ort
 # from transformers import DistilBertTokenizerFast
 
+
 class Attributor(QuoteAttributor):
     """
     Multi-sieve quote attribution:
@@ -32,16 +34,16 @@ class Attributor(QuoteAttributor):
     """
 
     ANC_PATTERN = re.compile(
-        r'\b(?:said|stated|noted|blogged|posted|wrote|quoted|'
-        r'according to|testif(?:y|ied)|deposed|swor(?:e|n)|submitted|'
-        r'annonce(?:d|ment)|privacy policy|public statements?)\b',
-        re.I
+        r"\b(?:said|stated|noted|blogged|posted|wrote|quoted|"
+        r"according to|testif(?:y|ied)|deposed|swor(?:e|n)|submitted|"
+        r"annonce(?:d|ment)|privacy policy|public statements?)\b",
+        re.I,
     )
 
     def __init__(self, company_aliases: Set[str]):
         """Initializes the attributor with company + officer aliases."""
-        self.nlp     = get_nlp()          # spaCy with AppleOps if available
-        self.aliases = company_aliases    # already lowered in config
+        self.nlp = get_nlp()  # spaCy with AppleOps if available
+        self.aliases = company_aliases  # already lowered in config
         self._add_alias_ruler()
 
         # Optional: load quantized DistilBERT (commented)
@@ -71,15 +73,15 @@ class Attributor(QuoteAttributor):
             if ctx.count('"') % 2 == 1:
                 ctx += '"'
             doc = self.nlp(ctx)
-            low_ctx   = ctx.lower()
+            low_ctx = ctx.lower()
             low_quote = qc.quote.lower() if qc.quote else ""
-            aliases   = self.aliases | set(ROLE_KEYWORDS)
+            aliases = self.aliases | set(ROLE_KEYWORDS)
 
             # 1) Rule-based cue regex
             for sent in doc.sents:
                 m = re.search(
                     rf'([A-Z][a-z]+)\s+{self.ANC_PATTERN.pattern}\s*[:,-]?\s*[""](.+?)[""]',
-                    sent.text
+                    sent.text,
                 )
                 if m:
                     qc.speaker = m.group(1)
@@ -91,9 +93,21 @@ class Attributor(QuoteAttributor):
             # 2) Dependency-pattern fallback
             for sent in doc.sents:
                 for token in sent:
-                    if token.lemma_ in {"say","state","note","post","blog","quote","write"}:
-                        subs = [c for c in token.children if c.dep_ in {"nsubj","nsubjpass"}]
-                        if subs and subs[0].ent_type_ in {"PERSON","ORG"}:
+                    if token.lemma_ in {
+                        "say",
+                        "state",
+                        "note",
+                        "post",
+                        "blog",
+                        "quote",
+                        "write",
+                    }:
+                        subs = [
+                            c
+                            for c in token.children
+                            if c.dep_ in {"nsubj", "nsubjpass"}
+                        ]
+                        if subs and subs[0].ent_type_ in {"PERSON", "ORG"}:
                             qc.speaker = subs[0].text
                             yield qc
                             break
@@ -123,7 +137,11 @@ class Attributor(QuoteAttributor):
                 continue
 
             # 4) Alias-enhanced NER via EntityRuler
-            entities = [ent for ent in doc.ents if ent.label_ in {"PERSON", "ORG", "CUSTOM_ENTITY"}]
+            entities = [
+                ent
+                for ent in doc.ents
+                if ent.label_ in {"PERSON", "ORG", "CUSTOM_ENTITY"}
+            ]
             for ent in entities:
                 if ent.text.lower() in aliases:
                     qc.speaker = ent.text

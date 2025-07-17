@@ -22,7 +22,7 @@ from corp_speech_risk_dataset.extractors.base_extractor import BaseExtractor
 def run_full_pipeline(
     statutes: Optional[List[str]] = None,
     output_dir: Optional[Path] = None,
-    save_opinions: bool = True
+    save_opinions: bool = True,
 ) -> None:
     """Run the complete data collection and processing pipeline.
 
@@ -73,6 +73,7 @@ def run_full_pipeline(
         logger.exception("Pipeline failed")
         raise
 
+
 """
 Pipeline orchestrator for coordinating API clients and extractors.
 """
@@ -85,10 +86,12 @@ class PipelineOrchestrator:
     Handles async data fetching and extraction processing.
     """
 
-    def __init__(self,
-                 api_clients: List[BaseAPIClient],
-                 extractors: List[BaseExtractor],
-                 output_path: Optional[str] = None):
+    def __init__(
+        self,
+        api_clients: List[BaseAPIClient],
+        extractors: List[BaseExtractor],
+        output_path: Optional[str] = None,
+    ):
         """
         Initialize the orchestrator with clients and extractors.
 
@@ -138,7 +141,9 @@ class PipelineOrchestrator:
                 data = await client.fetch_data(query_params)
                 all_data.extend(data)
 
-            logger.info(f"Fetched {len(all_data)} records from {len(self.api_clients)} clients")
+            logger.info(
+                f"Fetched {len(all_data)} records from {len(self.api_clients)} clients"
+            )
 
             # Process with extractors
             results = []
@@ -165,7 +170,9 @@ class PipelineOrchestrator:
             # Always close clients
             await self.close()
 
-    async def run_extraction_only(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def run_extraction_only(
+        self, data: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         Run extraction on provided data without fetching.
 
@@ -184,6 +191,7 @@ class PipelineOrchestrator:
                     results.extend(validated)
 
         return results
+
 
 if __name__ == "__main__":
     run_full_pipeline()

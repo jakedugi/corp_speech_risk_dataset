@@ -3,6 +3,7 @@ from loguru import logger
 
 _nlp = None
 
+
 def get_nlp():
     """Get spaCy NLP model with coreference resolution."""
     try:
@@ -15,5 +16,7 @@ def get_nlp():
             logger.warning(f"fastcoref not available, skipping: {e}")
         return _nlp
     except OSError:
-        logger.error("spaCy model 'en_core_web_sm' not found. Please install it with: python -m spacy download en_core_web_sm")
+        logger.error(
+            "spaCy model 'en_core_web_sm' not found. Please install it with: python -m spacy download en_core_web_sm"
+        )
         raise

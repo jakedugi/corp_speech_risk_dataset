@@ -6,6 +6,6 @@ from .core import (
     process_statutes,
     process_recap_data,
     process_recap_documents,
-    process_full_docket
+    process_full_docket,
 )
 from .queries import STATUTE_QUERIES, build_queries

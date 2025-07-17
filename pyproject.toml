@@ -108,6 +108,10 @@ dependencies = [
   "pydeps>=3.0.1",
   "libcst>=1.8.2",
   "import-linter>=2.3",
+  "faiss-cpu>=1.11.0.post1",
+  "hdbscan>=0.8.40",
+  "umap-learn>=0.5.9.post2",
+  "plotly>=6.2.0",
 ]
 
 

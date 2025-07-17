@@ -10,7 +10,7 @@ This project follows **Clean Architecture** with Domain-Driven Design patterns:
  Project Root
 ├── src/corp_speech_risk_dataset/     # Main source code (Clean Architecture)
 │   ├── domain/                       # Business logic (innermost layer)
-│   ├── application/                  # Use cases and services  
+│   ├── application/                  # Use cases and services
 │   ├── adapters/                     # Interface adapters
 │   ├── infrastructure/               # External frameworks/tools
 │   ├── shared/                       # Cross-cutting utilities
@@ -99,7 +99,7 @@ pytest tests/integration/ -v             # Integration tests
 ## Data Flow
 
 1. **Collection**: Legal cases from CourtListener API
-2. **Processing**: Quote extraction and speaker attribution  
+2. **Processing**: Quote extraction and speaker attribution
 3. **Encoding**: Text → vector representations for analysis
 4. **Storage**: Organized in `data/` with versioning
 
@@ -127,3 +127,108 @@ pytest tests/integration/ -v             # Integration tests
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
+COMMANDS: corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_api orchestrate \
+  --statutes "FTC Section 5" \
+  --company-file data/sp500_official_names_cleaned.csv \
+  --outdir data/testing_apis/courtlistener_refactor \
+  --pages 1 \
+  --page-size 1 \
+  --async \
+
+2025-07-15 18:52:17.482 | INFO     | corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator:run_async:72 - Starting ASYNC CourtListener orchestration (search + full hydrate)
+2025-07-15 18:52:25.331 | INFO     | corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator:_search_and_hydrate_async:105 - Saved search results to data/testing_apis/courtlistener_refactor/search/search_api_results.json
+2025-07-15 18:52:25.836 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_and_save:42 - Saved 1 dockets to data/testing_apis/courtlistener_refactor/15-16585_ca9/dockets
+2025-07-15 18:52:25.837 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/dockets/dockets_0.json
+2025-07-15 18:52:25.838 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/ia_dump.json
+2025-07-15 18:52:25.877 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_docket_entries:215 - Fetching docket entries with docket_id: 6155026, query: all
+^C2025-07-15 18:52:27.853 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_docket_entries:247 - Retrieved 31 docket entries
+2025-07-15 18:52:27.873 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_docket_entries:273 - Saved 31 docket entries to data/testing_apis/courtlistener_refactor/15-16585_ca9/entries
+2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951687_metadata.json
+2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951690_metadata.json
+2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951694_metadata.json
+2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951693_metadata.json
+2025-07-15 18:52:27.877 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951697_metadata.json
+2025-07-15 18:52:27.877 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085588_metadata.json
+2025-07-15 18:52:27.877 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951700_metadata.json
+2025-07-15 18:52:27.877 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951704_metadata.json
+2025-07-15 18:52:27.877 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951699_metadata.json
+2025-07-15 18:52:27.878 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085586_metadata.json
+2025-07-15 18:52:27.878 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085591_metadata.json
+2025-07-15 18:52:27.879 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951689_metadata.json
+2025-07-15 18:52:27.879 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085592_metadata.json
+2025-07-15 18:52:27.879 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085585_metadata.json
+2025-07-15 18:52:27.879 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951703_metadata.json
+2025-07-15 18:52:27.880 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085584_metadata.json
+2025-07-15 18:52:27.880 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951688_metadata.json
+2025-07-15 18:52:27.880 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951702_metadata.json
+2025-07-15 18:52:27.880 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951705_metadata.json
+2025-07-15 18:52:27.880 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951701_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085590_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085587_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951698_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30085589_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951696_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951685_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951692_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951695_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_30107445_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951691_metadata.json
+2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951686_metadata.json
+
+Aborted.
+corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python run_quote_extractor.py
+
+python: can't open file '/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/run_quote_extractor.py': [Errno 2] No such file or directory
+corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python scripts/run_extraction.py
+2025-07-15 19:10:14.692 | INFO     | __main__:main:20 - Starting quote extraction process...
+2025-07-15 19:10:14.692 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:__init__:31 - Initializing Quote Extraction Pipeline...
+2025-07-15 19:10:15.205 | WARNING  | corp_speech_risk_dataset.infrastructure.nlp:get_nlp:15 - fastcoref not available, skipping: [E002] Can't find factory for 'fastcoref' for language English (en). This usually happens when spaCy calls `nlp.create_pipe` with a custom component name that's not registered on the current language class. If you're using a custom component, make sure you've added the decorator `@Language.component` (for function components) or `@Language.factory` (for class components).
+
+Available factories: attribute_ruler, tok2vec, merge_noun_chunks, merge_entities, merge_subtokens, token_splitter, doc_cleaner, parser, beam_parser, lemmatizer, trainable_lemmatizer, entity_linker, entity_ruler, tagger, morphologizer, ner, beam_ner, senter, sentencizer, spancat, spancat_singlelabel, span_finder, future_entity_ruler, span_ruler, textcat, textcat_multilabel, en.lemmatizer
+2025-07-15 19:10:20.947 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:__init__:55 - Pipeline initialized.
+2025-07-15 19:10:20.950 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:save_results:162 - Saving results to extracted_quotes.jsonl...
+2025-07-15 19:10:20.951 | DEBUG    | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:run:81 - Starting pipeline run...
+2025-07-15 19:10:20.951 | DEBUG    | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:run:153 - Pipeline run finished.
+2025-07-15 19:10:20.952 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:save_results:172 - Saved 0 documents with quotes.
+2025-07-15 19:10:20.952 | INFO     | __main__:main:33 - Quote extraction process finished successfully.
+corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python encode_quotes.py data/extracted/ --recursive
+
+python: can't open file '/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/encode_quotes.py': [Errno 2] No such file or directory
+corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python encode_quotes.py data/extracted --recursive
+
+python: can't open file '/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/encode_quotes.py': [Errno 2] No such file or directory
+corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset %
+
+
+(corp_speech_risk_dataset) corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python src/corp_speech_risk_dataset/clustering/make_vectors.py \
+  --meta data/clustering/metadata.json \
+  --out data/clustering/concat_vectors.npy
+→ 25% done at 340.6s elapsed
+→ 50% done at 660.8s elapsed
+→ 75% done at 1423.3s elapsed
+Wrote (96732, 2816) → data/clustering/concat_vectors.npy
+
+
+(corp_speech_risk_dataset) corp_speech_risk_datasetjakedugan@Jakes-MacBook-Air-2013 corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_cluster \
+  --vec data/clustering/concat_vectors.npy \
+  --meta data/clustering/metadata.json \
+  --out data/clustering/clusters.html
+
+
+
+Dump clusters: uv run scripts/dump_clusters.py
+#!/usr/bin/env python3
+''' For use after the clustering pipeline has been run. In order to get the cluster labels for each document, we need to dump the cluster labels to a JSON file.
+it’s very handy for:
+	•	Automating downstream analysis or plotting (e.g. grouping sentences by risk-level in Python/R).
+	•	Hyperparameter sweeps: you can quickly diff two runs’ JSONs to see how cluster assignments shifted.
+	•	Audit logs: regulators often want a raw data dump, not just visuals.
+'''
+from pathlib import Path
+import argparse
+from corp_speech_risk_dataset.clustering.pipeline import ClusterPipeline
+
+def main():
+    p = argparse.ArgumentParser(
+        description="Dump idx→cluster mapping to JSON"
+    )

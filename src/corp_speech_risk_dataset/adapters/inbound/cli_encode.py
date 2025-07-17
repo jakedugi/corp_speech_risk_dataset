@@ -9,6 +9,7 @@ from src.corp_speech_risk_dataset.encoding.wl_features import wl_vector
 # Will look under data/models/en.wiki.bpe.vs32000.model by default
 tokenizer = SentencePieceTokenizer()
 
+
 def encode_file(in_path: Path, extracted_root: Path, tokenized_root: Path):
     """Helper: encode one file, writing into mirrored structure."""
     rel_path = in_path.relative_to(extracted_root)
@@ -20,7 +21,9 @@ def encode_file(in_path: Path, extracted_root: Path, tokenized_root: Path):
             row = json.loads(line)
             vec = wl_vector(row["text"])
             # capture fallback info too
-            sp_ids, used_fallback, fallback_chars = tokenizer.encode_with_flag(row["text"])
+            sp_ids, used_fallback, fallback_chars = tokenizer.encode_with_flag(
+                row["text"]
+            )
             if used_fallback:
                 logger.warning(f"Byte-fallback for chars: {fallback_chars}")
             enriched = {
@@ -37,6 +40,7 @@ def encode_file(in_path: Path, extracted_root: Path, tokenized_root: Path):
             }
             fout.write((json.dumps(enriched, ensure_ascii=False) + "\n").encode())
     logger.success(f"✔ Written tokenized output to {out_path}")
+
 
 @click.command(context_settings={"show_default": True})
 @click.argument(
@@ -103,6 +107,7 @@ def main(
         except ValueError as e:
             raise click.ClickException(f"Input must be under {extracted_root}: {e}")
         encode_file(in_path, extracted_root, tokenized_root)
+
 
 if __name__ == "__main__":
     main()

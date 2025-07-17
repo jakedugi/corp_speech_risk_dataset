@@ -2,6 +2,7 @@
 Main QuoteExtractor implementation that orchestrates the full extraction pipeline.
 This consolidates functionality from multiple scattered extractor classes.
 """
+
 import json
 from pathlib import Path
 from typing import Iterator, List, Optional, Set
@@ -23,11 +24,13 @@ class QuoteExtractor(QuoteExtractorPort):
     3. Semantic reranking
     """
 
-    def __init__(self,
-                 keywords: List[str] = None,
-                 company_aliases: Set[str] = None,
-                 seed_quotes: List[str] = None,
-                 threshold: float = 0.55):
+    def __init__(
+        self,
+        keywords: List[str] = None,
+        company_aliases: Set[str] = None,
+        seed_quotes: List[str] = None,
+        threshold: float = 0.55,
+    ):
         """
         Initialize the quote extractor with configuration.
 
@@ -101,25 +104,31 @@ class QuoteExtractor(QuoteExtractorPort):
         try:
             # For compatibility with test, assume input is JSON with text field
             import json
-            if input_file.suffix == '.json':
-                data = json.loads(input_file.read_text(encoding='utf-8'))
+
+            if input_file.suffix == ".json":
+                data = json.loads(input_file.read_text(encoding="utf-8"))
                 if isinstance(data, list):
                     all_quotes = []
                     for item in data:
-                        text = item.get('opinion_text', '')
+                        text = item.get("opinion_text", "")
                         quotes = list(self.extract(text))
                         all_quotes.extend([q.to_dict() for q in quotes])
                     output_file.write_text(json.dumps(all_quotes, indent=2))
                 else:
-                    text = data.get('opinion_text', '')
+                    text = data.get("opinion_text", "")
                     quotes = list(self.extract(text))
-                    output_file.write_text(json.dumps([q.to_dict() for q in quotes], indent=2))
+                    output_file.write_text(
+                        json.dumps([q.to_dict() for q in quotes], indent=2)
+                    )
             else:
                 # For text files, process directly
-                text = input_file.read_text(encoding='utf-8')
+                text = input_file.read_text(encoding="utf-8")
                 quotes = list(self.extract(text))
                 import json
-                output_file.write_text(json.dumps([q.to_dict() for q in quotes], indent=2))
+
+                output_file.write_text(
+                    json.dumps([q.to_dict() for q in quotes], indent=2)
+                )
         except Exception as e:
             logger.error(f"Error processing file {input_file}: {e}")
 

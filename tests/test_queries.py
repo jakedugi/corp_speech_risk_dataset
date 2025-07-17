@@ -1,7 +1,11 @@
 import csv
 from pathlib import Path
 import pytest
-from corp_speech_risk_dataset.api.courtlistener.queries import build_queries, STATUTE_QUERIES
+from corp_speech_risk_dataset.api.courtlistener.queries import (
+    build_queries,
+    STATUTE_QUERIES,
+)
+
 
 def test_build_queries_no_companies():
     for statute in STATUTE_QUERIES:
@@ -9,6 +13,7 @@ def test_build_queries_no_companies():
         assert isinstance(qlist, list)
         assert len(qlist) == 1
         assert STATUTE_QUERIES[statute].strip() in qlist[0]
+
 
 def test_build_queries_with_companies(tmp_path):
     csv_path = tmp_path / "companies.csv"
@@ -22,4 +27,4 @@ def test_build_queries_with_companies(tmp_path):
     qlist = build_queries("FTC Section 5", company_file=csv_path, chunk_size=2)
     assert len(qlist) == 2
     for q in qlist:
-        assert '"Alpha"' in q or '"Beta"' in q or '"Gamma"' in q 
+        assert '"Alpha"' in q or '"Beta"' in q or '"Gamma"' in q

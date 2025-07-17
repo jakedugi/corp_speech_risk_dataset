@@ -2,6 +2,7 @@ import nltk
 
 REQUIRED_NLTK_PACKAGES = ["punkt", "punkt_tab"]
 
+
 def ensure_nltk_resources():
     for package in REQUIRED_NLTK_PACKAGES:
         try:

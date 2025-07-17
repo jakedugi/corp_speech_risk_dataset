@@ -7,10 +7,9 @@ from typing import Optional
 
 from loguru import logger
 
+
 def setup_logging(
-    log_file: Optional[Path] = None,
-    level: str = "INFO",
-    rotation: str = "1 day"
+    log_file: Optional[Path] = None, level: str = "INFO", rotation: str = "1 day"
 ) -> None:
     """Configure logging for the application.
 
@@ -26,7 +25,7 @@ def setup_logging(
     logger.add(
         sys.stderr,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-        level=level
+        level=level,
     )
 
     # Add file handler if specified
@@ -37,8 +36,9 @@ def setup_logging(
             log_file,
             format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
             level=level,
-            rotation=rotation
+            rotation=rotation,
         )
+
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with the specified name.

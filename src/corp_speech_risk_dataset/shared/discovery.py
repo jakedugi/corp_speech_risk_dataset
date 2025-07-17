@@ -1,6 +1,7 @@
 from pathlib import Path
 from collections import defaultdict
 
+
 def find_stage_files(root: Path, pattern="*_stage*.jsonl"):
     """
     Walk `root` recursively and return {stage_int: [Path, …]} dict.

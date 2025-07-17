@@ -11,6 +11,7 @@ from typing import Optional
 
 from loguru import logger
 
+
 @dataclass
 class CourtListenerConfig:
     """Configuration settings for CourtListener API."""
@@ -28,6 +29,7 @@ class CourtListenerConfig:
     default_date_min: Optional[str] = None
     api_mode: str = "standard"
 
+
 def load_config() -> CourtListenerConfig:
     """Load configuration with proper fallbacks.
 
@@ -43,7 +45,9 @@ def load_config() -> CourtListenerConfig:
         # Load from environment variables
         api_token = os.getenv("COURTLISTENER_API_TOKEN")
         rate_limit = float(os.getenv("COURTLISTENER_RATE_LIMIT", "0.25"))
-        output_dir = Path(os.getenv("COURTLISTENER_OUTPUT_DIR", "data/raw/courtlistener"))
+        output_dir = Path(
+            os.getenv("COURTLISTENER_OUTPUT_DIR", "data/raw/courtlistener")
+        )
         default_pages = int(os.getenv("COURTLISTENER_DEFAULT_PAGES", "1"))
         default_page_size = int(os.getenv("COURTLISTENER_DEFAULT_PAGE_SIZE", "50"))
         default_date_min = os.getenv("COURTLISTENER_DEFAULT_DATE_MIN")
@@ -56,7 +60,7 @@ def load_config() -> CourtListenerConfig:
             default_pages=default_pages,
             default_page_size=default_page_size,
             default_date_min=default_date_min,
-            api_mode=api_mode
+            api_mode=api_mode,
         )
 
         # Validate API token

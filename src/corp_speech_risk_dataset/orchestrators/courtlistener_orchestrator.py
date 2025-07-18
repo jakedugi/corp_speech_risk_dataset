@@ -150,11 +150,11 @@ class CourtListenerOrchestrator:
         case_dir = self.outdir / slug
         ensure_dir(case_dir)
 
-        # 2️⃣ Docket shell
+        # Docket shell
         dockets_dir = case_dir / "dockets"
         process_and_save(self.client, "dockets", {"id": dk_id}, dockets_dir, limit=1)
 
-        # 3️⃣ IA dump
+        # IA dump
         ia_json_path = dockets_dir / "dockets_0.json"
         ia_url = None
         if ia_json_path.exists():
@@ -168,7 +168,7 @@ class CourtListenerOrchestrator:
                 except Exception as e:
                     logger.warning(f"Failed to download IA dump for {slug}: {e}")
 
-        # 4️⃣ Free-attachment back-fill if gaps
+        # Free-attachment back-fill if gaps
         ia_dump_path = case_dir / "ia_dump.json"
         if needs_recap_fetch(ia_dump_path):
             logger.info(f"Triggering RECAP free-attachment fetch for {slug}")
@@ -188,7 +188,7 @@ class CourtListenerOrchestrator:
                 else:
                     raise
 
-        # 5️⃣ Entries (RECAP mode gives nested docs)
+        # Entries (RECAP mode gives nested docs)
         entries_dir = case_dir / "entries"
         process_docket_entries(
             self.config,
@@ -251,7 +251,7 @@ class CourtListenerOrchestrator:
                                         f"Failed to download PDF for doc {doc['id']}: {e}"
                                     )
 
-        # 6️⃣ Clusters → Opinions
+        # Clusters → Opinions
         clusters_dir = case_dir / "clusters"
         process_and_save(
             self.client, "clusters", {"docket": dk_id}, clusters_dir, limit=100
@@ -274,10 +274,10 @@ class CourtListenerOrchestrator:
         slug = f"{dk_num}_{court}"
         case_dir = self.outdir / slug
         ensure_dir(case_dir)
-        # 2️⃣ Docket shell
+        # Docket shell
         dockets_dir = case_dir / "dockets"
         process_and_save(self.client, "dockets", {"id": dk_id}, dockets_dir, limit=1)
-        # 3️⃣ IA dump
+        # IA dump
         ia_json_path = dockets_dir / "dockets_0.json"
         ia_url = None
         if ia_json_path.exists():
@@ -290,7 +290,7 @@ class CourtListenerOrchestrator:
                     download(ia_url, ia_dump_path)
                 except Exception as e:
                     logger.warning(f"Failed to download IA dump for {slug}: {e}")
-        # 4️⃣ Free-attachment back-fill if gaps
+        # Free-attachment back-fill if gaps
         ia_dump_path = case_dir / "ia_dump.json"
         if needs_recap_fetch(ia_dump_path):
             logger.info(f"Triggering RECAP free-attachment fetch for {slug}")
@@ -309,7 +309,7 @@ class CourtListenerOrchestrator:
                     )
                 else:
                     raise
-        # 5️⃣ Entries (RECAP mode gives nested docs)
+        # Entries (RECAP mode gives nested docs)
         entries_dir = case_dir / "entries"
         process_docket_entries(
             self.config,
@@ -380,7 +380,7 @@ class CourtListenerOrchestrator:
                             logger.warning(
                                 f"Failed to download PDF for doc {doc['id']}: {e}"
                             )
-        # 6️⃣ Clusters → Opinions (sync for now)
+        # Clusters → Opinions (sync for now)
         clusters_dir = case_dir / "clusters"
         process_and_save(
             self.client, "clusters", {"docket": dk_id}, clusters_dir, limit=100

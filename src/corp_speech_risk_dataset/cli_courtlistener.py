@@ -16,7 +16,7 @@ import httpx
 from dotenv import load_dotenv
 
 from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
-from corp_speech_risk_dataset.config import load_config
+from corp_speech_risk_dataset.courtlistener_config import load_config
 from corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator import (
     CourtListenerOrchestrator,
 )

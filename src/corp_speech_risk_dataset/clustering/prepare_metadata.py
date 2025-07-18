@@ -55,15 +55,31 @@ if __name__ == "__main__":
         help="Root directory containing tokenized JSONL files",
     )
     parser.add_argument(
-        "--output-path", required=True, help="File path to write metadata.json"
+        "--output-path",
+        required=True,
+        help="File path to write metadata.json",
     )
+    parser.add_argument(
+        "--exclude-speakers",
+        nargs="*",  # zero-or-more values
+        default=[],
+        metavar="NAME",
+        help="List of speaker names to drop before writing metadata",
+    )
+
     args = parser.parse_args()
 
     root = Path(args.input_dir)
     out = Path(args.output_path)
 
+    # collect & optionally filter
     jsonl_files = collect_jsonl_files(root)
     entries = load_entries(jsonl_files)
-    write_metadata(entries, out)
 
+    if args.exclude_speakers:
+        before = len(entries)
+        entries = filter_speakers(entries, args.exclude_speakers)
+        print(f"Dropped {before-len(entries)} entries for excluded speakers")
+
+    write_metadata(entries, out)
     print(f"Wrote lossless metadata with {len(entries)} entries to {out}")

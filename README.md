@@ -206,3 +206,8 @@ def main():
 2025-07-17 12:14:13.214 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
 Dropped 24265 entries for excluded speakers
 Wrote lossless metadata with 72457 entries to data/clustering/metadata.json
+
+
+(corp_speech_risk_dataset) corp_speech_risk_dataset % python scripts/create_notebook.py \
+  --data-root data/extracted/rss \
+  --out notebooks/reports/rss_pipeline.ipynb

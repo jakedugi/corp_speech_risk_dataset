@@ -127,7 +127,9 @@ class QuoteExtractionPipeline:
                 with self.file_paths[1].open("a", encoding="utf8") as f1:
                     f1.write(json.dumps(rec_clean) + "\n")
             # Stage 2: FIRST PASS EXTRACTION
-            candidates = list(self.first_pass.extract(cleaned_text))
+            raw_cands = list(self.first_pass.extract(cleaned_text))
+            # drop any empty‐string quotes (avoids IndexError in merge_adjacent)
+            candidates = [qc for qc in raw_cands if qc.quote and qc.quote.strip()]
             candidates = self.merge_adjacent(candidates)
             if self.mirror_mode and candidates:
                 for qc in candidates:
@@ -183,6 +185,29 @@ class QuoteExtractionPipeline:
             logger.debug(f"Attributed {len(vetted)} quotes in {doc.doc_id}")
             # Stage 4: RERANKING
             final_quotes = list(self.reranker.rerank(vetted))
+
+            # If this was an RSS record and we got *no* reranked quotes,
+            # fall back to “whole‐doc” as a single QuoteCandidate:
+            # if not final_quotes and hasattr(doc, "_rss_parts"):
+            #     title, summary, content = doc._rss_parts
+            #     parts = []
+            #     for s in (title, summary, content):
+            #         if s and s not in parts:
+            #             parts.append(s)
+            #     whole = " ".join(parts).strip()
+            #     if whole:
+            #         from ..models.quote_candidate import QuoteCandidate
+            #         # build a dummy QuoteCandidate
+            #         qc = QuoteCandidate(
+            #             doc_id=doc.doc_id,
+            #             quote=whole,
+            #             speaker=doc.speaker,
+            #             score=0.0,
+            #             urls=doc.urls,
+            #             context=whole,
+            #         )
+            #         final_quotes = [qc]
+
             if self.mirror_mode and final_quotes:
                 for qc in final_quotes:
                     self.stage_writer.write(
@@ -209,7 +234,10 @@ class QuoteExtractionPipeline:
                 logger.debug(
                     f"Yielding {len(final_quotes)} final quotes for {doc.doc_id}"
                 )
+            # (this yield now covers either the “real” quotes or our one‐item fallback)
+            if final_quotes:
                 yield doc.doc_id, final_quotes
+
         logger.debug("Pipeline run finished.")
 
     def save_results(self, results, output_file="extracted_quotes.jsonl"):

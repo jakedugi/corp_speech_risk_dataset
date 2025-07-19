@@ -14,13 +14,13 @@ from datashader import transfer_functions as tf
 
 hv.extension("bokeh")
 
-STAGE_MAP = {
-    0: ["../../data/stage0_raw.jsonl"],
-    1: ["../../data/stage1_cleaner.jsonl"],
-    2: ["../../data/stage2_extractor.jsonl"],
-    3: ["../../data/stage3_attributor.jsonl"],
-    4: ["../../data/stage4_reranker.jsonl"],
-}
+# STAGE_MAP = {
+#     0: ["../../data/stage0_raw.jsonl"],
+#     1: ["../../data/stage1_cleaner.jsonl"],
+#     2: ["../../data/stage2_extractor.jsonl"],
+#     3: ["../../data/stage3_attributor.jsonl"],
+#     4: ["../../data/stage4_reranker.jsonl"],
+# }
 
 
 def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
@@ -30,52 +30,58 @@ def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
         stage_dir: Directory containing stage*.jsonl files
         output_file: Output notebook path (default: pipeline_report.ipynb)
     """
+    # ----------------------------------------------------------------
+    # dynamically discover all of the stage JSONLs under stage_dir:
+    STAGE_MAP: dict[int, list[Path]] = {}
+    for stage in range(5):
+        STAGE_MAP[stage] = sorted(stage_dir.glob(f"stage{stage}_*.jsonl"))
+    if not any(STAGE_MAP.values()):
+        raise RuntimeError(f"No stage files found in {stage_dir}")
+    # ----------------------------------------------------------------
+
     if output_file is None:
         output_file = stage_dir / "pipeline_report.ipynb"
 
     # Notebook structure
-    notebook = {
-        "cells": [
-            {
-                "cell_type": "markdown",
-                "metadata": {},
-                "source": [
-                    "# Pipeline Analysis Report\n\n",
-                    "This notebook was auto-generated from pipeline stage data.\n\n",
-                ],
-            },
-            {
-                "cell_type": "code",
-                "execution_count": None,
-                "metadata": {},
-                "source": [
-                    "import json\n",
-                    "import pandas as pd\n",
-                    "from pathlib import Path\n",
-                    "from corp_speech_risk_dataset.shared.discovery import find_stage_files\n\n",
-                ],
-            },
-        ],
-        "metadata": {
+    # build a real NotebookNode:
+    nb = nbf.v4.new_notebook(
+        metadata={
             "kernelspec": {
                 "display_name": "Python 3",
                 "language": "python",
                 "name": "python3",
             }
         },
-        "nbformat": 4,
-        "nbformat_minor": 4,
-    }
+        nbformat=4,
+        nbformat_minor=4,
+    )
+
+    # seed the first two cells
+    nb.cells = [
+        nbf.v4.new_markdown_cell(
+            "# Pipeline Analysis Report\n\n"
+            "This notebook was auto-generated from pipeline stage data.\n\n"
+        ),
+        nbf.v4.new_code_cell(
+            "import json\n"
+            "import pandas as pd\n"
+            "from pathlib import Path\n"
+            "from corp_speech_risk_dataset.shared.discovery import find_stage_files\n\n"
+        ),
+    ]
 
     # --- Papermill parameters cell (always first) ---
+    # embed *absolute* paths so read_json_auto can find them regardless of cwd
+    abs_map = {
+        stage: [str(p.resolve()) for p in files] for stage, files in STAGE_MAP.items()
+    }
     param_cell = nbf.v4.new_code_cell(
         "# --- Papermill parameters ---\n"
-        "from pathlib import Path\n"
-        "from corp_speech_risk_dataset.utils.discovery import find_stage_files\n\n"
-        f'DATA_ROOT = Path(r"{data_root}")  # absolute path\n'
-        "STAGE_MAP  = find_stage_files(DATA_ROOT)\n"
+        "from pathlib import Path\n\n"
+        f'DATA_ROOT = Path(r"{stage_dir.resolve()}")\n'
+        f"STAGE_MAP  = {json.dumps(abs_map, indent=4)}\n"
         "print('→ DATA_ROOT:', DATA_ROOT)\n"
-        "print({k: len(v) for k, v in STAGE_MAP.items()})\n"
+        "print({stage: len(files) for stage, files in STAGE_MAP.items()})\n"
         "assert STAGE_MAP, f'STAGE_MAP empty – does {DATA_ROOT} contain *_stage*.jsonl ?'\n",
         metadata={"tags": ["parameters"]},
     )
@@ -154,7 +160,7 @@ def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
     nb.cells.append(
         nbf.v4.new_code_cell(
             "def load_stage(stage: int) -> pl.DataFrame:\n"
-            "    paths = STAGE_MAP.get(stage, [])\n"
+            "    paths = STAGE_MAP[stage]\n"
             "    if not paths:\n"
             "        return pl.DataFrame()\n"
             "    # Properly quote each path as a plain string\n"
@@ -199,7 +205,7 @@ def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
             "}\n\n"
             "# 2. Guaranteed Polars loader\n"
             "def load_stage(stage: int) -> pl.DataFrame:\n"
-            "    paths = STAGE_MAP.get(stage, [])\n"
+            "    paths = STAGE_MAP[stage]\n"
             "    if not paths:\n"
             "        return pl.DataFrame()\n"
             "    joined = ', '.join(f\"'{p}'\" for p in paths)\n"
@@ -222,6 +228,29 @@ def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
             "full_df = pl.concat(aligned, how='vertical') if aligned else pl.DataFrame()\n"
             "print('Combined DataFrame shape:', full_df.shape)\n"
             "display(full_df.head(10)) if full_df.height > 0 else print('DataFrame is empty. Please run `make run` first to generate the data.')"
+        )
+    )
+
+    # --- CELL 9: Summary Statistics (Code) ---
+    nb.cells.append(
+        nbf.v4.new_code_cell(
+            "# 3.5 Summary Statistics\n"
+            "import polars as pl\n"
+            "# assume full_df is already defined\n"
+            "if full_df.is_empty():\n"
+            "    print('No data to summarize.')\n"
+            "else:\n"
+            "    total_docs = full_df.select(pl.col('doc_id')).unique().height\n"
+            "    total_quotes = full_df.height\n"
+            "    per_stage = (\n"
+            "        full_df\n"
+            "        .group_by('stage')\n"
+            "        .agg(pl.count().alias('n_rows'))\n"
+            "        .sort('stage')\n"
+            "    )\n"
+            "    print(f'Total documents processed: {total_docs}')\n"
+            "    print(f'Total quote-candidates (all stages): {total_quotes}')\n"
+            "    display(per_stage)\n"
         )
     )
 
@@ -377,11 +406,12 @@ def create_pipeline_notebook(stage_dir: Path, output_file: Path = None):
     )
 
     # --- Write the notebook to a file ---
-    notebook_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(notebook_path, "w") as f:
+    # make sure the parent dir exists
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
         nbf.write(nb, f)
 
-    print(f"Successfully created notebook at: {notebook_path}")
+    print(f"Successfully created notebook at: {output_file}")
 
 
 if __name__ == "__main__":
@@ -391,4 +421,4 @@ if __name__ == "__main__":
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
-    create_notebook(Path(args.data_root), Path(args.out))
+    create_pipeline_notebook(Path(args.data_root), Path(args.out))

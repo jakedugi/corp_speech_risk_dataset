@@ -37,6 +37,12 @@ def main():
         default=None,
         help="Destination root for mirrored output (overrides config.MIRROR_OUT_DIR)",
     )
+    parser.add_argument(
+        "--viz-out",
+        type=Path,
+        default=None,
+        help="Directory to write stage JSONL files (overrides default)",
+    )
     args = parser.parse_args()
 
     logger.add("pipeline_run.log", rotation="1 day")
@@ -47,6 +53,7 @@ def main():
 
     pipeline = QuoteExtractionPipeline(
         visualization_mode=args.visualize,
+        output_dir=args.viz_out,
         mirror_mode=True,
         db_root=args.db_root,
     )

@@ -211,3 +211,39 @@ Wrote lossless metadata with 72457 entries to data/clustering/metadata.json
 (corp_speech_risk_dataset) corp_speech_risk_dataset % python scripts/create_notebook.py \
   --data-root data/extracted/rss \
   --out notebooks/reports/rss_pipeline.ipynb
+
+
+  corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_encode \
+    data/extracted/rss \
+    -r \
+    --extracted-root data/extracted/rss \
+    --tokenized-root data/tokenized/rss
+
+
+python -m corp_speech_risk_dataset.clustering.prepare_metadata \
+    --input-dir    data/tokenized/rss \
+    --output-path  data/clustering/metadata.json
+
+
+corp_speech_risk_dataset % OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false \
+  python -m corp_speech_risk_dataset.clustering.make_vectors \
+    --meta data/clustering/metadata.json \
+    --out  data/clustering/concat_vectors.npy
+2025-07-19 16:00:31.423 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
+→ 25% done at 4.2s elapsed
+→ 50% done at 7.9s elapsed
+→ 75% done at 12.5s elapsed
+Wrote (976, 2816) → data/clustering/concat_vectors.npy
+
+
+
+
+THE OUTCOMES IS THE FINAL STEP TO APPEND THE AMOUNTS AND PERCENTILES OF THE FINAL JUDGEMENT AMOUNT IN FAVOR OF THE PLANTIFFS Positive values in favor of plantiff low or negative values in favor of defendant
+
+(corp_speech_risk_dataset)  corp_speech_risk_dataset % uv run python -m corp_speech_risk_dataset.case_outcome.case_outcome_imputer \
+  --root        data/tokenized/courtlistener \
+  --stage1-root data/extracted/courtlistener \
+  --outdir      data/outcomes/courtlistener \
+  --mode        manual \
+  --context-chars 400 \
+  --min-amount    0

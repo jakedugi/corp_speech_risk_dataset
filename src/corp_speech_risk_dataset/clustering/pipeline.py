@@ -59,6 +59,10 @@ class ClusterPipeline:
         is_missing = [
             v is None or (isinstance(v, float) and np.isnan(v)) for v in y
         ]  # flag nulls  [oai_citation:2‡letsdatascience.com](https://letsdatascience.com/handling-missing-values/?utm_source=chatgpt.com)
+
+        # make is_missing available on self before resampling
+        self.is_missing = np.array(is_missing)
+
         vals = np.array(
             [float(v) if not m else np.nan for v, m in zip(y, is_missing)],
             dtype=np.float64,
@@ -77,6 +81,94 @@ class ClusterPipeline:
         categories, bucket_codes = np.unique(buckets, return_inverse=True)
         # bucket_codes is an integer array [0=len(meta)-1], values in {0,1,2,3}
         # we'll use `buckets` (strings) later for coloring, but pass bucket_codes to UMAP
+
+        # ── QUICK OVERSAMPLING with small Gaussian noise ────────────────────
+        rs = np.random.RandomState(42)
+        counts = np.bincount(bucket_codes)
+        max_count = counts.max()
+        bucket_codes_orig = bucket_codes.copy()
+        resampled_idx = []
+        for cls in np.unique(bucket_codes_orig):
+
+            idx_cls = np.where(bucket_codes_orig == cls)[0]
+            n_needed = max_count - len(idx_cls)
+            # sample with replacement and add slight noise to jitter
+            choice = rs.choice(idx_cls, n_needed, replace=True)
+            resampled_idx.append(np.concatenate([idx_cls, choice]))
+        resampled_idx = np.concatenate(resampled_idx)  # final index array
+        bucket_codes = bucket_codes[resampled_idx]  # balanced labels
+        self.vectors = self.vectors[resampled_idx]  # balanced vectors
+        self.cluster_vectors = self.cluster_vectors[resampled_idx]
+        buckets = buckets[resampled_idx]
+        self.meta = [self.meta[i] for i in resampled_idx]
+        # after reshaping self.vectors and self.cluster_vectors:
+        dup_mask = np.zeros(len(resampled_idx), bool)
+        # mark the last n_needed entries in each class block as duplicates
+        start = 0
+        for cls in np.unique(bucket_codes_orig):
+            idx_cls = np.where(bucket_codes_orig == cls)[0]
+            n_needed = max_count - len(idx_cls)
+            dup_mask[start + len(idx_cls) : start + len(idx_cls) + n_needed] = True
+            start += len(idx_cls) + n_needed
+        # # apply noise only to duplicates
+        noise = rs.normal(
+            scale=1e-3 * np.linalg.norm(self.vectors, axis=1).mean(),
+            size=self.vectors.shape,
+        )
+        self.vectors[dup_mask] += noise[dup_mask]
+        # now recompute is_missing to match our oversampled meta
+        is_missing = [
+            (m.get("final_judgement_real") is None)
+            or (
+                isinstance(m.get("final_judgement_real"), float)
+                and np.isnan(m.get("final_judgement_real"))
+            )
+            for m in self.meta
+        ]
+        self.is_missing = np.array(is_missing)
+        target = bucket_codes
+
+        # ── 2) JITTER to break exact duplicates ──────────────────────
+        from sklearn.neighbors import KDTree
+
+        rs_j = np.random.RandomState(123)
+        tree = KDTree(self.vectors)
+        dists, _ = tree.query(self.vectors, k=2)
+        avg_nndist = dists[:, 1].mean()
+        jitter_scale = 0.001 * avg_nndist
+        print(f"avg_nndist={avg_nndist:.4f}, jitter_scale={jitter_scale:.6f}")
+        self.vectors += rs_j.normal(
+            scale=jitter_scale, size=self.vectors.shape
+        )  # avoids UMAP neighbor‐graph collapse  [oai_citation:0‡gemfury.com](https://gemfury.com/emaballarin/python%3Aumap-learn/-/content/parametric_umap.py)  [oai_citation:1‡GitHub](https://github.com/lmcinnes/umap/issues/771?utm_source=chatgpt.com)
+
+        # ── 3) CLUSTER-BASED UNDERSAMPLING of the majority class ─────
+        from sklearn.cluster import KMeans
+
+        # Identify the largest class code
+        maj_code = np.bincount(target).argmax()
+        min_count = np.bincount(target).min()
+        maj_idx = np.where(target == maj_code)[0]
+        # Cluster majority into balanced groups
+        n_clusters = int(np.floor(len(maj_idx) / min_count)) or 1
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        maj_labels = kmeans.fit_predict(self.vectors[maj_idx])
+        undersample_idx = []
+        for c in range(n_clusters):
+            members = maj_idx[maj_labels == c]
+            # only sample if sufficient members
+            if len(members) >= min_count:
+                undersample_idx.append(rs.choice(members, min_count, replace=False))
+            else:
+                undersample_idx.append(members)
+        undersample_idx = np.concatenate(undersample_idx)
+        # Keep *all* minority + balanced subset of majority
+        keep_idx = np.where(target != maj_code)[0].tolist() + undersample_idx.tolist()
+        keep_idx = np.array(keep_idx, dtype=int)
+        self.vectors = self.vectors[keep_idx]
+        self.cluster_vectors = self.cluster_vectors[keep_idx]
+        target = target[keep_idx]
+        self.meta = [self.meta[i] for i in keep_idx]
+        # now `target` is balanced by cluster among the majority  [oai_citation:2‡GitHub](https://github.com/farshidrayhancv/CUSBoost?utm_source=chatgpt.com) [oai_citation:3‡arXiv](https://arxiv.org/abs/1712.04356?utm_source=chatgpt.com)
 
         # decide supervision target for UMAP
         if supervision_mode == "continuous":
@@ -107,20 +199,23 @@ class ClusterPipeline:
             raise ValueError("Vector / metadata length mismatch")
 
         self.index = FaissIndex(dim=self.vectors.shape[1], use_gpu=use_gpu)
-        self.clusterer = HDBSCANClusterer(min_cluster_size=min_cluster_size)
+        self.clusterer = HDBSCANClusterer(
+            min_cluster_size=min_cluster_size,
+            metric="euclidean",
+        )
         # supervised UMAP with categorical buckets (no numeric NaNs)
         self.buckets = buckets  # save for plotting & diagnostics
         self.is_missing = np.array(is_missing)
-        # ── 4) Supervised UMAP ─────────────────────────────────────────────
-        # categorical: string labels; continuous: jittered floats
+        # ── 4) Supervised UMAP (using target_weight only) ────────────────
         tm = "categorical" if supervision_mode == "categorical" else "l2"
         self.reducer = DimReducer(
-            n_neighbors=50,
-            min_dist=0.1,
+            n_neighbors=15,
+            min_dist=0.0,
             metric="cosine",
             random_state=42,
-            target=target,  # now numeric: jittered floats or bucket_codes
-            target_weight=0.7,
+            target=target,
+            spread=0.5,
+            target_weight=0.9,  # bias toward bucket labels
             target_metric=tm,
         )
         self.visualizer = Visualizer()

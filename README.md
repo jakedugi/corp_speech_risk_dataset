@@ -223,7 +223,7 @@ Wrote lossless metadata with 72457 entries to data/clustering/metadata.json
 
 
 (corp_speech_risk_dataset)  corp_speech_risk_dataset % python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
-  --input-dir data/tokenized \
+  --input-dir data/outcomes \
   --output-path data/clustering/metadata.json \
 --apply-heuristics
 2025-07-22 08:53:56.257 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup

@@ -19,7 +19,7 @@ class DimReducer:
         target: np.ndarray | None = None,
         target_weight: float = 0.9,
         target_metric: str | None = None,
-        spread: float = 1.0,
+        spread: float = 0.5,
         set_op_mix_ratio: float = 0.5,
         local_connectivity: int = 1,
     ):

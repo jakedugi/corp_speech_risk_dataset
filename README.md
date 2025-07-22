@@ -247,3 +247,17 @@ THE OUTCOMES IS THE FINAL STEP TO APPEND THE AMOUNTS AND PERCENTILES OF THE FINA
   --mode        manual \
   --context-chars 400 \
   --min-amount    0
+
+
+
+(corp_speech_risk_dataset) corp_speech_risk_dataset % python -m src.corp_speech_risk_dataset.cli_cluster \
+  --vec data/clustering/concat_vectors.npy \
+  --meta data/clustering/metadata.json \
+  --supervision categorical \
+  --out data/clustering/supervised_cat.html
+
+  (corp_speech_risk_dataset) corp_speech_risk_dataset % python -m src.corp_speech_risk_dataset.cli_cluster \
+  --vec data/clustering/concat_vectors.npy \
+  --meta data/clustering/metadata.json \
+  --supervision continuous \
+  --out data/clustering/supervised_cat.html

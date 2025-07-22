@@ -17,17 +17,24 @@ class Visualizer:
 
     def scatter(
         self,
-        coords: pd.DataFrame,
+        df: pd.DataFrame,
         *,
         out_html: str | Path = "clusters.html",
         title: str = "Vector clusters (UMAP)",
     ) -> Path:
+        # ←— NEW: color by bucket, annotate missingness & real y
         fig = px.scatter(
-            coords,
+            df,
             x="x",
             y="y",
-            color="cluster",
-            hover_data=["sentence", "idx", "doc_id"],
+            color="bucket",  # color by low/med/high/missing  [plotly.express.scatter docs turn0search17 ]
+            hover_data=[
+                "sentence",
+                "idx",
+                "doc_id",
+                "final_judgement_real",
+                "is_missing",
+            ],
             opacity=0.7,
             title=title,
         )

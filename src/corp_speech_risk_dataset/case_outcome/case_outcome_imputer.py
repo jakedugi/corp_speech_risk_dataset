@@ -75,7 +75,9 @@ def scan_stage1(
         text = path.read_text(encoding="utf8")
         for m in AMOUNT_REGEX.finditer(text):
             amt = m.group(0)
+            # strip punctuation but leave "million"/"billion" suffix attached
             norm = amt.lower().replace(",", "").replace("$", "")
+            # if plain number, enforce min threshold; if suffix, handle below
             if "million" not in norm and "billion" not in norm:
                 try:
                     val = float(norm)
@@ -93,11 +95,15 @@ def scan_stage1(
             if sig in seen:
                 continue
             seen.add(sig)
-            val = float(norm.split()[0]) * (
-                1_000_000
-                if "million" in norm
-                else 1_000_000_000 if "billion" in norm else 1
+            # correctly handle '280million' or '1.2 billion'
+            # split off numeric prefix, then apply multiplier
+            num_str = norm.rstrip("0123456789.").rstrip()  # e.g. '280million' -> '280'
+            multiplier = (
+                1_000_000_000
+                if "billion" in norm
+                else 1_000_000 if "million" in norm else 1
             )
+            val = float(num_str) * multiplier
             out.append(Candidate(val, amt, ctx))
     return out
 
@@ -130,8 +136,8 @@ def impute_for_case(
     outdir: Path | None,
 ):
     # map this tokenized-case back to its extracted-location
-    rel = case_root.relative_to(tokenized_root)
-    extracted_case_root = extracted_root / rel
+    # map this case folder directly into the extracted tree by name
+    extracted_case_root = extracted_root / case_root.name
     candidates = scan_stage1(extracted_case_root, min_amount, context_chars)
     amount = selector.choose(candidates)
     print(f"▶ {case_root.relative_to(tokenized_root)} → {amount!r}")
@@ -182,9 +188,19 @@ def main():
     selector = ManualAmountSelector() if args.mode == "manual" else AmountSelector()
     tokenized_root = args.root
     extracted_root = args.stage1_root or args.root
-    roots = {p.parent for p in tokenized_root.rglob("*_stage4.jsonl")}
+    # discover each CASE folder by taking the first path segment under --root
+    all_stage4 = list(tokenized_root.rglob("*_stage4.jsonl"))
+    roots: set[Path] = set()
+    for stage4 in all_stage4:
+        rel = stage4.relative_to(
+            tokenized_root
+        )  # e.g. "0:14-cv-61344_flsd/entries/…/doc.jsonl"
+        case_name = rel.parts[0]  # "0:14-cv-61344_flsd"
+        roots.add(
+            tokenized_root / case_name
+        )  # → data/tokenized/courtlistener/0:14-cv-61344_flsd
 
-    for case_root in roots:
+    for case_root in sorted(roots):
         impute_for_case(
             case_root,
             selector,

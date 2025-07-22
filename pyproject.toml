@@ -114,6 +114,7 @@ dependencies = [
   "plotly>=6.2.0",
   "feedparser>=6.0.11",
   "pytest>=8.4.1",
+  "imblearn>=0.0",
 ]
 
 

@@ -2,6 +2,7 @@
 
 import argparse
 from pathlib import Path
+import numpy as np
 
 from corp_speech_risk_dataset.clustering.pipeline import ClusterPipeline
 
@@ -51,16 +52,30 @@ def main():  # pragma: no cover
     # ── 3) Quantitative diagnostics ─────────────────────────────────────────
     # reduce first so we can compute silhouette on the final 2-D coords
     coords = pipe.reduce()
-    from sklearn.metrics import silhouette_score, adjusted_rand_score
+    from sklearn.metrics import (
+        silhouette_score,
+        silhouette_samples,
+        adjusted_rand_score,
+    )
 
-    sil = silhouette_score(
-        coords, pipe.buckets, metric="euclidean"
-    )  #  [oai_citation:1‡scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html?utm_source=chatgpt.com)
-    ari = adjusted_rand_score(
-        pipe.buckets, pipe.clusterer.labels_
-    )  #  [oai_citation:2‡scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.adjusted_rand_score.html?utm_source=chatgpt.com)
-    print(f"[✓] Silhouette (coords vs buckets): {sil:.3f}")
-    print(f"[✓] ARI (clusters vs buckets)    : {ari:.3f}")
+    # 1) Standard mean Silhouette
+    sil = silhouette_score(coords, pipe.clusterer.labels_, metric="euclidean")
+    # 2) Per-sample Silhouette values
+    sil_vals = silhouette_samples(coords, pipe.clusterer.labels_, metric="euclidean")
+    # 3) Macro-average: mean Silhouette per cluster, then mean across clusters
+    macro_sil = np.mean(
+        [
+            sil_vals[pipe.clusterer.labels_ == c].mean()
+            for c in np.unique(pipe.clusterer.labels_)
+        ]
+    )  # implements per-cluster then across-cluster averaging  [oai_citation:5‡GitHub](https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/metrics/cluster/_unsupervised.py?utm_source=chatgpt.com) [oai_citation:6‡Stack Overflow](https://stackoverflow.com/questions/59919627/how-to-calculate-the-silhouette-score-for-each-cluster-separately-in-python?utm_source=chatgpt.com)
+    # 4) Adjusted Rand Index
+    ari = adjusted_rand_score(pipe.buckets, pipe.clusterer.labels_)
+
+    # Print all three metrics
+    print(f"[✓] Silhouette (mean)           : {sil:.3f}")
+    print(f"[✓] Silhouette (macro-averaged) : {macro_sil:.3f}")
+    print(f"[✓] ARI                         : {ari:.3f}")
 
     print("[4/4] Writing HTML scatter …", flush=True)
     out_path = pipe.visualise(args.out)

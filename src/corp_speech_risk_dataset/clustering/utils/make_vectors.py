@@ -7,7 +7,7 @@ import torch
 from transformers import GPT2Model, GPT2TokenizerFast
 from torch.nn.utils.rnn import pad_sequence
 
-from corp_speech_risk_dataset.clustering.reverse_utils import wl_vector
+from corp_speech_risk_dataset.clustering.utils.reverse_utils import wl_vector
 from corp_speech_risk_dataset.encoding.tokenizer import SentencePieceTokenizer
 
 

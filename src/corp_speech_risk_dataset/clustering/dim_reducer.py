@@ -12,13 +12,16 @@ class DimReducer:
     def __init__(
         self,
         *,
-        n_neighbors: int = 50,
-        min_dist: float = 0.1,
+        n_neighbors: int = 15,
+        min_dist: float = 0.0,
         metric: str = "cosine",
         random_state: int = 42,
         target: np.ndarray | None = None,
-        target_weight: float = 0.7,
+        target_weight: float = 0.9,
         target_metric: str | None = None,
+        spread: float = 1.0,
+        set_op_mix_ratio: float = 0.5,
+        local_connectivity: int = 1,
     ):
         """
         Args:
@@ -35,6 +38,9 @@ class DimReducer:
             random_state=random_state,
             target_metric=target_metric,
             target_weight=target_weight,
+            set_op_mix_ratio=set_op_mix_ratio,
+            local_connectivity=local_connectivity,
+            spread=spread,
         )
 
     def fit_transform(self, vectors: np.ndarray) -> np.ndarray:

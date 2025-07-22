@@ -6,6 +6,7 @@
 
 from pathlib import Path
 import json
+import re
 from typing import List, Dict
 
 
@@ -29,9 +30,91 @@ def load_entries(jsonl_paths: List[Path]) -> List[Dict]:
 
 
 def filter_speakers(entries: List[Dict], exclude: List[str]) -> List[Dict]:
-    """Drop any entry whose 'speaker' matches one in `exclude`."""
+    """Drop any entry whose 'speaker' matches exactly one in `exclude`."""
     exclude_set = set(exclude)
     return [e for e in entries if e.get("speaker") not in exclude_set]
+
+
+def filter_heuristics(entries: List[Dict]) -> List[Dict]:
+    """
+    Apply the temporary heuristics:
+      1. Drop entries whose speaker string contains (case‐insensitive) any excluded substrings.
+      2. Drop entries whose text contains 'plaintiff' in any form.
+      3. Drop entries whose text contains other banned tokens.
+      4. Drop entries with fewer than 5 words in 'text'.
+    """
+    # compile once
+    plaintiff_re = re.compile(r"\bplaintiff(s)?\b", re.I)
+
+    bad_tokens = [
+        "court",
+        "ftc",
+        "fed",
+        "plaintiff",
+        "state",
+        "commission",
+        "congress",
+        "circuit",
+        "fda",
+        "federal law",
+        "statutory",
+        "juncture",
+        "litigation",
+        "counsel",
+        "llc",  # newly added
+        "supp",  # newly added (matches 'Supp.')
+        "judge",  # newly added
+        "litigant",  # newly added
+    ]
+    bad_token_res = [
+        re.compile(r"\b{}\b".format(re.escape(w)), re.I) for w in bad_tokens
+    ]
+
+    exclude_speakers = {
+        w.lower()
+        for w in [
+            "Unknown",
+            "Court",
+            "FTC",
+            "Fed",
+            "Plaintiff",
+            "State",
+            "Commission",
+            "Congress",
+            "Circuit",
+            "FDA",
+            "LLC",  # newly added
+            "Supp.",  # newly added
+            "Judge",  # newly added
+            "Litigant",  # newly added
+        ]
+    }
+
+    filtered = []
+    for e in entries:
+        text = e.get("text", "") or ""
+        speaker = e.get("speaker", "") or ""
+        sp_lower = speaker.lower()
+
+        # A) speaker‐based substring exclusion
+        if any(sub in sp_lower for sub in exclude_speakers):
+            continue
+
+        # B) 'plaintiff' anywhere in text
+        if plaintiff_re.search(text):
+            continue
+
+        # C) any other banned token in text
+        if any(rx.search(text) for rx in bad_token_res):
+            continue
+
+        # D) too short?
+        if len(text.split()) < 5:
+            continue
+
+        filtered.append(e)
+
+    return filtered
 
 
 def write_metadata(entries: List[Dict], out_path: Path) -> None:
@@ -66,20 +149,36 @@ if __name__ == "__main__":
         metavar="NAME",
         help="List of speaker names to drop before writing metadata",
     )
+    parser.add_argument(
+        "--apply-heuristics",
+        action="store_true",
+        help=(
+            "If set, also drop entries by substring‐based speaker exclusion, "
+            "text containing 'plaintiff' or other banned tokens, or text <5 words."
+        ),
+    )
 
     args = parser.parse_args()
 
     root = Path(args.input_dir)
     out = Path(args.output_path)
 
-    # collect & optionally filter
+    # 1) collect & load
     jsonl_files = collect_jsonl_files(root)
     entries = load_entries(jsonl_files)
 
+    # 2) exact-speaker exclusion (existing behavior)
     if args.exclude_speakers:
         before = len(entries)
         entries = filter_speakers(entries, args.exclude_speakers)
-        print(f"Dropped {before-len(entries)} entries for excluded speakers")
+        print(f"Dropped {before - len(entries)} entries for excluded speakers")
 
+    # 3) optional heuristics
+    if args.apply_heuristics:
+        before = len(entries)
+        entries = filter_heuristics(entries)
+        print(f"Dropped {before - len(entries)} entries by heuristic filters")
+
+    # 4) write out
     write_metadata(entries, out)
     print(f"Wrote lossless metadata with {len(entries)} entries to {out}")

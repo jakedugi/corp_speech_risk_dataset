@@ -199,13 +199,15 @@ def main():
     p = argparse.ArgumentParser(
         description="Dump idx→cluster mapping to JSON"
     )
-     corp_speech_risk_dataset % python -m corp_speech_risk_dataset.clustering.prepare_metadata \
+     corp_speech_risk_dataset % python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
   --input-dir data/tokenized \
   --output-path data/clustering/metadata.json \
   --exclude-speakers Unknown Court FTC Fed Plaintiff State Commission Congress Circuit FDA
 2025-07-17 12:14:13.214 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
 Dropped 24265 entries for excluded speakers
 Wrote lossless metadata with 72457 entries to data/clustering/metadata.json
+
+
 
 
 (corp_speech_risk_dataset) corp_speech_risk_dataset % python scripts/create_notebook.py \
@@ -220,15 +222,18 @@ Wrote lossless metadata with 72457 entries to data/clustering/metadata.json
     --tokenized-root data/tokenized/rss
 
 
-python -m corp_speech_risk_dataset.clustering.prepare_metadata \
-    --input-dir    data/tokenized/rss \
-    --output-path  data/clustering/metadata.json
+(corp_speech_risk_dataset)  corp_speech_risk_dataset % python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
+  --input-dir data/tokenized \
+  --output-path data/clustering/metadata.json \
+--apply-heuristics
+2025-07-22 08:53:56.257 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
+Dropped 50434 entries by heuristic filters
+Wrote lossless metadata with 47081 entries to data/clustering/metadata.json
 
-
-corp_speech_risk_dataset % OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false \
-  python -m corp_speech_risk_dataset.clustering.make_vectors \
-    --meta data/clustering/metadata.json \
-    --out  data/clustering/concat_vectors.npy
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false \
+python -m corp_speech_risk_dataset.clustering.utils.make_vectors \
+  --meta data/clustering/metadata.json \
+  --out  data/clustering/concat_vectors.npy
 2025-07-19 16:00:31.423 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
 → 25% done at 4.2s elapsed
 → 50% done at 7.9s elapsed

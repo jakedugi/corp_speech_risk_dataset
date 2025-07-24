@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.nn import Node2Vec, SAGEConv
 import time
+import numpy as np
 
 from transformers import GPT2Model, GPT2TokenizerFast
 from src.corp_speech_risk_dataset.encoding.tokenizer import SentencePieceTokenizer
@@ -97,7 +98,11 @@ def encode_file(
         gpt_mod.eval()
     else:
         # still need a dummy device for signature
-        device = torch.device("cpu")
+        device = torch.device(
+            "cuda"
+            if torch.cuda.is_available()
+            else ("mps" if torch.backends.mps.is_available() else "cpu")
+        )
         gpt_mod = gpt_tok = None
 
     # Graph embedders & fusion
@@ -507,14 +512,104 @@ def cmd_embed(ctx, st_model):
 
 @cli.command("graph")
 @click.option(
-    "--graph-embed", type=click.Choice(["wl", "node2vec", "graphsage"]), default="wl"
+    "--graph-embed",
+    type=click.Choice(["wl", "node2vec", "graphsage", "cross"]),
+    default="wl",
+)
+@click.option(
+    "--eval-graph",
+    is_flag=True,
+    help="Run comprehensive evaluation on GraphSAGE model (reconstruction + classification + clustering)",
+)
+@click.option(
+    "--epochs",
+    type=int,
+    default=40,  # Increased from 15 to 40 for 10^-4 target
+    help="Number of training epochs for GraphSAGE (default: 40)",
+)
+@click.option(
+    "--max-samples",
+    type=int,
+    default=15000,  # Increased for better legal text coverage
+    help="Maximum training graphs to sample for GraphSAGE (default: 15,000)",
+)
+@click.option(
+    "--max-files",
+    type=int,
+    default=1000,  # Increased for better diversity
+    help="Maximum files to sample from for GraphSAGE training (default: 1,000)",
+)
+@click.option(
+    "--batch-size",
+    type=int,
+    default=512,
+    help="Batch size for GraphSAGE training (default: 512)",
+)
+@click.option(
+    "--hidden-dim",
+    type=int,
+    default=256,  # Increased default to 256 for legal text
+    help="Hidden dimensions for GraphSAGE (default: 256, optimized for legal text)",
+)
+@click.option(
+    "--loss-type",
+    type=click.Choice(["mse", "cosine", "hybrid"]),
+    default="hybrid",
+    help="Reconstruction loss type: MSE, scaled-cosine, or hybrid (default: hybrid)",
+)
+@click.option(
+    "--dgi-weight",
+    type=float,
+    default=0.1,
+    help="Weight for DGI contrastive loss (default: 0.1)",
+)
+@click.option(
+    "--num-negative",
+    type=int,
+    default=30,
+    help="Number of negative samples for DGI loss (default: 30)",
 )
 @click.pass_context
-def cmd_graph(ctx, graph_embed):
-    """Embed graphs via WL, Node2Vec, or GraphSAGE."""
+def cmd_graph(
+    ctx,
+    graph_embed,
+    eval_graph,
+    epochs,
+    max_samples,
+    max_files,
+    batch_size,
+    hidden_dim,
+    loss_type,
+    dgi_weight,
+    num_negative,
+):
+    """Embed graphs via WL, Node2Vec, GraphSAGE, or Cross-Modal Fusion targeting 10^-4 MSE."""
     # Print setup information once
     print(f"\n[STEP] GRAPH EMBEDDING")
     print(f"Method: {graph_embed.upper()}")
+
+    if graph_embed in ["graphsage", "cross"]:
+        print(f"GraphSAGE Hyperparameters (10^-4 MSE Target):")
+        print(f"  ├─ Epochs: {epochs} (extended for convergence)")
+        print(f"  ├─ Max training samples: {max_samples:,}")
+        print(f"  ├─ Max files to sample: {max_files}")
+        print(f"  ├─ Batch size: {batch_size}")
+        print(f"  ├─ Hidden dimensions: {hidden_dim} (3 layers)")
+        print(f"  ├─ Neighbor sampling: [50, 25] (increased fan-out for legal text)")
+        print(f"  ├─ Loss type: {loss_type.upper()}")
+        print(f"  ├─ DGI weight: {dgi_weight} (contrastive)")
+        print(f"  ├─ Negative samples: {num_negative}")
+        print(f"  ├─ Dropout: 0.3 (legal domain regularization)")
+        print(f"  ├─ Validation split: 20%")
+        print(f"  ├─ Early stopping: 8 epochs patience")
+        print(f"  └─ Evaluation mode: {'ON' if eval_graph else 'OFF'}")
+        if graph_embed == "cross":
+            print(f"CrossModal Fusion (InfoNCE Optimized):")
+            print(f"  ├─ Training samples: 2,000")
+            print(f"  ├─ Batch size: 256")
+            print(f"  ├─ Temperature: 0.07")
+            print(f"  ├─ Epochs: 12")
+            print(f"  └─ Early stopping: 3 epochs patience")
 
     # imports for dynamic graph processing
     from src.corp_speech_risk_dataset.encoding.graphembedder import (
@@ -527,27 +622,31 @@ def cmd_graph(ctx, graph_embed):
     from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
 
     node2vec_model = get_node2vec_embedder() if graph_embed == "node2vec" else None
-    # Create GraphSAGE model with fixed dimensions
+    # Create GraphSAGE model with configurable dimensions
     sage_model = (
-        get_graphsage_embedder(in_channels=16, hidden_channels=128, num_layers=2)
-        if graph_embed == "graphsage"
+        get_graphsage_embedder(in_channels=16, hidden_channels=hidden_dim, num_layers=2)
+        if graph_embed in ["graphsage", "cross"]
         else None
     )
 
     # Train GraphSAGE model if needed
+    training_metrics = {}
+    fusion_model = None  # Initialize fusion model
     if graph_embed == "graphsage" and sage_model is not None:
         print(f"Preparing to train GraphSAGE model...")
 
-        # Collect sample graphs for training - optimized for legal text
+        # Collect sample graphs for training - improved sampling strategy
         training_graphs = []
+        training_labels = []  # For evaluation if available
+        training_texts = []  # For CrossModalFusion training
         sample_count = 0
-        max_samples = 5000  # More samples for better legal text understanding
         min_nodes = 3  # Lower threshold - even simple structures are useful
-        files_to_sample = min(200, len(ctx.obj["files"]))  # Sample from many more files
+        files_to_sample = min(max_files, len(ctx.obj["files"]))
 
         print(
-            f"Sampling from {files_to_sample} files to collect {max_samples} training graphs..."
+            f"Sampling from {files_to_sample} files to collect up to {max_samples:,} training graphs..."
         )
+        print(f"Minimum nodes per graph: {min_nodes}")
 
         for i, file_path in enumerate(ctx.obj["files"][:files_to_sample]):
             try:
@@ -563,15 +662,29 @@ def cmd_graph(ctx, graph_embed):
                             if node_count >= min_nodes:
                                 pyg_data = _nx_to_pyg(dep_graph)
                                 training_graphs.append(pyg_data)
+                                training_texts.append(
+                                    js["text"]
+                                )  # Store text for fusion training
+
+                                # Extract labels for evaluation if available
+                                label = 0  # Default label
+                                if "label" in js:
+                                    label = int(js["label"])
+                                elif "false_advertising" in js:
+                                    label = int(js["false_advertising"])
+                                elif "target" in js:
+                                    label = int(js["target"])
+                                training_labels.append(label)
+
                                 sample_count += 1
                                 file_samples += 1
                         except Exception as e:
                             continue
 
-                # Progress update every 10 files
-                if (i + 1) % 10 == 0:
+                # Progress update every 25 files for better visibility
+                if (i + 1) % 25 == 0:
                     print(
-                        f"  Processed {i+1}/{files_to_sample} files, collected {sample_count} graphs"
+                        f"  Processed {i+1}/{files_to_sample} files, collected {sample_count:,} graphs"
                     )
 
                 if sample_count >= max_samples:
@@ -580,12 +693,150 @@ def cmd_graph(ctx, graph_embed):
                 continue
 
         if training_graphs:
-            sage_model = train_graphsage_model(sage_model, training_graphs, epochs=5)
-            print(f"GraphSAGE training completed on {len(training_graphs)} graphs")
+            print(
+                f"\n[GRAPHSAGE TRAINING] Collected {len(training_graphs):,} training graphs"
+            )
+            print(
+                f"[GRAPHSAGE TRAINING] Label distribution: {np.bincount(training_labels) if training_labels else 'No labels'}"
+            )
 
-    if graph_embed == "graphsage":
-        print(f"GraphSAGE config: 16→128→128 (2 layers)")
-    elif graph_embed == "node2vec":
+            # Use labels for evaluation if available, otherwise None
+            eval_labels = (
+                training_labels
+                if eval_graph and len(set(training_labels)) > 1
+                else None
+            )
+
+            sage_model, training_metrics = train_graphsage_model(
+                sage_model,
+                training_graphs,
+                epochs=epochs,
+                neighbor_samples=[
+                    50,
+                    25,
+                ],  # Increased fan-out for legal text (was [25, 10])
+                val_split=0.2,
+                batch_size=batch_size,
+                eval_mode=eval_graph,
+                val_labels=eval_labels,
+                loss_type=loss_type,
+                dgi_weight=dgi_weight,
+                num_negative=num_negative,
+            )
+
+            print(f"[GRAPHSAGE TRAINING] Training completed!")
+
+            # Train CrossModalFusion if needed
+            if graph_embed == "cross":
+                from src.corp_speech_risk_dataset.encoding.stembedder import (
+                    get_sentence_embedder,
+                )
+                from src.corp_speech_risk_dataset.encoding.graphembedder import (
+                    train_crossmodal_fusion,
+                )
+
+                print(f"\n[CROSSMODAL FUSION] Starting fusion training...")
+
+                # Get text embeddings for training
+                st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+                text_embs = st_model.encode(
+                    training_texts[:2000], convert_to_tensor=True, batch_size=64
+                )  # Increased to 2000 for better coverage
+
+                # Get graph embeddings for same texts
+                graph_embs = []
+                sage_model.eval()
+                with torch.no_grad():
+                    for i, text in enumerate(
+                        training_texts[:2000]
+                    ):  # Match text embeddings count
+                        graph_emb = compute_graph_embedding(
+                            text, "graphsage", None, sage_model
+                        )
+                        graph_embs.append(graph_emb)
+
+                # Create and train fusion model
+                txt_dim = st_model.get_sentence_embedding_dimension()
+                fusion_model = CrossModalFusion(text_dim=txt_dim, graph_dim=hidden_dim)
+                fusion_model = train_crossmodal_fusion(
+                    fusion_model,
+                    [text_embs[i] for i in range(len(text_embs))],
+                    graph_embs,
+                    epochs=12,  # Increased from 3 to 12 for better convergence
+                    batch_size=256,  # Proper batch size for contrastive learning
+                    temperature=0.07,  # InfoNCE temperature for legal text
+                    patience=3,  # Early stopping patience
+                )
+
+                print(f"[CROSSMODAL FUSION] Fusion training completed!")
+
+            # Print evaluation results if available
+            if eval_graph and training_metrics:
+                print(f"\n[GRAPHSAGE EVALUATION RESULTS]")
+                print(
+                    f"├─ Final train loss: {training_metrics.get('final_train_loss', 0):.4e}"
+                )
+                print(
+                    f"├─ Final val loss: {training_metrics.get('final_val_loss', 0):.4e}"
+                )
+                print(
+                    f"├─ Best val loss: {training_metrics.get('best_val_loss', 0):.4e}"
+                )
+                print(f"├─ Epochs trained: {training_metrics.get('epochs_trained', 0)}")
+
+                if "classification_f1" in training_metrics:
+                    print(
+                        f"├─ Classification F1: {training_metrics['classification_f1']:.3f}"
+                    )
+                    print(
+                        f"├─ Classification AUC: {training_metrics['classification_auc']:.3f}"
+                    )
+
+                if "silhouette_score" in training_metrics:
+                    print(
+                        f"└─ Silhouette Score: {training_metrics['silhouette_score']:.3f}"
+                    )
+
+                # Recommendations based on results
+                val_loss = training_metrics.get("final_val_loss", 0)
+                train_loss = training_metrics.get("final_train_loss", 0)
+                f1_score = training_metrics.get("classification_f1", 0)
+
+                print(f"\n[GRAPHSAGE RECOMMENDATIONS]")
+                if val_loss > train_loss * 2:
+                    print(
+                        "⚠️  High validation loss suggests overfitting - consider reducing capacity or adding dropout"
+                    )
+                if f1_score < 0.6:
+                    print(
+                        "⚠️  Low F1 score - consider enriching node features or increasing neighbor sampling"
+                    )
+                if f1_score > 0.8:
+                    print(
+                        "✅ Good F1 score - embeddings are learning task-relevant patterns"
+                    )
+                if val_loss < 1e-3:
+                    print(
+                        "✅ Low validation loss - model is learning graph structure well"
+                    )
+        else:
+            print("⚠️  No suitable training graphs found - using untrained model")
+
+    # Handle cross-modal fusion setup for inference
+    if graph_embed == "cross" and fusion_model is None:
+        # If we didn't train fusion above, create untrained one (fallback)
+        from src.corp_speech_risk_dataset.encoding.stembedder import (
+            get_sentence_embedder,
+        )
+
+        st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+        txt_dim = st_model.get_sentence_embedding_dimension()
+        fusion_model = CrossModalFusion(text_dim=txt_dim, graph_dim=hidden_dim)
+        print(
+            "⚠️  Using untrained CrossModalFusion - consider enabling GraphSAGE training"
+        )
+
+    if graph_embed == "node2vec":
         print(f"Node2Vec model loaded")
     elif graph_embed == "wl":
         print(f"Weisfeiler-Lehman kernel features")
@@ -601,6 +852,7 @@ def cmd_graph(ctx, graph_embed):
             js = json.loads(line)
             # clear any stale graph embedding
             js.pop("gph_emb", None)
+            js.pop("fused_emb", None)  # Clear any stale fusion embeddings
 
             # IMPORTANT: Extract graph features based on the method
             from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
@@ -614,6 +866,44 @@ def cmd_graph(ctx, graph_embed):
                 js["wl_counts"] = wl_vec.data.tolist()
                 # No dependency edges needed for WL
                 js["deps"] = []
+
+                # Use the utility function with the pre-created model
+                gph_tensor = compute_graph_embedding(
+                    js["text"], "wl", node2vec_model, sage_model, fusion_model
+                )
+                js["gph_emb"] = gph_tensor.tolist()
+
+            elif graph_embed == "cross":
+                # For cross-modal: compute both text and graph embeddings then fuse
+                from src.corp_speech_risk_dataset.encoding.stembedder import (
+                    get_sentence_embedder,
+                )
+
+                # Get text embedding
+                st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+                text_emb = st_model.encode([js["text"]], convert_to_tensor=True)[0]
+
+                # Get graph embedding via GraphSAGE
+                dep_graph = to_dependency_graph(js["text"])
+                js["deps"] = [(h, t, l) for h, t, l in dep_graph.edges.data("dep")]
+                graph_emb = compute_graph_embedding(
+                    js["text"], "graphsage", node2vec_model, sage_model, fusion_model
+                )
+
+                # Fuse embeddings using trained fusion model
+                if fusion_model is not None:
+                    fusion_model.eval()
+                    with torch.no_grad():
+                        fused_emb = fusion_model(
+                            text_emb.unsqueeze(0), graph_emb.unsqueeze(0)
+                        )[0]
+                    js["fused_emb"] = fused_emb.tolist()
+                    js["gph_emb"] = graph_emb.tolist()  # Also store graph embedding
+                    js["st_emb"] = text_emb.tolist()  # Also store text embedding
+                else:
+                    # Fallback if no trained fusion model
+                    js["gph_emb"] = graph_emb.tolist()
+
             else:
                 # For GraphSAGE and Node2Vec: extract dependency parse information
                 dep_graph = to_dependency_graph(js["text"])
@@ -622,13 +912,22 @@ def cmd_graph(ctx, graph_embed):
                 js.pop("wl_indices", None)
                 js.pop("wl_counts", None)
 
-            # Use the utility function with the pre-created model
-            gph_tensor = compute_graph_embedding(
-                js["text"], graph_embed, node2vec_model, sage_model
-            )
+                # Use the utility function with the pre-created model
+                gph_tensor = compute_graph_embedding(
+                    js["text"], graph_embed, node2vec_model, sage_model, fusion_model
+                )
+                js["gph_emb"] = gph_tensor.tolist()
 
-            js["gph_emb"] = gph_tensor.tolist()
             js["gph_method"] = graph_embed
+
+            # Store training metrics in metadata for first entry if available
+            if (
+                total_processed == 0
+                and graph_embed in ["graphsage", "cross"]
+                and training_metrics
+            ):
+                js["graphsage_training_metrics"] = training_metrics
+
             total_processed += 1
 
             # Progress logging every 1000 entries
@@ -637,6 +936,18 @@ def cmd_graph(ctx, graph_embed):
                 if graph_embed == "wl":
                     print(
                         f"  └─ WL features: {len(js.get('wl_indices', []))} dimensions"
+                    )
+                elif graph_embed == "cross":
+                    print(
+                        f"  └─ CrossModal: {len(js.get('fused_emb', []))}D fused embeddings"
+                    )
+                    print(
+                        f"  └─ Text: {len(js.get('st_emb', []))}D, Graph: {len(js.get('gph_emb', []))}D"
+                    )
+                elif graph_embed == "graphsage":
+                    print(f"  └─ GraphSAGE: {len(js.get('gph_emb', []))}D embeddings")
+                    print(
+                        f"  └─ Last entry: {len(js.get('deps', []))} dependency edges"
                     )
                 else:
                     print(
@@ -651,6 +962,8 @@ def cmd_graph(ctx, graph_embed):
         print(f"\n[STEP COMPLETE] GRAPH EMBEDDING")
         print(f"Processed: {total_processed:,} entries")
         print(f"Time: {step_time:.2f}s")
+        if graph_embed in ["graphsage", "cross"] and training_metrics:
+            print(f"Training metrics saved in first entry metadata")
         print("=" * 60)
 
     ctx.obj["processors"].append(processor)

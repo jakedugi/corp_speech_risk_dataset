@@ -85,7 +85,6 @@ dependencies = [
   "thinc>=8.1.0,<9.0.0",
   "python-dotenv>=1.0.0",
   "grakel>=0.1.10",
-  "scipy==1.13.0",
   "orjson>=3.10",
   "networkx",
   "jinja2>=3.1.2",
@@ -117,30 +116,63 @@ dependencies = [
   "imblearn>=0.0",
   "ujson>=5.10.0",
   "langdetect>=1.0.9",
-  "torch>=2.7.1",
-  "torch-geometric>=2.6.1",
+  "scipy==1.13.0 ; sys_platform == 'darwin' and platform_machine == 'arm64' or sys_platform == 'linux'",
   "huggingface-hub>=0.33.0",
 ]
 
 
 
 [project.optional-dependencies]
+cpu = [
+  "torch>=2.7.1",
+  "torchvision>=0.14.1",
+]
+gpu = [
+  "torch>=2.7.1 ; sys_platform == 'linux'",
+  "torchvision>=0.14.1 ; sys_platform == 'linux'",
+]
 dev = [
   "black>=23.0.0",
   "isort>=5.0.0",
   "mypy>=1.0.0",
-  "pytest-cov>=4.0.0",
   "pytest>=8.4.1",
+  "pytest-cov>=4.0.0",
   "pytest-asyncio",
 ]
 
 
 [tool.uv]
-dev-dependencies = [
-  "pytest>=8.4.1",
-  "pytest-cov>=4.0.0",
-  "pytest-asyncio",
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "gpu" },
+  ],
 ]
+
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu128", extra = "gpu" },
+]
+
+torchvision = [
+  { index = "pytorch-cpu", extra = "cpu" },
+  { index = "pytorch-cu128", extra = "gpu" },
+]
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+
+
 
 # Optional: For transformer fallback in Attributor
 # transformers = [
@@ -167,12 +199,16 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_paths = ["src"]
 
-# [dependency-groups]
-# dev = [
-#  "pytest>=8.4.1",
-#  "pytest-cov>=6.2.1",
-#  "pytest-asyncio",
-# ]
+
+[dependency-groups]
+dev = [
+  "black>=23.0.0",
+  "isort>=5.0.0",
+  "mypy>=1.0.0",
+  "pytest>=8.4.1",
+  "pytest-cov>=4.0.0",
+  "pytest-asyncio",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

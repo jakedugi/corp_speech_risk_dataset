@@ -127,156 +127,281 @@ pytest tests/integration/ -v             # Integration tests
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
-COMMANDS:
+## COMMANDS
 
+---
 
+### Orchestrate CourtListener Pipeline (API)
 
-corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_api orchestrate \
+```bash
+python -m corp_speech_risk_dataset.cli_api orchestrate \
   --statutes "FTC Section 5" \
   --company-file data/sp500_official_names_cleaned.csv \
   --outdir data/testing_apis/courtlistener_refactor \
   --pages 1 \
   --page-size 1 \
-  --async \
+  --async
+```
 
-2025-07-15 18:52:17.482 | INFO     | corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator:run_async:72 - Starting ASYNC CourtListener orchestration (search + full hydrate)
-2025-07-15 18:52:25.331 | INFO     | corp_speech_risk_dataset.orchestrators.courtlistener_orchestrator:_search_and_hydrate_async:105 - Saved search results to data/testing_apis/courtlistener_refactor/search/search_api_results.json
-2025-07-15 18:52:25.836 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_and_save:42 - Saved 1 dockets to data/testing_apis/courtlistener_refactor/15-16585_ca9/dockets
-2025-07-15 18:52:25.837 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/dockets/dockets_0.json
-2025-07-15 18:52:25.838 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/ia_dump.json
-2025-07-15 18:52:25.877 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_docket_entries:215 - Fetching docket entries with docket_id: 6155026, query: all
-^C2025-07-15 18:52:27.853 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_docket_entries:247 - Retrieved 31 docket entries
-2025-07-15 18:52:27.873 | INFO     | corp_speech_risk_dataset.api.courtlistener.core:process_docket_entries:273 - Saved 31 docket entries to data/testing_apis/courtlistener_refactor/15-16585_ca9/entries
-2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951687_metadata.json
-2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951690_metadata.json
-2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951694_metadata.json
-2025-07-15 18:52:27.876 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951693_metadata.json
-2025-07-15 18:52:27.877 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951697_metadata.json
-2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951691_metadata.json
-2025-07-15 18:52:27.881 | DEBUG    | corp_speech_risk_dataset.infrastructure.file_io:load_json:44 - Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951686_metadata.json
+# Example log output for orchestration
+# (Shows progress and file locations)
 
+```
+2025-07-15 18:52:17.482 | INFO     | ... Starting ASYNC CourtListener orchestration (search + full hydrate)
+2025-07-15 18:52:25.331 | INFO     | ... Saved search results to data/testing_apis/courtlistener_refactor/search/search_api_results.json
+2025-07-15 18:52:25.836 | INFO     | ... Saved 1 dockets to data/testing_apis/courtlistener_refactor/15-16585_ca9/dockets
+2025-07-15 18:52:25.837 | DEBUG    | ... Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/dockets/dockets_0.json
+2025-07-15 18:52:25.838 | DEBUG    | ... Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/ia_dump.json
+2025-07-15 18:52:25.877 | INFO     | ... Fetching docket entries with docket_id: 6155026, query: all
+2025-07-15 18:52:27.853 | INFO     | ... Retrieved 31 docket entries
+2025-07-15 18:52:27.873 | INFO     | ... Saved 31 docket entries to data/testing_apis/courtlistener_refactor/15-16585_ca9/entries
+2025-07-15 18:52:27.876 | DEBUG    | ... Loaded JSON from data/testing_apis/courtlistener_refactor/15-16585_ca9/entries/entry_20951687_metadata.json
+...
 Aborted.
- corp_speech_risk_dataset % python run_quote_extractor.py
+```
 
+---
 
+### Quote Extraction
 
+```bash
+python scripts/run_extraction.py
+```
 
-git clone https://huggingface.co/gpt2 \
-  ~/.cache/huggingface/transformers/gpt2
+# Example log output for quote extraction
 
-
-
-
-
-python: can't open file '': [Errno 2] No such file or directory
- corp_speech_risk_dataset % python scripts/run_extraction.py
+```
 2025-07-15 19:10:14.692 | INFO     | __main__:main:20 - Starting quote extraction process...
-2025-07-15 19:10:14.692 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:__init__:31 - Initializing Quote Extraction Pipeline...
-2025-07-15 19:10:15.205 | WARNING  | corp_speech_risk_dataset.infrastructure.nlp:get_nlp:15 - fastcoref not available, skipping: [E002] Can't find factory for 'fastcoref' for language English (en). This usually happens when spaCy calls `nlp.create_pipe` with a custom component name that's not registered on the current language class. If you're using a custom component, make sure you've added the decorator `@Language.component` (for function components) or `@Language.factory` (for class components).
+2025-07-15 19:10:14.692 | INFO     | ... Initializing Quote Extraction Pipeline...
+2025-07-15 19:10:15.205 | WARNING  | ... fastcoref not available, skipping: [E002] Can't find factory for 'fastcoref' ...
+2025-07-15 19:10:20.947 | INFO     | ... Pipeline initialized.
+2025-07-15 19:10:20.950 | INFO     | ... Saving results to extracted_quotes.jsonl...
+2025-07-15 19:10:20.951 | DEBUG    | ... Starting pipeline run...
+2025-07-15 19:10:20.951 | DEBUG    | ... Pipeline run finished.
+2025-07-15 19:10:20.952 | INFO     | ... Saved 0 documents with quotes.
+```
 
-Available factories: attribute_ruler, tok2vec, merge_noun_chunks, merge_entities, merge_subtokens, token_splitter, doc_cleaner, parser, beam_parser, lemmatizer, trainable_lemmatizer, entity_linker, entity_ruler, tagger, morphologizer, ner, beam_ner, senter, sentencizer, spancat, spancat_singlelabel, span_finder, future_entity_ruler, span_ruler, textcat, textcat_multilabel, en.lemmatizer
-2025-07-15 19:10:20.947 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:__init__:55 - Pipeline initialized.
-2025-07-15 19:10:20.950 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:save_results:162 - Saving results to extracted_quotes.jsonl...
-2025-07-15 19:10:20.951 | DEBUG    | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:run:81 - Starting pipeline run...
-2025-07-15 19:10:20.951 | DEBUG    | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:run:153 - Pipeline run finished.
-2025-07-15 19:10:20.952 | INFO     | corp_speech_risk_dataset.orchestrators.quote_extraction_pipeline:save_results:172 - Saved 0 documents with quotes.
- corp_speech_risk_dataset % python encode_quotes.py data/extracted/ --recursive
+---
 
-corp_speech_risk_dataset % python src/corp_speech_risk_dataset/clustering/make_vectors.py \
+### Encode Quotes
+
+```bash
+python encode_quotes.py data/extracted/ --recursive
+```
+
+---
+
+### Make Vectors for Clustering
+
+```bash
+python src/corp_speech_risk_dataset/clustering/make_vectors.py \
   --meta data/clustering/metadata.json \
   --out data/clustering/concat_vectors.npy
+```
+
+# Example log output for vector creation
+
+```
 → 25% done at 340.6s elapsed
 → 50% done at 660.8s elapsed
 → 75% done at 1423.3s elapsed
 Wrote (96732, 2816) → data/clustering/concat_vectors.npy
+```
 
-corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_cluster \
+---
+
+### Run Clustering
+
+```bash
+python -m corp_speech_risk_dataset.cli_cluster \
   --vec data/clustering/concat_vectors.npy \
   --meta data/clustering/metadata.json \
   --out data/clustering/clusters.html
+```
 
+---
 
+### Dump Clusters (for downstream analysis)
 
-Dump clusters: uv run scripts/dump_clusters.py
+```bash
+uv run scripts/dump_clusters.py
+```
+
+# Example: dump cluster labels to JSON for analysis, plotting, or audit logs
+
+```python
 #!/usr/bin/env python3
-''' For use after the clustering pipeline has been run. In order to get the cluster labels for each document, we need to dump the cluster labels to a JSON file.
-it’s very handy for:
-	•	Automating downstream analysis or plotting (e.g. grouping sentences by risk-level in Python/R).
-	•	Hyperparameter sweeps: you can quickly diff two runs’ JSONs to see how cluster assignments shifted.
-	•	Audit logs: regulators often want a raw data dump, not just visuals.
+'''
+For use after the clustering pipeline has been run. Dumps idx→cluster mapping to JSON.
+Automates downstream analysis, hyperparameter sweeps, and audit logs.
 '''
 from pathlib import Path
 import argparse
 from corp_speech_risk_dataset.clustering.pipeline import ClusterPipeline
 
 def main():
-    p = argparse.ArgumentParser(
-        description="Dump idx→cluster mapping to JSON"
-    )
-     corp_speech_risk_dataset % python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
+    p = argparse.ArgumentParser(description="Dump idx→cluster mapping to JSON")
+    # ...
+```
+
+---
+
+### Prepare Metadata for Clustering
+
+```bash
+python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
   --input-dir data/tokenized \
   --output-path data/clustering/metadata.json \
   --exclude-speakers Unknown Court FTC Fed Plaintiff State Commission Congress Circuit FDA
-2025-07-17 12:14:13.214 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
+```
+
+# Example log output
+
+```
 Dropped 24265 entries for excluded speakers
 Wrote lossless metadata with 72457 entries to data/clustering/metadata.json
+```
 
+---
 
+### Create Notebook from Extracted Data
 
-
-(corp_speech_risk_dataset) corp_speech_risk_dataset % python scripts/create_notebook.py \
+```bash
+python scripts/create_notebook.py \
   --data-root data/extracted/rss \
   --out notebooks/reports/rss_pipeline.ipynb
+```
 
+---
 
-  corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_encode \
-    data/extracted/rss \
-    -r \
-    --extracted-root data/extracted/rss \
-    --tokenized-root data/tokenized/rss
+### Encode RSS Data
 
+```bash
+python -m corp_speech_risk_dataset.cli_encode \
+  data/extracted/rss \
+  -r \
+  --extracted-root data/extracted/rss \
+  --tokenized-root data/tokenized/rss
+```
 
-(corp_speech_risk_dataset)  corp_speech_risk_dataset % python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
+---
+
+### Prepare Metadata with Heuristics
+
+```bash
+python -m corp_speech_risk_dataset.clustering.utils.prepare_metadata \
   --input-dir data/outcomes \
   --output-path data/clustering/metadata.json \
---apply-heuristics
-2025-07-22 08:53:56.257 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
+  --apply-heuristics
+```
+
+# Example log output
+
+```
 Dropped 50434 entries by heuristic filters
 Wrote lossless metadata with 47081 entries to data/clustering/metadata.json
+```
 
+---
+
+### Make Vectors (with environment variables for performance)
+
+```bash
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false \
 python -m corp_speech_risk_dataset.clustering.utils.make_vectors \
   --meta data/clustering/metadata.json \
   --out  data/clustering/concat_vectors.npy
-2025-07-19 16:00:31.423 | INFO     | corp_speech_risk_dataset.encoding.tokenizer:<module>:82 - Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup
+```
+
+# Example log output
+
+```
 → 25% done at 4.2s elapsed
 → 50% done at 7.9s elapsed
 → 75% done at 12.5s elapsed
 Wrote (976, 2816) → data/clustering/concat_vectors.npy
+```
 
+---
 
+### Case Outcome Imputation (Final Step)
 
+# Appends amounts and percentiles of the final judgement amount in favor of plaintiffs.
+# Positive values = plaintiff, low/negative = defendant.
 
-THE OUTCOMES IS THE FINAL STEP TO APPEND THE AMOUNTS AND PERCENTILES OF THE FINAL JUDGEMENT AMOUNT IN FAVOR OF THE PLANTIFFS Positive values in favor of plantiff low or negative values in favor of defendant
-
-(corp_speech_risk_dataset)  corp_speech_risk_dataset % uv run python -m corp_speech_risk_dataset.case_outcome.case_outcome_imputer \
+```bash
+uv run python -m corp_speech_risk_dataset.case_outcome.case_outcome_imputer \
   --root        data/tokenized/courtlistener \
   --stage1-root data/extracted/courtlistener \
   --outdir      data/outcomes/courtlistener \
   --mode        manual \
   --context-chars 400 \
   --min-amount    0
+```
 
+---
 
+### Supervised Clustering (Categorical and Continuous)
 
-(corp_speech_risk_dataset) corp_speech_risk_dataset % python -m src.corp_speech_risk_dataset.cli_cluster \
+```bash
+python -m src.corp_speech_risk_dataset.cli_cluster \
   --vec data/clustering/concat_vectors.npy \
   --meta data/clustering/metadata.json \
   --supervision categorical \
   --out data/clustering/supervised_cat.html
 
-  (corp_speech_risk_dataset) corp_speech_risk_dataset % python -m src.corp_speech_risk_dataset.cli_cluster \
+python -m src.corp_speech_risk_dataset.cli_cluster \
   --vec data/clustering/concat_vectors.npy \
   --meta data/clustering/metadata.json \
   --supervision continuous \
   --out data/clustering/supervised_cat.html
+```
+
+
+# PyG extensions must be installed manually (not via pyproject.toml or uv)
+
+```bash
+pip install pyg_lib torch-scatter torch-sparse torch-cluster torch-spline-conv \
+  -f https://data.pyg.org/whl/torch-$(python -c "import torch; print(torch.__version__)")+cpu.html
+```
+
+1. **Let UV handle only Python dependencies:**
+
+```bash
+rm uv.lock
+uv lock
+uv sync --extra cpu
+```
+
+2. **Manually install PyG extensions:**
+
+```bash
+pip install pyg_lib torch-scatter torch-sparse torch-cluster torch-spline-conv \
+  -f https://data.pyg.org/whl/torch-$(python -c "import torch;print(torch.__version__)")+cpu.html
+```
+
+3. **On CUDA (e.g. Colab):**
+
+Switch the URL suffix to +cu118 (or your CUDA version) and run:
+
+```bash
+pip install ... -f ...+cu118.html
+```
+
+FOR COLAB: # 1. Clone your repo
+!git clone https://github.com/YOUR-USERNAME/corp_speech_risk_dataset.git
+%cd corp_speech_risk_dataset
+
+# 2. Install or upgrade uv
+!pip install --upgrade uv
+
+# 3. (Option A) Ensure gpu extra exists:
+!uv add "torch>=2.7.1" --optional gpu
+!uv add "torchvision>=0.14.1" --optional gpu
+
+# 4. Sync all deps, including gpu
+!uv sync --extra gpu
+
+# 5. Manually install PyG extensions
+!pip install pyg_lib torch-scatter torch-sparse torch-cluster torch-spline-conv \
+    -f https://data.pyg.org/whl/torch-$(python -c "import torch;print(torch.__ve

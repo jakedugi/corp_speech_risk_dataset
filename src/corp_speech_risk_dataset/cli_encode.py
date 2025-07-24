@@ -93,9 +93,8 @@ def encode_file(
         )
         gpt_tok = GPT2TokenizerFast.from_pretrained("gpt2", local_files_only=True)
         gpt_tok.pad_token = gpt_tok.eos_token  # <-- fix: set pad_token
-        gpt_mod = GPT2Model.from_pretrained("gpt2", local_files_only=True)
+        gpt_mod = GPT2Model.from_pretrained("gpt2", local_files_only=True).to(device)
         gpt_mod.eval()
-        gpt_mod = gpt_mod.to(device)
     else:
         # still need a dummy device for signature
         device = torch.device("cpu")
@@ -410,7 +409,7 @@ def cmd_tokenize(ctx, text_model, st_model):
         import time
 
         start_time = time.time()
-        # print(f"[STAGE] Tokenization (model={text_model}) start")
+        print(f"[TOKENIZATION] Using tokenizer: {text_model.upper()}")
         from src.corp_speech_risk_dataset.encoding.tokenizer import (
             SentencePieceTokenizer,
         )
@@ -420,9 +419,11 @@ def cmd_tokenize(ctx, text_model, st_model):
         tok_sp = None
         tok_gpt = None
         if text_model == "gpt2":
+            print(f"[TOKENIZATION] Loading GPT-2 tokenizer (50,257 vocab)")
             tok_gpt = GPT2TokenizerFast.from_pretrained("gpt2", local_files_only=True)
             tok_gpt.pad_token = tok_gpt.eos_token  # <-- fix: set pad_token
         else:
+            print(f"[TOKENIZATION] Loading SentencePiece tokenizer (32,000 vocab)")
             tok_sp = SentencePieceTokenizer()
         try:
             for line in lines:
@@ -451,7 +452,7 @@ def cmd_tokenize(ctx, text_model, st_model):
                 yield json.dumps(js, ensure_ascii=False)
         finally:
             dt = time.time() - start_time
-            # print(f"[STAGE] Tokenization done: {dt:.2f}s")
+            print(f"[TOKENIZATION] Completed in {dt:.2f}s")
 
     ctx.obj["processors"].append(processor)
 
@@ -466,12 +467,16 @@ def cmd_embed(ctx, st_model):
         import time
 
         start_time = time.time()
-        # print(f"[STAGE] Text Embedding (model={st_model}) start")
+        print(f"[TEXT EMBEDDING] Loading model: {st_model}")
         from src.corp_speech_risk_dataset.encoding.stembedder import (
             get_sentence_embedder,
         )
 
         model = get_sentence_embedder(st_model)
+        embedding_dim = model.get_sentence_embedding_dimension()
+        print(f"[TEXT EMBEDDING] Model output dimension: {embedding_dim}D")
+        print(f"[TEXT EMBEDDING] Batch size: 64")
+
         batch, metas = [], []
         try:
             for line in lines:
@@ -495,7 +500,7 @@ def cmd_embed(ctx, st_model):
                     yield json.dumps(mj, ensure_ascii=False)
         finally:
             dt = time.time() - start_time
-            # print(f"[STAGE] Text Embedding done: {dt:.2f}s")
+            print(f"[TEXT EMBEDDING] Completed in {dt:.2f}s")
 
     ctx.obj["processors"].append(processor)
 
@@ -507,12 +512,19 @@ def cmd_embed(ctx, st_model):
 @click.pass_context
 def cmd_graph(ctx, graph_embed):
     """Embed graphs via WL, Node2Vec, or GraphSAGE."""
+    # Print setup information once
+    print(f"\n[STEP] GRAPH EMBEDDING")
+    print(f"Method: {graph_embed.upper()}")
+
     # imports for dynamic graph processing
     from src.corp_speech_risk_dataset.encoding.graphembedder import (
         compute_graph_embedding,
         get_node2vec_embedder,
         get_graphsage_embedder,
+        train_graphsage_model,
+        _nx_to_pyg,
     )
+    from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
 
     node2vec_model = get_node2vec_embedder() if graph_embed == "node2vec" else None
     # Create GraphSAGE model with fixed dimensions
@@ -522,29 +534,129 @@ def cmd_graph(ctx, graph_embed):
         else None
     )
 
+    # Train GraphSAGE model if needed
+    if graph_embed == "graphsage" and sage_model is not None:
+        print(f"Preparing to train GraphSAGE model...")
+
+        # Collect sample graphs for training - optimized for legal text
+        training_graphs = []
+        sample_count = 0
+        max_samples = 5000  # More samples for better legal text understanding
+        min_nodes = 3  # Lower threshold - even simple structures are useful
+        files_to_sample = min(200, len(ctx.obj["files"]))  # Sample from many more files
+
+        print(
+            f"Sampling from {files_to_sample} files to collect {max_samples} training graphs..."
+        )
+
+        for i, file_path in enumerate(ctx.obj["files"][:files_to_sample]):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    file_samples = 0
+                    for line in f:
+                        if sample_count >= max_samples:
+                            break
+                        try:
+                            js = json.loads(line)
+                            dep_graph = to_dependency_graph(js["text"])
+                            node_count = len(list(dep_graph.nodes()))
+                            if node_count >= min_nodes:
+                                pyg_data = _nx_to_pyg(dep_graph)
+                                training_graphs.append(pyg_data)
+                                sample_count += 1
+                                file_samples += 1
+                        except Exception as e:
+                            continue
+
+                # Progress update every 10 files
+                if (i + 1) % 10 == 0:
+                    print(
+                        f"  Processed {i+1}/{files_to_sample} files, collected {sample_count} graphs"
+                    )
+
+                if sample_count >= max_samples:
+                    break
+            except Exception as e:
+                continue
+
+        if training_graphs:
+            sage_model = train_graphsage_model(sage_model, training_graphs, epochs=5)
+            print(f"GraphSAGE training completed on {len(training_graphs)} graphs")
+
+    if graph_embed == "graphsage":
+        print(f"GraphSAGE config: 16→128→128 (2 layers)")
+    elif graph_embed == "node2vec":
+        print(f"Node2Vec model loaded")
+    elif graph_embed == "wl":
+        print(f"Weisfeiler-Lehman kernel features")
+    print("=" * 60)
+
+    total_processed = 0
+    step_start_time = time.time()
+
     def processor(lines):
-        import time
+        nonlocal total_processed
+        batch_count = 0
+        for line in lines:
+            js = json.loads(line)
+            # clear any stale graph embedding
+            js.pop("gph_emb", None)
 
-        start_time = time.time()
-        # print(f"[STAGE] Graph Embedding (method={graph_embed}) start")
-        try:
-            for line in lines:
-                js = json.loads(line)
-                # clear any stale graph embedding
-                js.pop("gph_emb", None)
+            # IMPORTANT: Extract graph features based on the method
+            from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
 
-                # Use the utility function with the pre-created model
-                gph_tensor = compute_graph_embedding(
-                    js["text"], graph_embed, node2vec_model, sage_model
-                )
+            if graph_embed == "wl":
+                # Only compute WL features for WL method
+                from src.corp_speech_risk_dataset.encoding.wl_features import wl_vector
 
-                js["gph_emb"] = gph_tensor.tolist()
-                yield json.dumps(js, ensure_ascii=False)
-        finally:
-            dt = time.time() - start_time
-            # print(f"[STAGE] Graph Embedding done: {dt:.2f}s")
+                wl_vec = wl_vector(js["text"])
+                js["wl_indices"] = wl_vec.indices.tolist()
+                js["wl_counts"] = wl_vec.data.tolist()
+                # No dependency edges needed for WL
+                js["deps"] = []
+            else:
+                # For GraphSAGE and Node2Vec: extract dependency parse information
+                dep_graph = to_dependency_graph(js["text"])
+                js["deps"] = [(h, t, l) for h, t, l in dep_graph.edges.data("dep")]
+                # No WL features needed for GraphSAGE/Node2Vec
+                js.pop("wl_indices", None)
+                js.pop("wl_counts", None)
+
+            # Use the utility function with the pre-created model
+            gph_tensor = compute_graph_embedding(
+                js["text"], graph_embed, node2vec_model, sage_model
+            )
+
+            js["gph_emb"] = gph_tensor.tolist()
+            js["gph_method"] = graph_embed
+            total_processed += 1
+
+            # Progress logging every 1000 entries
+            if total_processed % 1000 == 0:
+                print(f"\n[GRAPH EMBEDDING] Processed {total_processed:,} entries")
+                if graph_embed == "wl":
+                    print(
+                        f"  └─ WL features: {len(js.get('wl_indices', []))} dimensions"
+                    )
+                else:
+                    print(
+                        f"  └─ Last entry: {len(js.get('deps', []))} dependency edges"
+                    )
+                print(f"  └─ {graph_embed.upper()} embedding computed successfully")
+
+            yield json.dumps(js, ensure_ascii=False)
+
+    def cleanup():
+        step_time = time.time() - step_start_time
+        print(f"\n[STEP COMPLETE] GRAPH EMBEDDING")
+        print(f"Processed: {total_processed:,} entries")
+        print(f"Time: {step_time:.2f}s")
+        print("=" * 60)
 
     ctx.obj["processors"].append(processor)
+    if "cleanup_funcs" not in ctx.obj:
+        ctx.obj["cleanup_funcs"] = []
+    ctx.obj["cleanup_funcs"].append(cleanup)
 
 
 @cli.command("fuse")
@@ -552,45 +664,75 @@ def cmd_graph(ctx, graph_embed):
 def cmd_fuse(ctx):
     """Fuse text+graph embeddings via CrossModalFusion."""
 
+    print(f"\n[STEP] CROSS-MODAL FUSION")
+    print(f"Model: CrossModalFusion (text + graph → combined)")
+    print("=" * 60)
+
+    from src.corp_speech_risk_dataset.encoding.graphembedder import CrossModalFusion
+    import torch
+
+    total_processed = 0
+    step_start_time = time.time()
+    fusion_model = None
+    text_dim = None
+    graph_dim = None
+
     def processor(lines):
-        import time
+        nonlocal total_processed, fusion_model, text_dim, graph_dim
 
-        start_time = time.time()
-        # print("[STAGE] CrossModalFusion start")
-        from src.corp_speech_risk_dataset.encoding.graphembedder import CrossModalFusion
+        # collect all incoming lines; nothing to do if empty
+        batch = list(lines)
+        if not batch:
+            return []  # empty generator
 
-        try:
-            # collect all incoming lines; nothing to do if empty
-            batch = list(lines)
-            if not batch:
-                return []  # empty generator
-            texts = [json.loads(l)["text"] for l in batch]
-            # gather embeddings
-            emb_text = []
-            emb_graph = []
-            for l in batch:
-                js = json.loads(l)
-                # clear previous fusion embeddings
-                js.pop("fused_emb", None)
-                emb_text.append(js["st_emb"])
-                emb_graph.append(js["gph_emb"])
-            # perform fusion - use the actual dimensions from the embeddings
+        # gather embeddings
+        emb_text = []
+        emb_graph = []
+        for l in batch:
+            js = json.loads(l)
+            # clear previous fusion embeddings
+            js.pop("fused_emb", None)
+            emb_text.append(js["st_emb"])
+            emb_graph.append(js["gph_emb"])
+
+        # Initialize fusion model on first batch
+        if fusion_model is None:
             text_dim = len(emb_text[0])
             graph_dim = len(emb_graph[0])
-            fuse = CrossModalFusion(text_dim, graph_dim)
-            import torch
+            print(
+                f"\nFusion config: {text_dim}D (text) + {graph_dim}D (graph) → {text_dim + graph_dim}D"
+            )
+            fusion_model = CrossModalFusion(text_dim, graph_dim)
 
-            fused = fuse(torch.tensor(emb_text), torch.tensor(emb_graph)).tolist()
-            # emit fused rows
-            for l, f in zip(batch, fused):
-                js = json.loads(l)
-                js["fused_emb"] = f
-                yield json.dumps(js, ensure_ascii=False)
-        finally:
-            dt = time.time() - start_time
-            # print(f"[STAGE] CrossModalFusion done: {dt:.2f}s")
+        fused = fusion_model(torch.tensor(emb_text), torch.tensor(emb_graph)).tolist()
+        # emit fused rows
+        for l, f in zip(batch, fused):
+            js = json.loads(l)
+            js["fused_emb"] = f
+            total_processed += 1
+
+            # Progress logging every 1000 entries
+            if total_processed % 1000 == 0:
+                print(f"\n[CROSS-MODAL FUSION] Processed {total_processed:,} entries")
+                print(
+                    f"  └─ Fused {text_dim}D text + {graph_dim}D graph → {text_dim + graph_dim}D combined"
+                )
+
+            yield json.dumps(js, ensure_ascii=False)
+
+    def cleanup():
+        step_time = time.time() - step_start_time
+        print(f"\n[STEP COMPLETE] CROSS-MODAL FUSION")
+        print(f"Processed: {total_processed:,} entries")
+        if text_dim and graph_dim:
+            print(f"Output dimensions: {text_dim + graph_dim}D")
+        print(f"Time: {step_time:.2f}s")
+        print("=" * 60)
 
     ctx.obj["processors"].append(processor)
+    if "cleanup_funcs" not in ctx.obj:
+        ctx.obj["cleanup_funcs"] = []
+    ctx.obj["cleanup_funcs"].append(cleanup)
 
 
 @cli.result_callback()
@@ -599,17 +741,46 @@ def run_pipeline(ctx, processors, in_path, out_root, recursive, stage):
     files = ctx.obj["files"]
     out_root = ctx.obj["out_root"]
     stage = ctx.obj["stage"]
-    # Group input files by their immediate parent directory (case folders)
-    case_dirs = sorted({f.parent for f in files})
-    # Progress bar over case folders
     from tqdm import tqdm
 
-    for case_dir in tqdm(case_dirs, desc="Encoding case folders", unit="folder"):
-        # Process all files in this case folder
-        case_files = [f for f in files if f.parent == case_dir]
-        for in_file in case_files:
-            # Count total entries in the file
-            total = sum(1 for _ in open(in_file, "r", encoding="utf-8"))
+    # Print pipeline configuration
+    print(f"\n{'='*80}")
+    print(f"PIPELINE CONFIGURATION")
+    print(f"{'='*80}")
+    print(f"Input stage: {stage}")
+    print(f"Output stage: {stage + 1}")
+    print(f"Processing steps: {len(ctx.obj['processors'])} processors configured")
+
+    # Determine what steps are being run based on processor count and context
+    if len(ctx.obj["processors"]) == 0:
+        print("Steps: ALL (tokenize + embed + graph + fuse)")
+    else:
+        print("Steps: Custom pipeline with the following processors:")
+        for i, proc in enumerate(ctx.obj["processors"], 1):
+            proc_name = proc.__name__ if hasattr(proc, "__name__") else str(proc)
+            print(f"  {i}. {proc_name}")
+    print(f"{'='*80}\n")
+
+    # First pass: count total entries across all files
+    print("[PHASE 1] Counting total entries across all files...")
+    total_entries = 0
+    for file_path in files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                file_entries = sum(1 for _ in f)
+                total_entries += file_entries
+        except Exception as e:
+            logger.warning(f"Could not count entries in {file_path}: {e}")
+
+    print(f"[PHASE 1] Found {total_entries:,} total entries to process\n")
+
+    # Progress bar over total entries
+    print(
+        f"[PHASE 2] Processing {len(files)} files through {len(ctx.obj['processors'])}-step pipeline...\n"
+    )
+
+    with tqdm(total=total_entries, desc="Processing entries", unit="entry") as pbar:
+        for in_file in files:
             # Open input stream and apply processors
             with open(in_file, "r", encoding="utf-8") as stream:
                 proc_stream = stream
@@ -625,6 +796,16 @@ def run_pipeline(ctx, processors, in_path, out_root, recursive, stage):
                 with open(out_file, "w", encoding="utf-8") as fout:
                     for line in proc_stream:
                         fout.write(line + "\n")
+                        pbar.update(1)  # Update progress for each entry processed
+
+    # Run cleanup functions
+    if "cleanup_funcs" in ctx.obj:
+        for cleanup_func in ctx.obj["cleanup_funcs"]:
+            cleanup_func()
+
+    print(f"\n[PIPELINE COMPLETE] All {len(files)} files processed successfully!")
+    print(f"Output directory: {out_root}")
+    print("=" * 80)
 
 
 if __name__ == "__main__":

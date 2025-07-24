@@ -85,7 +85,12 @@ def encode_file(
 
     # -------- GPT-2 mean-pool (optional) ------------------------------- #
     if text_model.lower() == "gpt2":
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        # Prefer CUDA GPU, then Apple MPS, then CPU
+        device = torch.device(
+            "cuda"
+            if torch.cuda.is_available()
+            else ("mps" if torch.backends.mps.is_available() else "cpu")
+        )
         gpt_tok = GPT2TokenizerFast.from_pretrained("gpt2", local_files_only=True)
         gpt_tok.pad_token = gpt_tok.eos_token  # <-- fix: set pad_token
         gpt_mod = GPT2Model.from_pretrained("gpt2", local_files_only=True)

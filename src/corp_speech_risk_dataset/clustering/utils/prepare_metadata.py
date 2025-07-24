@@ -7,7 +7,7 @@
 from pathlib import Path
 import json
 import re
-from typing import List, Dict
+from typing import List, Dict, Any
 
 
 def collect_jsonl_files(root_dir: Path) -> List[Path]:
@@ -17,11 +17,11 @@ def collect_jsonl_files(root_dir: Path) -> List[Path]:
     return sorted(root_dir.rglob("*.jsonl"))
 
 
-def load_entries(jsonl_paths: List[Path]) -> List[Dict]:
+def load_entries(jsonl_paths: List[Path]) -> List[Dict[str, Any]]:
     """
     Read and parse all JSONL entries into a single list, preserving every field.
     """
-    entries: List[Dict] = []
+    entries: List[Dict[str, Any]] = []
     for path in jsonl_paths:
         with path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -29,13 +29,15 @@ def load_entries(jsonl_paths: List[Path]) -> List[Dict]:
     return entries
 
 
-def filter_speakers(entries: List[Dict], exclude: List[str]) -> List[Dict]:
+def filter_speakers(
+    entries: List[Dict[str, Any]], exclude: List[str]
+) -> List[Dict[str, Any]]:
     """Drop any entry whose 'speaker' matches exactly one in `exclude`."""
     exclude_set = set(exclude)
     return [e for e in entries if e.get("speaker") not in exclude_set]
 
 
-def filter_heuristics(entries: List[Dict]) -> List[Dict]:
+def filter_heuristics(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Apply the temporary heuristics:
       1. Drop entries whose speaker string contains (case‐insensitive) any excluded substrings.
@@ -117,7 +119,7 @@ def filter_heuristics(entries: List[Dict]) -> List[Dict]:
     return filtered
 
 
-def write_metadata(entries: List[Dict], out_path: Path) -> None:
+def write_metadata(entries: List[Dict[str, Any]], out_path: Path) -> None:
     """
     Write a single JSON file containing the list of entries with all fields.
     """

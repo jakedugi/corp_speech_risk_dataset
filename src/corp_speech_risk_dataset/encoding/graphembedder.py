@@ -161,6 +161,95 @@ class CrossModalFusion(nn.Module):
         return self.proj(fused)  # [B,Tdim]
 
 
+def train_graphsage_model(
+    model: nn.Module, graphs: list[Data], epochs: int = 15
+) -> nn.Module:
+    """
+    Train GraphSAGE model optimized for Mac M1 MPS and legal text dependency graphs.
+    Uses contrastive learning + reconstruction for better embeddings.
+    """
+    # Enable MPS acceleration on Mac M1
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    model = model.to(device)
+    model.train()
+
+    # Optimized for Mac M1 - higher LR, Adam with weight decay
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    # Persistent decoder for reconstruction loss
+    decoder = nn.Linear(128, 16).to(device)
+    decoder_opt = torch.optim.AdamW(decoder.parameters(), lr=0.001)
+
+    print(f"[GRAPHSAGE TRAINING] Training on {len(graphs)} graphs for {epochs} epochs")
+    print(f"[GRAPHSAGE TRAINING] Device: {device}")
+    print(f"[GRAPHSAGE TRAINING] Optimized for legal text dependency structures")
+
+    # Move graphs to device
+    graphs = [g.to(device) for g in graphs if g.num_nodes > 0]
+
+    best_loss = float("inf")
+    for epoch in range(epochs):
+        total_loss = 0.0
+        total_samples = 0
+
+        for pyg_data in graphs:
+            if pyg_data.num_nodes == 0:
+                continue
+
+            optimizer.zero_grad()
+            decoder_opt.zero_grad()
+
+            # Forward pass
+            embeddings = model(pyg_data.x, pyg_data.edge_index)
+
+            # Reconstruction loss
+            reconstructed = decoder(embeddings)
+            recon_loss = F.mse_loss(reconstructed, pyg_data.x)
+
+            # Additional contrastive loss for legal text patterns
+            # Encourage similar POS patterns to have similar embeddings
+            pos_mask = pyg_data.x[:, 1:13]  # POS one-hot features
+            if embeddings.size(0) > 1:
+                # Compute similarity matrix
+                emb_sim = torch.mm(embeddings, embeddings.t())
+                pos_sim = torch.mm(pos_mask, pos_mask.t())
+                contrastive_loss = F.mse_loss(emb_sim, pos_sim * 0.1)  # Scale down
+
+                total_loss_batch = recon_loss + 0.1 * contrastive_loss
+            else:
+                total_loss_batch = recon_loss
+
+            total_loss_batch.backward()
+            optimizer.step()
+            decoder_opt.step()
+
+            total_loss += total_loss_batch.item()
+            total_samples += 1
+
+        scheduler.step()
+        avg_loss = total_loss / max(total_samples, 1)
+
+        # Progress logging optimized for development
+        if epoch % 3 == 0 or epoch == epochs - 1:
+            lr = scheduler.get_last_lr()[0]
+            print(
+                f"[GRAPHSAGE TRAINING] Epoch {epoch:2d}: loss = {avg_loss:.4f}, lr = {lr:.6f}"
+            )
+
+        # Early stopping for quick development
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+        elif epoch > 5 and avg_loss > best_loss * 1.1:
+            print(f"[GRAPHSAGE TRAINING] Early stopping at epoch {epoch}")
+            break
+
+    model.eval()
+    model = model.cpu()  # Move back to CPU for inference
+    print(f"[GRAPHSAGE TRAINING] Training complete! Final loss: {best_loss:.4f}")
+    return model
+
+
 def compute_graph_embedding(
     text: str,
     method: Literal["wl", "node2vec", "graphsage"],
@@ -172,7 +261,7 @@ def compute_graph_embedding(
     Compute a graph embedding vector for a single sentence:
       - wl: converts via wl_vector (counts → sparse → to_dense)
       - node2vec: runs random walks (requires trained model)
-      - graphsage: runs mini-batch through GNN (requires trained model)
+      - graphsage: runs mini-batch through GNN (trained model)
     """
     g_nx = to_dependency_graph(text)
 
@@ -202,8 +291,8 @@ def compute_graph_embedding(
         if pyg.num_nodes == 0 or pyg.x is None:
             return torch.zeros(128)  # Return zero vector with correct hidden dimension
 
-        # Run GNN and mean-pool node embeddings
-        with torch.no_grad():  # Ensure we're in eval mode for consistency
+        # Run GNN and mean-pool node embeddings (model should be trained by now)
+        with torch.no_grad():
             node_embs = graphsage_model(pyg.x, pyg.edge_index)
             return node_embs.mean(dim=0)  # Mean pooling across nodes
 

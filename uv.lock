@@ -523,6 +523,7 @@ dependencies = [
     { name = "hdbscan" },
     { name = "holoviews" },
     { name = "httpx", extra = ["http2"] },
+    { name = "huggingface-hub" },
     { name = "hvplot" },
     { name = "imblearn" },
     { name = "import-linter" },
@@ -583,6 +584,8 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tomli" },
     { name = "tomli-w" },
+    { name = "torch" },
+    { name = "torch-geometric" },
     { name = "tqdm" },
     { name = "transformers" },
     { name = "typer" },
@@ -641,6 +644,7 @@ requires-dist = [
     { name = "hdbscan", specifier = ">=0.8.40" },
     { name = "holoviews" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.28.0,<1.0.0" },
+    { name = "huggingface-hub", specifier = ">=0.33.0" },
     { name = "hvplot" },
     { name = "imblearn", specifier = ">=0.0" },
     { name = "import-linter", specifier = ">=2.3" },
@@ -706,6 +710,8 @@ requires-dist = [
     { name = "tokenizers", specifier = ">=0.20" },
     { name = "tomli" },
     { name = "tomli-w" },
+    { name = "torch", specifier = ">=2.7.1" },
+    { name = "torch-geometric", specifier = ">=2.6.1" },
     { name = "tqdm" },
     { name = "transformers", specifier = ">=4.41" },
     { name = "typer" },
@@ -4067,6 +4073,25 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/94/34b80bd172d0072c9979708ccd279c2da2f55c3ef318eceec276ab9544a4/torch-2.7.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:06eea61f859436622e78dd0cdd51dbc8f8c6d76917a9cf0555a333f9eac31ec1", size = 821174704, upload-time = "2025-06-04T17:37:03.799Z" },
     { url = "https://files.pythonhosted.org/packages/50/9e/acf04ff375b0b49a45511c55d188bcea5c942da2aaf293096676110086d1/torch-2.7.1-cp311-cp311-win_amd64.whl", hash = "sha256:8273145a2e0a3c6f9fd2ac36762d6ee89c26d430e612b95a99885df083b04e52", size = 216095937, upload-time = "2025-06-04T17:39:24.83Z" },
     { url = "https://files.pythonhosted.org/packages/5b/2b/d36d57c66ff031f93b4fa432e86802f84991477e522adcdffd314454326b/torch-2.7.1-cp311-none-macosx_11_0_arm64.whl", hash = "sha256:aea4fc1bf433d12843eb2c6b2204861f43d8364597697074c8d38ae2507f8730", size = 68640034, upload-time = "2025-06-04T17:39:17.989Z" },
+]
+
+[[package]]
+name = "torch-geometric"
+version = "2.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "fsspec" },
+    { name = "jinja2" },
+    { name = "numpy" },
+    { name = "psutil" },
+    { name = "pyparsing" },
+    { name = "requests" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e8/81/e1b015494cb9e0bf4c47cc8426e49736120248733be0e22072a5628ae9ed/torch_geometric-2.6.1.tar.gz", hash = "sha256:1f18f9d0fc4d2239d526221e4f22606a4a3895b5d965a9856d27610a3df662c6", size = 771490, upload-time = "2024-09-26T08:11:30.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/9f/157e913626c1acfb3b19ce000b1a6e4e4fb177c0bc0ea0c67ca5bd714b5a/torch_geometric-2.6.1-py3-none-any.whl", hash = "sha256:8faeb353f9655f7dbec44c5e0b44c721773bdfb279994da96b9b8b12fd30f427", size = 1135632, upload-time = "2024-09-26T08:11:27.194Z" },
 ]
 
 [[package]]

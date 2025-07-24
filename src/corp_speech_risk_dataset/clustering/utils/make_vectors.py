@@ -4,16 +4,21 @@ import json
 import numpy as np
 import time
 import torch
-from transformers import GPT2Model, GPT2TokenizerFast
 from torch.nn.utils.rnn import pad_sequence
+from typing import Literal
 
+from corp_speech_risk_dataset.encoding.stembedder import get_sentence_embedder
 from corp_speech_risk_dataset.clustering.utils.reverse_utils import wl_vector
 from corp_speech_risk_dataset.encoding.tokenizer import SentencePieceTokenizer
+
+# we’ll import GPT-2 classes only if needed
+from transformers import GPT2Model, GPT2TokenizerFast
 
 
 def build_concat_vectors(
     meta_path: str | Path,
     out_npy: str | Path = "concat_vectors.npy",
+    text_model: Literal["gpt2", "st"] = "gpt2",
 ):
     """
     Rebuilds and saves the full (N × D) float32 array of features:
@@ -24,21 +29,28 @@ def build_concat_vectors(
     # meta = meta[:64]
     N = len(meta)
 
-    # ── Prepare GPT-2 for on‐the‐fly embeddings ──────────────────────────
-    tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-    model = GPT2Model.from_pretrained("gpt2")
-    model.eval()
-    # send model to MPS (Apple Silicon GPU)
-    # prefer the new MPS API
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    model.to(device)
+    # ── Determine embedding dimension (from metadata or models) ─────────────
+    sample = meta[0]
 
-    # Embedding dimension from the model config
-    E = model.config.hidden_size
+    # If metadata already has a dense st_emb, use its length:
+    if "st_emb" in sample and sample["st_emb"] is not None:
+        E = len(sample["st_emb"])
+        use_metadata_embeddings = True
+    else:
+        use_metadata_embeddings = False
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        if text_model == "gpt2":
+            gpt_tok = GPT2TokenizerFast.from_pretrained("gpt2")
+            gpt_mod = GPT2Model.from_pretrained("gpt2").eval().to(device)
+            E = gpt_mod.config.hidden_size
+        else:
+            st_model = get_sentence_embedder(None)
+            E = st_model.get_sentence_embedding_dimension()
+
     D = 2048  # WL dimension
 
     out = np.zeros((N, E + D), dtype=np.float32)
-    BATCH_SIZE = 16
+    BATCH_SIZE = 64  # adjust for memory vs. speed
     i = 0
     # pre-filter entries with non-empty sp_ids
     entries = [m for m in meta if m.get("sp_ids")]
@@ -55,15 +67,29 @@ def build_concat_vectors(
                 elapsed = time.perf_counter() - t0
                 print(f"→ {q*25}% done at {elapsed:.1f}s elapsed", flush=True)
                 printed.add(q)
-        # build list of token-ID tensors, send to device
-        toks = [torch.tensor(m["sp_ids"], dtype=torch.long) for m in batch]
-        toks = [t.to(device) for t in toks]
-        # pad to same length (batch, L_max)
-        padded = pad_sequence(toks, batch_first=True)
-        with torch.no_grad():
-            hidden = model(input_ids=padded).last_hidden_state  # (B, L_max, E)
-        # mean-pool and move back to CPU+numpy
-        embs = hidden.mean(dim=1).cpu().numpy().astype(np.float32)
+        # ── Get text embeddings ─────────────────────────────────────────────
+        if use_metadata_embeddings:
+            # Pull precomputed vectors right out of JSON
+            embs = np.vstack([m["st_emb"] for m in batch]).astype(np.float32)
+        else:
+            if text_model == "gpt2":
+                enc = gpt_tok(
+                    [m["text"] for m in batch],
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                ).to(device)
+                with torch.no_grad():
+                    hidden = gpt_mod(**enc).last_hidden_state
+                embs = hidden.mean(dim=1).cpu().numpy().astype(np.float32)
+            else:
+                texts = [m["text"] for m in batch]
+                embs = st_model.encode(
+                    texts,
+                    batch_size=BATCH_SIZE,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                ).astype(np.float32)
 
         # assign embeddings + WL vectors back to `out`
         for emb, m in zip(embs, batch):
@@ -84,6 +110,16 @@ if __name__ == "__main__":
     )
     p.add_argument("--meta", required=True, help="Path to metadata.json")
     p.add_argument("--out", default="concat_vectors.npy", help="Output .npy file")
+    p.add_argument(
+        "--text-model",
+        choices=["gpt2", "st"],
+        default="gpt2",
+        help="`gpt2` for legacy GPT-2 mean-pool (default), or `st` for Sentence-Transformer",
+    )
     args = p.parse_args()
 
-    build_concat_vectors(args.meta, args.out)
+    build_concat_vectors(
+        meta_path=args.meta,
+        out_npy=args.out,
+        text_model=args.text_model,
+    )

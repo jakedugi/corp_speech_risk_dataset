@@ -26,3 +26,8 @@ def kernel_kmeans(K: np.ndarray, k=20, max_iter=100):
         y = D.argmin(axis=1)
         H = np.eye(k)[y]
     return y
+
+
+def cosine_dense(a: np.ndarray, b: np.ndarray) -> float:
+    """Cosine similarity for 1-D dense vectors (Sentence-Transformer output)."""
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))

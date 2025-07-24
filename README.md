@@ -127,7 +127,11 @@ pytest tests/integration/ -v             # Integration tests
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
-COMMANDS: corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_api orchestrate \
+COMMANDS:
+
+
+
+corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_api orchestrate \
   --statutes "FTC Section 5" \
   --company-file data/sp500_official_names_cleaned.csv \
   --outdir data/testing_apis/courtlistener_refactor \
@@ -153,6 +157,16 @@ COMMANDS: corp_speech_risk_dataset % python -m corp_speech_risk_dataset.cli_api 
 
 Aborted.
  corp_speech_risk_dataset % python run_quote_extractor.py
+
+
+
+
+git clone https://huggingface.co/gpt2 \
+  ~/.cache/huggingface/transformers/gpt2
+
+
+
+
 
 python: can't open file '': [Errno 2] No such file or directory
  corp_speech_risk_dataset % python scripts/run_extraction.py

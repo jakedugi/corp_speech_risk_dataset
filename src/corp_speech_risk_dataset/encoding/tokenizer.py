@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from transformers import GPT2TokenizerFast
 from loguru import logger
 
@@ -18,7 +18,7 @@ class SentencePieceTokenizer:
     Maintains backward compatibility with the existing pipeline interface.
     """
 
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: Optional[str] = None):
         """
         Load GPT-2 tokenizer.
 
@@ -28,8 +28,9 @@ class SentencePieceTokenizer:
         if model_path is not None:
             logger.warning("model_path parameter ignored - using GPT-2 tokenizer")
 
-        self.tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-        logger.info("Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens)")
+        # use the shared GPT-2 byte-level BPE tokenizer
+        self.tokenizer = _SHARED_SP_TOKENIZER
+        logger.info("Using shared GPT-2 byte-level BPE tokenizer")
 
     def encode(self, text: str) -> List[int]:
         """
@@ -75,8 +76,6 @@ class SentencePieceTokenizer:
 
 
 # ——— Shared tokenizer instance ———
-from transformers import GPT2TokenizerFast
-
-# create a single shared instance at import time
+# one shared GPT-2 byte-level BPE tokenizer for all use
 _SHARED_SP_TOKENIZER = GPT2TokenizerFast.from_pretrained("gpt2")
 logger.info("Loaded GPT-2 byte-level BPE tokenizer (50,257 tokens) once at startup")

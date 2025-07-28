@@ -11,6 +11,18 @@ import time
 import numpy as np
 
 from transformers import GPT2Model, GPT2TokenizerFast
+
+
+def get_best_device() -> torch.device:
+    """Get best available device with consistent priority: CUDA → MPS → CPU"""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+
 from src.corp_speech_risk_dataset.encoding.tokenizer import SentencePieceTokenizer
 from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
 from src.corp_speech_risk_dataset.encoding.wl_features import wl_vector
@@ -86,23 +98,15 @@ def encode_file(
 
     # -------- GPT-2 mean-pool (optional) ------------------------------- #
     if text_model.lower() == "gpt2":
-        # Prefer CUDA GPU, then Apple MPS, then CPU
-        device = torch.device(
-            "cuda"
-            if torch.cuda.is_available()
-            else ("mps" if torch.backends.mps.is_available() else "cpu")
-        )
+        # Use consistent device priority: CUDA → MPS → CPU
+        device = get_best_device()
         gpt_tok = GPT2TokenizerFast.from_pretrained("gpt2", local_files_only=True)
         gpt_tok.pad_token = gpt_tok.eos_token  # <-- fix: set pad_token
         gpt_mod = GPT2Model.from_pretrained("gpt2", local_files_only=True).to(device)
         gpt_mod.eval()
     else:
         # still need a dummy device for signature
-        device = torch.device(
-            "cuda"
-            if torch.cuda.is_available()
-            else ("mps" if torch.backends.mps.is_available() else "cpu")
-        )
+        device = get_best_device()
         gpt_mod = gpt_tok = None
 
     # Graph embedders & fusion
@@ -569,6 +573,46 @@ def cmd_embed(ctx, st_model):
     default=30,
     help="Number of negative samples for DGI loss (default: 30)",
 )
+@click.option(
+    "--fusion-epochs",
+    type=int,
+    default=10,
+    help="Number of CrossModal fusion training epochs (default: 10)",
+)
+@click.option(
+    "--fusion-samples",
+    type=int,
+    default=5000,
+    help="Number of text-graph pairs for CrossModal fusion training (default: 5000)",
+)
+@click.option(
+    "--fusion-batch-size",
+    type=int,
+    default=256,
+    help="Batch size for CrossModal fusion training (default: 256)",
+)
+@click.option(
+    "--fusion-temperature",
+    type=float,
+    default=0.07,
+    help="Temperature for InfoNCE loss in CrossModal fusion (default: 0.07)",
+)
+@click.option(
+    "--fusion-patience",
+    type=int,
+    default=2,
+    help="Early stopping patience for CrossModal fusion (default: 2)",
+)
+@click.option(
+    "--use-compile",
+    is_flag=True,
+    help="Use torch.compile for CrossModal fusion speedup",
+)
+@click.option(
+    "--use-amp",
+    is_flag=True,
+    help="Use Automatic Mixed Precision (AMP) for speedup",
+)
 @click.pass_context
 def cmd_graph(
     ctx,
@@ -582,6 +626,13 @@ def cmd_graph(
     loss_type,
     dgi_weight,
     num_negative,
+    fusion_epochs,
+    fusion_samples,
+    fusion_batch_size,
+    fusion_temperature,
+    fusion_patience,
+    use_compile,
+    use_amp,
 ):
     """Embed graphs via WL, Node2Vec, GraphSAGE, or Cross-Modal Fusion targeting 10^-4 MSE."""
     # Print setup information once
@@ -740,15 +791,17 @@ def cmd_graph(
                 # Get text embeddings for training
                 st_model = get_sentence_embedder("all-MiniLM-L6-v2")
                 text_embs = st_model.encode(
-                    training_texts[:2000], convert_to_tensor=True, batch_size=64
-                )  # Increased to 2000 for better coverage
+                    training_texts[:fusion_samples],
+                    convert_to_tensor=True,
+                    batch_size=64,
+                )  # Use configurable fusion_samples
 
                 # Get graph embeddings for same texts
                 graph_embs = []
                 sage_model.eval()
                 with torch.no_grad():
                     for i, text in enumerate(
-                        training_texts[:2000]
+                        training_texts[:fusion_samples]
                     ):  # Match text embeddings count
                         graph_emb = compute_graph_embedding(
                             text, "graphsage", None, sage_model
@@ -757,15 +810,29 @@ def cmd_graph(
 
                 # Create and train fusion model
                 txt_dim = st_model.get_sentence_embedding_dimension()
+                if txt_dim is None:
+                    raise ValueError("Could not determine text embedding dimension")
                 fusion_model = CrossModalFusion(text_dim=txt_dim, graph_dim=hidden_dim)
+
+                # Apply torch.compile optimization if requested
+                if use_compile:
+                    try:
+                        compiled_model = torch.compile(fusion_model)
+                        print(f"[CROSSMODAL FUSION] torch.compile enabled for speedup")
+                        # Use compiled model for training
+                        fusion_model = compiled_model  # type: ignore
+                    except Exception as e:
+                        print(f"[CROSSMODAL FUSION] torch.compile failed: {e}")
+
                 fusion_model = train_crossmodal_fusion(
                     fusion_model,
                     [text_embs[i] for i in range(len(text_embs))],
                     graph_embs,
-                    epochs=12,  # Increased from 3 to 12 for better convergence
-                    batch_size=256,  # Proper batch size for contrastive learning
-                    temperature=0.07,  # InfoNCE temperature for legal text
-                    patience=3,  # Early stopping patience
+                    epochs=fusion_epochs,
+                    batch_size=fusion_batch_size,
+                    temperature=fusion_temperature,
+                    patience=fusion_patience,
+                    use_amp=use_amp,
                 )
 
                 print(f"[CROSSMODAL FUSION] Fusion training completed!")
@@ -805,24 +872,24 @@ def cmd_graph(
                 print(f"\n[GRAPHSAGE RECOMMENDATIONS]")
                 if val_loss > train_loss * 2:
                     print(
-                        "⚠️  High validation loss suggests overfitting - consider reducing capacity or adding dropout"
+                        " High validation loss suggests overfitting - consider reducing capacity or adding dropout"
                     )
                 if f1_score < 0.6:
                     print(
-                        "⚠️  Low F1 score - consider enriching node features or increasing neighbor sampling"
+                        "  Low F1 score - consider enriching node features or increasing neighbor sampling"
                     )
                 if f1_score > 0.8:
                     print(
-                        "✅ Good F1 score - embeddings are learning task-relevant patterns"
+                        " Good F1 score - embeddings are learning task-relevant patterns"
                     )
                 if val_loss < 1e-3:
                     print(
-                        "✅ Low validation loss - model is learning graph structure well"
+                        " Low validation loss - model is learning graph structure well"
                     )
-        else:
-            print("⚠️  No suitable training graphs found - using untrained model")
+                else:
+                    print("⚠️ No suitable training graphs found - using untrained model")
 
-    # Handle cross-modal fusion setup for inference
+                    # Handle cross-modal fusion setup for inference
     if graph_embed == "cross" and fusion_model is None:
         # If we didn't train fusion above, create untrained one (fallback)
         from src.corp_speech_risk_dataset.encoding.stembedder import (
@@ -831,10 +898,10 @@ def cmd_graph(
 
         st_model = get_sentence_embedder("all-MiniLM-L6-v2")
         txt_dim = st_model.get_sentence_embedding_dimension()
+        if txt_dim is None:
+            raise ValueError("Could not determine text embedding dimension")
         fusion_model = CrossModalFusion(text_dim=txt_dim, graph_dim=hidden_dim)
-        print(
-            "⚠️  Using untrained CrossModalFusion - consider enabling GraphSAGE training"
-        )
+        print("  Using untrained CrossModalFusion - will train on existing embeddings")
 
     if graph_embed == "node2vec":
         print(f"Node2Vec model loaded")
@@ -845,8 +912,12 @@ def cmd_graph(
     total_processed = 0
     step_start_time = time.time()
 
+    # Initialize fusion_model for processor scope - will be set if cross-modal training occurs
+    if "fusion_model" not in locals():
+        fusion_model = None
+
     def processor(lines):
-        nonlocal total_processed
+        nonlocal total_processed, fusion_model
         batch_count = 0
         for line in lines:
             js = json.loads(line)
@@ -874,35 +945,61 @@ def cmd_graph(
                 js["gph_emb"] = gph_tensor.tolist()
 
             elif graph_embed == "cross":
-                # For cross-modal: compute both text and graph embeddings then fuse
-                from src.corp_speech_risk_dataset.encoding.stembedder import (
-                    get_sentence_embedder,
-                )
+                # For cross-modal: use existing embeddings from data if available
+                if "st_emb" in js and "gph_emb" in js:
+                    # Use existing embeddings from previous stages
+                    text_emb = torch.tensor(js["st_emb"])
+                    graph_emb = torch.tensor(js["gph_emb"])
 
-                # Get text embedding
-                st_model = get_sentence_embedder("all-MiniLM-L6-v2")
-                text_emb = st_model.encode([js["text"]], convert_to_tensor=True)[0]
-
-                # Get graph embedding via GraphSAGE
-                dep_graph = to_dependency_graph(js["text"])
-                js["deps"] = [(h, t, l) for h, t, l in dep_graph.edges.data("dep")]
-                graph_emb = compute_graph_embedding(
-                    js["text"], "graphsage", node2vec_model, sage_model, fusion_model
-                )
-
-                # Fuse embeddings using trained fusion model
-                if fusion_model is not None:
-                    fusion_model.eval()
-                    with torch.no_grad():
-                        fused_emb = fusion_model(
-                            text_emb.unsqueeze(0), graph_emb.unsqueeze(0)
-                        )[0]
-                    js["fused_emb"] = fused_emb.tolist()
-                    js["gph_emb"] = graph_emb.tolist()  # Also store graph embedding
-                    js["st_emb"] = text_emb.tolist()  # Also store text embedding
+                    # Fuse embeddings using fusion model
+                    if fusion_model is not None:
+                        fusion_model.eval()
+                        # Ensure tensors and model are on CPU for inference
+                        fusion_model = fusion_model.cpu()
+                        with torch.no_grad():
+                            fused_emb = fusion_model(
+                                text_emb.unsqueeze(0), graph_emb.unsqueeze(0)
+                            )[0]
+                        js["fused_emb"] = fused_emb.tolist()
+                    else:
+                        # Fallback: just concatenate embeddings
+                        fused_emb = torch.cat([text_emb, graph_emb])
+                        js["fused_emb"] = fused_emb.tolist()
                 else:
-                    # Fallback if no trained fusion model
-                    js["gph_emb"] = graph_emb.tolist()
+                    # Fallback: compute embeddings if not available
+                    from src.corp_speech_risk_dataset.encoding.stembedder import (
+                        get_sentence_embedder,
+                    )
+
+                    # Get text embedding
+                    st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+                    text_emb = st_model.encode([js["text"]], convert_to_tensor=True)[0]
+
+                    # Get graph embedding via GraphSAGE
+                    dep_graph = to_dependency_graph(js["text"])
+                    js["deps"] = [(h, t, l) for h, t, l in dep_graph.edges.data("dep")]
+                    graph_emb = compute_graph_embedding(
+                        js["text"],
+                        "graphsage",
+                        node2vec_model,
+                        sage_model,
+                        fusion_model,
+                    )
+
+                    # Fuse embeddings using trained fusion model
+                    if fusion_model is not None:
+                        fusion_model.eval()
+                        fusion_model = fusion_model.cpu()
+                        with torch.no_grad():
+                            fused_emb = fusion_model(
+                                text_emb.unsqueeze(0), graph_emb.unsqueeze(0)
+                            )[0]
+                        js["fused_emb"] = fused_emb.tolist()
+                        js["gph_emb"] = graph_emb.tolist()
+                        js["st_emb"] = text_emb.tolist()
+                    else:
+                        # Fallback if no trained fusion model
+                        js["gph_emb"] = graph_emb.tolist()
 
             else:
                 # For GraphSAGE and Node2Vec: extract dependency parse information

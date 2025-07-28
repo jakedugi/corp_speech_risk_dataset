@@ -18,6 +18,14 @@ from sklearn.metrics import silhouette_score
 from .parser import to_dependency_graph
 
 
+def get_best_device() -> torch.device:
+    """Get best available device with consistent priority: CUDA → CPU → MPS"""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")  # Prefer CPU over MPS for stability
+
+
 def _nx_to_pyg(g: nx.DiGraph) -> Data:
     # Convert NetworkX DiGraph to a PyG Data object
     # Nodes are indexed 0..N-1
@@ -137,12 +145,8 @@ def train_graphsage_model(
     Returns:
         Tuple of (trained_model, evaluation_metrics)
     """
-    # Proper device priority: CUDA > MPS > CPU
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else ("mps" if torch.backends.mps.is_available() else "cpu")
-    )
+    # Use consistent device priority: CUDA → MPS → CPU
+    device = get_best_device()
     model = model.to(device)
     model.train()
 
@@ -504,34 +508,44 @@ class CrossModalFusion(nn.Module):
     Simple two-stream cross-attention fusion:
       - text_embs: [B, Tdim]
       - graph_embs: [B, Gdim]
-    returns fused [B, Fdim] where Fdim = Tdim
+    returns fused [B, Fdim] where Fdim = fusion_dim
     """
 
-    def __init__(self, text_dim: int, graph_dim: Optional[int] = None):
+    def __init__(
+        self,
+        text_dim: int,
+        graph_dim: Optional[int] = None,
+        fusion_dim: Optional[int] = None,
+    ):
         super().__init__()
-        # project text and graph embeddings into the same space
+        # Set default dimensions
         graph_dim = graph_dim or text_dim
-        self.text_proj = nn.Linear(text_dim, text_dim)
-        self.graph_proj = nn.Linear(graph_dim, text_dim)
+        fusion_dim = fusion_dim or max(
+            text_dim, graph_dim
+        )  # Use larger dimension as default
+
+        # Project text and graph embeddings into the same fusion space
+        self.text_proj = nn.Linear(text_dim, fusion_dim)
+        self.graph_proj = nn.Linear(graph_dim, fusion_dim)
         self.attn = nn.MultiheadAttention(
-            embed_dim=text_dim, num_heads=4, batch_first=True
+            embed_dim=fusion_dim, num_heads=4, batch_first=True
         )
-        self.proj = nn.Linear(text_dim * 2, text_dim)
+        self.proj = nn.Linear(fusion_dim * 2, fusion_dim)
 
     def forward(self, txt: torch.Tensor, gph: torch.Tensor) -> torch.Tensor:
-        # Project into shared dimension
-        txt_up = self.text_proj(txt)  # [B, Tdim]
-        gph_up = self.graph_proj(gph)  # [B, Tdim]
+        # Project into shared fusion dimension
+        txt_up = self.text_proj(txt)  # [B, fusion_dim]
+        gph_up = self.graph_proj(gph)  # [B, fusion_dim]
         # Add a sequence dimension of 1 for attention
-        txt_seq = txt_up.unsqueeze(1)  # [B,1,Tdim]
-        gph_seq = gph_up.unsqueeze(1)  # [B,1,Tdim]
+        txt_seq = txt_up.unsqueeze(1)  # [B,1,fusion_dim]
+        gph_seq = gph_up.unsqueeze(1)  # [B,1,fusion_dim]
         # Cross-attend: text attends to graph
         o1, _ = self.attn(txt_seq, gph_seq, gph_seq)
         # Graph attends to text
         o2, _ = self.attn(gph_seq, txt_seq, txt_seq)
         # Remove sequence dim, concatenate, then project
-        fused = torch.cat([o1.squeeze(1), o2.squeeze(1)], dim=-1)  # [B,2*Tdim]
-        return self.proj(fused)  # [B,Tdim]
+        fused = torch.cat([o1.squeeze(1), o2.squeeze(1)], dim=-1)  # [B,2*fusion_dim]
+        return self.proj(fused)  # [B,fusion_dim]
 
 
 def train_crossmodal_fusion(
@@ -542,6 +556,7 @@ def train_crossmodal_fusion(
     batch_size: int = 256,  # Added batch processing
     temperature: float = 0.07,  # InfoNCE temperature
     patience: int = 3,  # Early stopping patience
+    use_amp: bool = False,  # Automatic Mixed Precision
 ) -> CrossModalFusion:
     """
     Train CrossModalFusion with InfoNCE contrastive learning - optimized for legal text.
@@ -558,11 +573,7 @@ def train_crossmodal_fusion(
     Returns:
         Trained fusion model
     """
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else ("mps" if torch.backends.mps.is_available() else "cpu")
-    )
+    device = get_best_device()
 
     fusion_model = fusion_model.to(device)
     fusion_model.train()
@@ -618,7 +629,7 @@ def train_crossmodal_fusion(
 
                 # InfoNCE contrastive loss - legal text optimized
                 batch_loss = compute_infonce_loss(
-                    fused, batch_text, batch_graph, temperature
+                    fused, batch_text, batch_graph, temperature, use_nt_xent=use_amp
                 )
 
             batch_loss.backward()
@@ -659,12 +670,25 @@ def compute_infonce_loss(
     text: torch.Tensor,
     graph: torch.Tensor,
     temperature: float = 0.07,
+    use_nt_xent: bool = False,
 ) -> torch.Tensor:
     """
     Compute InfoNCE contrastive loss for cross-modal alignment.
     Optimized for legal text dependency graph alignment.
+
+    Handles different input dimensions by projecting to fused dimension.
     """
     batch_size = fused.shape[0]
+    fused_dim = fused.shape[1]
+
+    # Project text and graph to fused dimension if needed
+    device = fused.device
+    if text.shape[1] != fused_dim:
+        text_proj = nn.Linear(text.shape[1], fused_dim).to(device)
+        text = text_proj(text)
+    if graph.shape[1] != fused_dim:
+        graph_proj = nn.Linear(graph.shape[1], fused_dim).to(device)
+        graph = graph_proj(graph)
 
     # Normalize embeddings for cosine similarity
     fused_norm = F.normalize(fused, dim=1)
@@ -679,6 +703,12 @@ def compute_infonce_loss(
 
     # Positive pairs are on the diagonal
     labels = torch.arange(batch_size, device=fused.device)
+
+    # Quick win #4: NT-Xent loss (normalized InfoNCE for stability)
+    if use_nt_xent:
+        # NT-Xent: L2 normalize similarities before softmax for better stability
+        text_fused_sim = F.normalize(text_fused_sim, p=2, dim=1)
+        graph_fused_sim = F.normalize(graph_fused_sim, p=2, dim=1)
 
     # InfoNCE loss for both directions
     text_to_fused_loss = F.cross_entropy(text_fused_sim, labels)

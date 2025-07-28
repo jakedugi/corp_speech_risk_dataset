@@ -80,7 +80,7 @@ dependencies = [
   "pandas",
   "requests",
   "lxml",
-  "pyarrow",
+  "pyarrow>=12.0.0,<22.0.0",
   "urllib3==2.5.0",
   "thinc>=8.1.0,<9.0.0",
   "python-dotenv>=1.0.0",
@@ -118,6 +118,8 @@ dependencies = [
   "langdetect>=1.0.9",
   "scipy==1.13.0 ; sys_platform == 'darwin' and platform_machine == 'arm64' or sys_platform == 'linux'",
   "huggingface-hub>=0.33.0",
+  "datasets>=3.0.0",
+  "pip>=25.1.1",
 ]
 
 

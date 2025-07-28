@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Single-line public API  →  get_sentence_embedder()
 # • Memoised – model is downloaded & moved to device exactly once
-# • Apple-Silicon aware – prefers MPS, then CUDA, then CPU
+# • Device priority: CUDA GPU, then Apple MPS, then CPU
 
 from functools import lru_cache
 from typing import Optional
@@ -12,10 +12,10 @@ from sentence_transformers import SentenceTransformer
 
 
 def _best_device() -> str:
-    if torch.backends.mps.is_available():
-        return "mps"
     if torch.cuda.is_available():
         return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
     return "cpu"
 
 

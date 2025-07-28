@@ -405,3 +405,49 @@ FOR COLAB: # 1. Clone your repo
 # 5. Manually install PyG extensions
 !pip install pyg_lib torch-scatter torch-sparse torch-cluster torch-spline-conv \
     -f https://data.pyg.org/whl/torch-$(python -c "import torch;print(torch.__ve
+
+
+
+python3 src/corp_speech_risk_dataset/clustering/utils/summary_y_stats.py data/tokenized/courtlistener_v5_final_with_outcome --field final_judgement_real --output-format text
+
+uv run pip install spacy
+
+
+
+
+ # CORAL Ordinal MLP (No PPLM)
+
+## Quick Start
+1. Put your dataset as JSONL, one object per line containing keys `fused_emb` (list[float]) and `bucket` (e.g. "Low"/"Medium"/"High").
+2. Install deps: `pip install torch numpy scipy scikit-learn matplotlib`.
+3. Train:
+```bash
+python -m coral_ordinal.cli --data path/to/data.jsonl --buckets Low Medium High --plot-cm
+```
+4. Metrics (Exact, Off-by-one, Spearman ρ) will print, confusion matrix saved to `runs/coral/cm.png`.
+5. Use `--eval-only --model-path runs/coral/best.pt` to just evaluate.
+
+### Why CORAL?
+- Outputs K-1 cumulative logits → enforces order consistency.
+- Simple BCE-with-logits loss, easy to backprop in downstream steering.
+- Predict by counting thresholds surpassed → exact/off-by-one metrics trivial to compute.
+
+### Design Choices
+- **Shared-weight CORAL head** to guarantee monotonic logits (lightweight & provable).
+- **Config dataclass** to keep hyperparams tidy & serializable.
+- **Device auto-select** (MPS/cuda/cpu) works on
+- **Unit tests** for buckets, loss, metrics, and forward pass ensure correctness & easy refactors.
+- **Visualization** via confusion matrix for quick sanity-checks.
+
+### Extending
+- Swap MLP backbone for Transformer/Graph nets w/out touching CORAL head.
+- Increase buckets (e.g. deciles) by just listing more labels.
+- Add calibration or ordinal-specific metrics (MAE, Kendall τ) in `metrics.py`.
+
+### Downstream Compatibility
+- The `predict` method returns integer ranks [0..K-1]; plug directly into PPLM later as classifier logits/gradients.
+- Check gate: script prints exact, off-by-one, ρ so you can enforce ≥40/80/0.5 thresholds.
+
+
+
+"""

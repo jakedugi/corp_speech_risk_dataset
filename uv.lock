@@ -515,6 +515,7 @@ dependencies = [
     { name = "confection", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "cymem", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "cytoolz", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "datasets", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "datashader", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "duckdb", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "en-core-web-lg", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
@@ -556,6 +557,7 @@ dependencies = [
     { name = "orjson", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "packaging", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "pandas", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "pip", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "playwright", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "plotly", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "polars", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
@@ -641,6 +643,7 @@ requires-dist = [
     { name = "confection", specifier = ">=0.0.3" },
     { name = "cymem", specifier = ">=2.0.7" },
     { name = "cytoolz", specifier = ">=0.12.1" },
+    { name = "datasets", specifier = ">=3.0.0" },
     { name = "datashader" },
     { name = "duckdb" },
     { name = "en-core-web-lg", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz" },
@@ -684,12 +687,13 @@ requires-dist = [
     { name = "orjson", specifier = ">=3.10" },
     { name = "packaging", specifier = ">=23.1" },
     { name = "pandas" },
+    { name = "pip", specifier = ">=25.1.1" },
     { name = "playwright" },
     { name = "plotly", specifier = ">=6.2.0" },
     { name = "polars" },
     { name = "pre-commit" },
     { name = "preshed", specifier = ">=3.0.8" },
-    { name = "pyarrow" },
+    { name = "pyarrow", specifier = ">=12.0.0,<22.0.0" },
     { name = "pydantic", specifier = "<2.0" },
     { name = "pydeps", specifier = ">=3.0.1" },
     { name = "pygments" },
@@ -844,11 +848,11 @@ wheels = [
 
 [[package]]
 name = "datasets"
-version = "2.14.4"
+version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohttp", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "dill", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "filelock", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "fsspec", extra = ["http"], marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "huggingface-hub", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "multiprocess", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
@@ -861,9 +865,9 @@ dependencies = [
     { name = "tqdm", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "xxhash", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/69/8cc725b5d38968fd118e4ce56a483b16e75b7793854c1a392ec4a34eeb31/datasets-2.14.4.tar.gz", hash = "sha256:ef29c2b5841de488cd343cfc26ab979bff77efa4d2285af51f1ad7db5c46a83b", size = 2178719, upload-time = "2023-08-08T15:45:43.015Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/9d/348ed92110ba5f9b70b51ca1078d4809767a835aa2b7ce7e74ad2b98323d/datasets-4.0.0.tar.gz", hash = "sha256:9657e7140a9050db13443ba21cb5de185af8af944479b00e7ff1e00a61c8dbf1", size = 569566, upload-time = "2025-07-09T14:35:52.431Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/f8/38298237d18d4b6a8ee5dfe390e97bed5adb8e01ec6f9680c0ddf3066728/datasets-2.14.4-py3-none-any.whl", hash = "sha256:29336bd316a7d827ccd4da2236596279b20ca2ac78f64c04c9483da7cbc2459b", size = 519335, upload-time = "2023-08-08T15:45:38.837Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/62/eb8157afb21bd229c864521c1ab4fa8e9b4f1b06bafdd8c4668a7a31b5dd/datasets-4.0.0-py3-none-any.whl", hash = "sha256:7ef95e62025fd122882dbce6cb904c8cd3fbc829de6669a5eb939c77d50e203d", size = 494825, upload-time = "2025-07-09T14:35:50.658Z" },
 ]
 
 [[package]]
@@ -1145,11 +1149,11 @@ wheels = [
 
 [[package]]
 name = "fsspec"
-version = "2025.7.0"
+version = "2025.3.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/8b/02/0835e6ab9cfc03916fe3f78c0956cfcdb6ff2669ffa6651065d5ebf7fc98/fsspec-2025.7.0.tar.gz", hash = "sha256:786120687ffa54b8283d942929540d8bc5ccfa820deb555a2b5d0ed2b737bf58", size = 304432, upload-time = "2025-07-15T16:05:21.19Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/f4/5721faf47b8c499e776bc34c6a8fc17efdf7fdef0b00f398128bc5dcb4ac/fsspec-2025.3.0.tar.gz", hash = "sha256:a935fd1ea872591f2b5148907d103488fc523295e6c64b835cfad8c3eca44972", size = 298491, upload-time = "2025-03-07T21:47:56.461Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/e0/014d5d9d7a4564cf1c40b5039bc882db69fd881111e03ab3657ac0b218e2/fsspec-2025.7.0-py3-none-any.whl", hash = "sha256:8b012e39f63c7d5f10474de957f3ab793b47b45ae7d39f2fb735f8bbe25c0e21", size = 199597, upload-time = "2025-07-15T16:05:19.529Z" },
+    { url = "https://files.pythonhosted.org/packages/56/53/eb690efa8513166adef3e0669afd31e95ffde69fb3c52ec2ac7223ed6018/fsspec-2025.3.0-py3-none-any.whl", hash = "sha256:efb87af3efa9103f94ca91a7f8cb7a4df91af9f74fc106c9c7ea0efd7277c1b3", size = 193615, upload-time = "2025-03-07T21:47:54.809Z" },
 ]
 
 [package.optional-dependencies]
@@ -2733,6 +2737,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/31/5e/03966aedfbfcbb4d5f8aa042452d3361f325b963ebbadddac05b122e47dd/pillow-11.3.0-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5418b53c0d59b3824d05e029669efa023bbef0f3e92e75ec8428f3799487f361", size = 4957170, upload-time = "2025-07-01T09:16:23.762Z" },
     { url = "https://files.pythonhosted.org/packages/cc/2d/e082982aacc927fc2cab48e1e731bdb1643a1406acace8bed0900a61464e/pillow-11.3.0-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:504b6f59505f08ae014f724b6207ff6222662aab5cc9542577fb084ed0676ac7", size = 5581505, upload-time = "2025-07-01T09:16:25.593Z" },
     { url = "https://files.pythonhosted.org/packages/34/e7/ae39f538fd6844e982063c3a5e4598b8ced43b9633baa3a85ef33af8c05c/pillow-11.3.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:c84d689db21a1c397d001aa08241044aa2069e7587b398c8cc63020390b1c1b8", size = 6984598, upload-time = "2025-07-01T09:16:27.732Z" },
+]
+
+[[package]]
+name = "pip"
+version = "25.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/de/241caa0ca606f2ec5fe0c1f4261b0465df78d786a38da693864a116c37f4/pip-25.1.1.tar.gz", hash = "sha256:3de45d411d308d5054c2168185d8da7f9a2cd753dbac8acbfa88a8909ecd9077", size = 1940155, upload-time = "2025-05-02T15:14:02.057Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/a2/d40fb2460e883eca5199c62cfc2463fd261f760556ae6290f88488c362c0/pip-25.1.1-py3-none-any.whl", hash = "sha256:2913a38a2abf4ea6b64ab507bd9e967f3b53dc1ede74b01b0931e1ce548751af", size = 1825227, upload-time = "2025-05-02T15:13:59.102Z" },
 ]
 
 [[package]]

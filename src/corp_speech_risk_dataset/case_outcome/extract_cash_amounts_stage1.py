@@ -323,19 +323,22 @@ def count_all_caps_section_titles(text: str) -> int:
     return count
 
 
-def count_document_titles(text: str) -> int:
+def count_document_titles(text: str, header_chars: int = 2000) -> int:
     """
-    Count the number of important document titles in the text.
+    Count the number of important document titles in the header of the text.
 
     Args:
         text: Document text to search
+        header_chars: Number of characters to consider as header (default: 2000)
 
     Returns:
-        int: Number of document titles found
+        int: Number of document titles found in header
     """
     count = 0
+    # Only search in the header portion of the document
+    header_text = text[:header_chars]
     for pattern in DOCUMENT_TITLES:
-        matches = pattern.findall(text)
+        matches = pattern.findall(header_text)
         count += len(matches)
     return count
 
@@ -595,60 +598,141 @@ def extract_usd_amount(text: str, match) -> float:
 
 def get_spacy_nlp() -> Optional[Any]:
     """Initialize spaCy pipeline with EntityRuler for enhanced amount detection."""
-    # Temporarily disabled due to linter issues
-    return None
+    if not spacy_available:
+        return None
 
-    # Original implementation commented out
-    # if not spacy_available:
-    #     return None
-    #
-    # try:
-    #     import spacy
-    #     nlp = spacy.blank("en")
-    #
-    #     # Add entity ruler using the factory
-    #     ruler = nlp.add_pipe("entity_ruler", config={"overwrite_ents": True})
-    #
-    #     patterns = [
-    #         # spelled-out numbers
-    #         {"label": "MONEY",
-    #          "pattern": [
-    #              {"LOWER": {"IN": ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]}},
-    #              {"LOWER": "million"},
-    #              {"LOWER": {"IN": ["dollars", "usd"]}}
-    #          ]},
-    #         # USD 12,000,000.00
-    #         {"label": "MONEY",
-    #          "pattern": [{"TEXT": {"REGEX": r"USD?\s?[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{2})?"}}]}
-    #     ]
-    #
-    #     # Add patterns to the ruler - use try/except to handle different spaCy versions
-    #     try:
-    #         ruler.add_patterns(patterns)
-    #     except AttributeError:
-    #         # Fallback for older spaCy versions
-    #         for pattern in patterns:
-    #             ruler.add_patterns([pattern])
-    #
-    #     return nlp
-    # except Exception:
-    #     # Fallback to None if spaCy setup fails
-    #     return None
+    try:
+        import spacy
+
+        nlp = spacy.blank("en")
+
+        # Add entity ruler using the factory
+        ruler = nlp.add_pipe("entity_ruler", config={"overwrite_ents": True})
+
+        patterns = [
+            # $X million/billion
+            {
+                "label": "MONEY",
+                "pattern": [
+                    {"IS_CURRENCY": True},
+                    {"LIKE_NUM": True},
+                    {"LOWER": {"IN": ["million", "billion"]}},
+                ],
+            },
+            # $X.X million/billion
+            {
+                "label": "MONEY",
+                "pattern": [
+                    {"IS_CURRENCY": True},
+                    {"LIKE_NUM": True},
+                    {"TEXT": "."},
+                    {"LIKE_NUM": True},
+                    {"LOWER": {"IN": ["million", "billion"]}},
+                ],
+            },
+            # spelled-out numbers with million/billion
+            {
+                "label": "MONEY",
+                "pattern": [
+                    {
+                        "LOWER": {
+                            "IN": [
+                                "one",
+                                "two",
+                                "three",
+                                "four",
+                                "five",
+                                "six",
+                                "seven",
+                                "eight",
+                                "nine",
+                                "ten",
+                            ]
+                        }
+                    },
+                    {"LOWER": "million"},
+                    {"LOWER": {"IN": ["dollars", "usd"]}},
+                ],
+            },
+            # X million/billion dollars
+            {
+                "label": "MONEY",
+                "pattern": [
+                    {"LIKE_NUM": True},
+                    {"LOWER": {"IN": ["million", "billion"]}},
+                    {"LOWER": {"IN": ["dollars", "usd"]}},
+                ],
+            },
+            # USD 12,000,000.00
+            {
+                "label": "MONEY",
+                "pattern": [
+                    {
+                        "TEXT": {
+                            "REGEX": r"USD?\s?[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{2})?"
+                        }
+                    }
+                ],
+            },
+            # $12,000,000.00
+            {
+                "label": "MONEY",
+                "pattern": [
+                    {"TEXT": {"REGEX": r"\$[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{2})?"}}
+                ],
+            },
+        ]
+
+        # Add patterns to the ruler - use try/except to handle different spaCy versions
+        try:
+            # Use getattr to safely access the method
+            add_patterns_method = getattr(ruler, "add_patterns", None)
+            if add_patterns_method:
+                add_patterns_method(patterns)
+        except (AttributeError, TypeError):
+            # Fallback for older spaCy versions or if method doesn't exist
+            try:
+                for pattern in patterns:
+                    add_patterns_method = getattr(ruler, "add_patterns", None)
+                    if add_patterns_method:
+                        add_patterns_method([pattern])
+            except (AttributeError, TypeError):
+                # If all else fails, just continue without patterns
+                pass
+
+        return nlp
+    except Exception:
+        # Fallback to None if spaCy setup fails
+        return None
 
 
 def extract_spacy_amounts(
-    text: str, nlp: Optional[Any], min_amount: float, context_chars: int
+    text: str,
+    nlp: Optional[Any],
+    min_amount: float,
+    context_chars: int,
+    fast_mode: bool = False,
 ) -> List[Dict[str, Any]]:
     """Extract amounts using spaCy EntityRuler for spelled-out and USD amounts."""
-    if not nlp:
+    # Skip spaCy processing entirely in fast mode for speed
+    if fast_mode or not nlp:
         return []
 
     candidates = []
     try:
         doc = nlp(text)
+
+        # Debug: Print all entities found by spaCy (only in non-fast mode)
+        if doc.ents and not fast_mode:
+            print(
+                f"🔍 spaCy found {len(doc.ents)} entities: {[(ent.text, ent.label_) for ent in doc.ents[:3]]}"
+            )
+
         for ent in doc.ents:
             if ent.label_ == "MONEY":
                 amt_text = ent.text.lower()
+                if not fast_mode:
+                    print(f"💰 spaCy MONEY entity: '{ent.text}' -> '{amt_text}'")
 
                 # Handle spelled-out numbers with million
                 if "million" in amt_text and "dollars" in amt_text:
@@ -707,8 +791,92 @@ def extract_spacy_amounts(
                                 )
                         except ValueError:
                             continue
-    except Exception:
+
+                # Handle $X million/billion patterns
+                elif "$" in amt_text and (
+                    "million" in amt_text or "billion" in amt_text
+                ):
+                    # Extract numeric value from $X million/billion
+                    numeric_match = re.search(r"\$?([0-9,]+(?:\.[0-9]+)?)", amt_text)
+                    if numeric_match:
+                        try:
+                            val = float(numeric_match.group(1).replace(",", ""))
+                            if "billion" in amt_text:
+                                val *= 1_000_000_000
+                            elif "million" in amt_text:
+                                val *= 1_000_000
+
+                            if val >= min_amount:
+                                start, end = ent.start_char, ent.end_char
+                                ctx = text[
+                                    max(0, start - context_chars) : end + context_chars
+                                ].replace("\n", " ")
+                                candidates.append(
+                                    {
+                                        "amount": ent.text,
+                                        "value": val,
+                                        "context": ctx,
+                                        "type": "spacy_dollar_million",
+                                    }
+                                )
+                        except ValueError:
+                            continue
+
+                # Handle X million/billion dollars patterns
+                elif (
+                    "million" in amt_text or "billion" in amt_text
+                ) and "dollars" in amt_text:
+                    # Extract numeric value from X million/billion dollars
+                    numeric_match = re.search(r"([0-9,]+(?:\.[0-9]+)?)", amt_text)
+                    if numeric_match:
+                        try:
+                            val = float(numeric_match.group(1).replace(",", ""))
+                            if "billion" in amt_text:
+                                val *= 1_000_000_000
+                            elif "million" in amt_text:
+                                val *= 1_000_000
+
+                            if val >= min_amount:
+                                start, end = ent.start_char, ent.end_char
+                                ctx = text[
+                                    max(0, start - context_chars) : end + context_chars
+                                ].replace("\n", " ")
+                                candidates.append(
+                                    {
+                                        "amount": ent.text,
+                                        "value": val,
+                                        "context": ctx,
+                                        "type": "spacy_million_dollars",
+                                    }
+                                )
+                        except ValueError:
+                            continue
+
+                # Handle comma-separated dollar amounts
+                elif "$" in amt_text and "," in amt_text:
+                    numeric_match = re.search(r"\$?([0-9,]+(?:\.[0-9]{2})?)", amt_text)
+                    if numeric_match:
+                        try:
+                            val = float(numeric_match.group(1).replace(",", ""))
+                            if val >= min_amount:
+                                start, end = ent.start_char, ent.end_char
+                                ctx = text[
+                                    max(0, start - context_chars) : end + context_chars
+                                ].replace("\n", " ")
+                                candidates.append(
+                                    {
+                                        "amount": ent.text,
+                                        "value": val,
+                                        "context": ctx,
+                                        "type": "spacy_comma_amount",
+                                    }
+                                )
+                        except ValueError:
+                            continue
+    except Exception as e:
         # Fallback to empty list if spaCy processing fails
+        if not fast_mode:
+            print(f"❌ spaCy processing error: {e}")
         pass
 
     return candidates
@@ -895,6 +1063,7 @@ def compute_enhanced_feature_votes_with_titles(
     case_position_threshold: float = 0.5,
     docket_position_threshold: float = 0.5,
     weights: VotingWeights = DEFAULT_VOTING_WEIGHTS,
+    header_chars: int = 2000,
 ) -> int:
     """
     Enhanced feature voting that includes chronological position votes and title proximity votes.
@@ -904,6 +1073,7 @@ def compute_enhanced_feature_votes_with_titles(
         file_path: Path to the current file for position calculation
         case_position_threshold: Threshold for case position voting
         docket_position_threshold: Threshold for docket position voting
+        header_chars: Number of characters to consider as header for document titles
 
     Returns:
         int: Total number of feature votes including position and title votes
@@ -925,8 +1095,10 @@ def compute_enhanced_feature_votes_with_titles(
     )
     votes += title_votes
 
-    # Add votes for document titles in context
-    doc_title_votes = count_document_titles(context) * weights.document_titles_weight
+    # Add votes for document titles in header
+    doc_title_votes = (
+        count_document_titles(context, header_chars) * weights.document_titles_weight
+    )
     votes += doc_title_votes
 
     return int(votes)
@@ -939,6 +1111,7 @@ def passes_enhanced_feature_filter_with_titles(
     case_position_threshold: float = 0.5,
     docket_position_threshold: float = 0.5,
     weights: VotingWeights = DEFAULT_VOTING_WEIGHTS,
+    header_chars: int = 2000,
 ) -> bool:
     """
     Enhanced feature filter that includes chronological position votes and title proximity votes.
@@ -949,12 +1122,18 @@ def passes_enhanced_feature_filter_with_titles(
         min_features: Minimum number of features required
         case_position_threshold: Threshold for case position voting
         docket_position_threshold: Threshold for docket position voting
+        header_chars: Number of characters to consider as header for document titles
 
     Returns:
         bool: True if context+position+titles has at least min_features
     """
     votes = compute_enhanced_feature_votes_with_titles(
-        context, file_path, case_position_threshold, docket_position_threshold, weights
+        context,
+        file_path,
+        case_position_threshold,
+        docket_position_threshold,
+        weights,
+        header_chars,
     )
     return votes >= min_features
 
@@ -1046,7 +1225,7 @@ def export_candidates_to_csv(candidates_data, csv_output_path, max_cases):
     print(
         f"✓ Exported {len(csv_rows)} candidates from {len(cases_seen)} cases to {csv_output_path}"
     )
-    print("📝 Annotation workflow:")
+    print("Annotation workflow:")
     print("  1. Open CSV in Excel/Google Sheets")
     print("  2. Sort by has_verb desc, has_proximity desc, amount_val desc")
     print("  3. Fill 'label' column with: TRUE_FINAL, FALSE_MISC, or PROC_DOC")

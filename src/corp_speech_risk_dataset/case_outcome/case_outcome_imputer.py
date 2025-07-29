@@ -103,18 +103,23 @@ def scan_stage1(
     case_position_threshold: float = 0.5,
     docket_position_threshold: float = 0.5,
     voting_weights: VotingWeights = DEFAULT_VOTING_WEIGHTS,
+    header_chars: int = 2000,
+    fast_mode: bool = False,  # New parameter for optimization speed
 ) -> List[Candidate]:
     """
     Scan stage1 JSONL files for cash amounts. Each line in stage1 files is a JSON object
     with a 'text' field containing the actual document text.
     Enhanced with spaCy EntityRuler, spelled-out amounts, USD prefixes, judgment-verb filtering,
     and chronological position-based voting.
+
+    Args:
+        fast_mode: If True, disables print statements and reduces I/O for faster optimization
     """
     seen = set()
     out = []
 
-    # Initialize spaCy pipeline once for reuse
-    nlp = get_spacy_nlp()
+    # Initialize spaCy pipeline once for reuse (skip in fast mode for speed)
+    nlp = None if fast_mode else get_spacy_nlp()
 
     for path in case_root.rglob("*_stage1.jsonl"):
         with open(path, "r", encoding="utf8") as f:
@@ -125,40 +130,49 @@ def scan_stage1(
                     if not text:
                         continue
 
-                    # Process spaCy EntityRuler amounts (new - highest priority)
-                    spacy_candidates = extract_spacy_amounts(
-                        text, nlp, min_amount, context_chars
-                    )
-                    for candidate in spacy_candidates:
-                        ctx = candidate["context"]
-                        # Enhanced filtering: require minimum feature votes including position and titles
-                        if passes_enhanced_feature_filter_with_titles(
-                            ctx,
-                            str(path),
-                            min_features,
-                            case_position_threshold,
-                            docket_position_threshold,
-                            voting_weights,
-                        ):
-                            sig = f"{candidate['amount']}:{ctx[:60]}"
-                            if sig not in seen:
-                                seen.add(sig)
-                                feature_votes = (
-                                    compute_enhanced_feature_votes_with_titles(
-                                        ctx,
-                                        str(path),
-                                        case_position_threshold,
-                                        docket_position_threshold,
-                                        voting_weights,
-                                    )
+                    # Process spaCy EntityRuler amounts (skip in fast mode)
+                    if not fast_mode:
+                        spacy_candidates = extract_spacy_amounts(
+                            text, nlp, min_amount, context_chars, fast_mode
+                        )
+                        for candidate in spacy_candidates:
+                            ctx = candidate["context"]
+                            # Enhanced filtering: require minimum feature votes including position and titles
+                            feature_votes = compute_enhanced_feature_votes_with_titles(
+                                ctx,
+                                str(path),
+                                case_position_threshold,
+                                docket_position_threshold,
+                                voting_weights,
+                            )
+                            if not fast_mode:
+                                print(
+                                    f"🔍 spaCy candidate '{candidate['amount']}' -> {feature_votes} votes (need {min_features})"
                                 )
-                                out.append(
-                                    Candidate(
-                                        candidate["value"],
-                                        candidate["amount"],
-                                        ctx,
-                                        feature_votes,
+
+                            if passes_enhanced_feature_filter_with_titles(
+                                ctx,
+                                str(path),
+                                min_features,
+                                case_position_threshold,
+                                docket_position_threshold,
+                                voting_weights,
+                                header_chars,
+                            ):
+                                sig = f"{candidate['amount']}:{ctx[:60]}"
+                                if sig not in seen:
+                                    seen.add(sig)
+                                    out.append(
+                                        Candidate(
+                                            candidate["value"],
+                                            candidate["amount"],
+                                            ctx,
+                                            feature_votes,
+                                        )
                                     )
+                            elif not fast_mode:
+                                print(
+                                    f"❌ Filtered out: '{candidate['amount']}' (votes: {feature_votes}, need: {min_features})"
                                 )
 
                     # Process enhanced spelled-out amounts (new)
@@ -177,6 +191,7 @@ def scan_stage1(
                                 case_position_threshold,
                                 docket_position_threshold,
                                 voting_weights,
+                                header_chars,
                             ):
                                 sig = f"{m.group(0)}:{ctx[:60]}"
                                 if sig not in seen:
@@ -188,6 +203,7 @@ def scan_stage1(
                                             case_position_threshold,
                                             docket_position_threshold,
                                             voting_weights,
+                                            header_chars,
                                         )
                                     )
                                     out.append(
@@ -210,6 +226,7 @@ def scan_stage1(
                                 case_position_threshold,
                                 docket_position_threshold,
                                 voting_weights,
+                                header_chars,
                             ):
                                 sig = f"{m.group(0)}:{ctx[:60]}"
                                 if sig not in seen:
@@ -221,6 +238,7 @@ def scan_stage1(
                                             case_position_threshold,
                                             docket_position_threshold,
                                             voting_weights,
+                                            header_chars,
                                         )
                                     )
                                     out.append(
@@ -265,6 +283,19 @@ def scan_stage1(
                         ].replace("\n", " ")
 
                         # Enhanced filtering: require minimum feature votes including position and titles
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                        )
+                        if not fast_mode:
+                            print(
+                                f"🔍 Regex candidate '{amt}' -> {feature_votes} votes (need {min_features})"
+                            )
+
                         if not passes_enhanced_feature_filter_with_titles(
                             ctx,
                             str(path),
@@ -272,7 +303,12 @@ def scan_stage1(
                             case_position_threshold,
                             docket_position_threshold,
                             voting_weights,
+                            header_chars,
                         ):
+                            if not fast_mode:
+                                print(
+                                    f"❌ Filtered out: '{amt}' (votes: {feature_votes}, need: {min_features})"
+                                )
                             continue
 
                         sig = f"{amt}:{ctx[:60]}"
@@ -280,13 +316,6 @@ def scan_stage1(
                             continue
                         seen.add(sig)
 
-                        feature_votes = compute_enhanced_feature_votes_with_titles(
-                            ctx,
-                            str(path),
-                            case_position_threshold,
-                            docket_position_threshold,
-                            voting_weights,
-                        )
                         out.append(Candidate(val, amt, ctx, feature_votes))
 
                 except json.JSONDecodeError:
@@ -339,6 +368,7 @@ def impute_for_case(
     dismissal_ratio_threshold: float = 0.5,
     bankruptcy_ratio_threshold: float = 0.5,
     voting_weights: VotingWeights = DEFAULT_VOTING_WEIGHTS,
+    header_chars: int = 2000,
 ):
     # map this tokenized-case back to its extracted-location
     # map this case folder directly into the extracted tree by name
@@ -376,6 +406,7 @@ def impute_for_case(
                 case_position_threshold,
                 docket_position_threshold,
                 voting_weights,
+                header_chars,
             )
             amount = selector.choose(candidates)
             print(f"▶ {case_root.relative_to(tokenized_root)} → {amount!r}")
@@ -522,6 +553,12 @@ def parse_args():
         default=1.0,
         help="Weight for document titles (default: 1.0)",
     )
+    p.add_argument(
+        "--header-chars",
+        type=int,
+        default=2000,
+        help="Number of characters to consider as header for document titles (default: 2000)",
+    )
     return p.parse_args()
 
 
@@ -572,6 +609,7 @@ def main():
             args.dismissal_ratio_threshold,
             args.bankruptcy_ratio_threshold,
             voting_weights,
+            args.header_chars,
         )
 
 

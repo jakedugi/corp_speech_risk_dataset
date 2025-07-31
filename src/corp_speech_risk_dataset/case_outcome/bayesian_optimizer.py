@@ -134,27 +134,35 @@ class BayesianOptimizer:
             raise ImportError("scikit-optimize is required for Bayesian optimization")
 
         return [
-            # Core extraction parameters
-            Integer(900, 2400, name="min_amount"),  # $1k to $100k
-            Integer(300, 600, name="context_chars"),  # 50 to 500 chars
-            Integer(2, 7, name="min_features"),  # 1 to 5 features
-            # Position thresholds (0.1 to 0.9)
-            Real(0.40, 0.9, name="case_position_threshold"),
-            Real(0.10, 0.9, name="docket_position_threshold"),
-            # Case flag thresholds
-            Real(1.0, 1.1, name="fee_shifting_ratio_threshold"),
-            Real(1.0, 1.1, name="patent_ratio_threshold"),
-            Real(0.4, 0.8, name="dismissal_ratio_threshold"),
-            Real(0.52, 0.72, name="bankruptcy_ratio_threshold"),
-            # Voting weights (0.1 to 3.0)
-            Real(1.0, 3.3, name="proximity_pattern_weight"),
-            Real(0.4, 1.0, name="judgment_verbs_weight"),
-            Real(0.8, 2.0, name="case_position_weight"),
-            Real(0.1, 3.0, name="docket_position_weight"),
-            Real(1.5, 3.5, name="all_caps_titles_weight"),
-            Real(1.0, 3.0, name="document_titles_weight"),
-            # Header size
-            Integer(1000, 1700, name="header_chars"),  # 500 to 5000 chars
+            # Core extraction parameters - anchored around best results
+            Integer(800, 1200, name="min_amount"),  # Around best: 976
+            Integer(400, 600, name="context_chars"),  # Around best: 510
+            Integer(5, 9, name="min_features"),  # Around best: 7
+            # Position thresholds - fine-tune around best
+            Real(0.55, 0.75, name="case_position_threshold"),  # Around best: 0.634
+            Real(0.75, 0.90, name="docket_position_threshold"),  # Around best: 0.832
+            # Case flag thresholds - tighter ranges
+            Real(0.9, 1.2, name="fee_shifting_ratio_threshold"),
+            Real(0.9, 1.3, name="patent_ratio_threshold"),
+            Real(0.5, 0.7, name="dismissal_ratio_threshold"),  # Around best: 0.596
+            Real(0.45, 0.65, name="bankruptcy_ratio_threshold"),  # Around best: 0.552
+            # Voting weights - focused around successful values
+            Real(0.8, 1.2, name="proximity_pattern_weight"),  # Around best: 1.0
+            Real(0.5, 0.9, name="judgment_verbs_weight"),  # Around best: 0.690
+            Real(1.5, 2.0, name="case_position_weight"),  # Around best: 1.752
+            Real(2.2, 3.0, name="docket_position_weight"),  # Around best: 2.609
+            Real(1.5, 2.0, name="all_caps_titles_weight"),  # Around best: 1.741
+            Real(0.8, 1.3, name="document_titles_weight"),  # Around best: 1.027
+            # Header size - focused range
+            Integer(1500, 1800, name="header_chars"),  # Around best: 1686
+            # NEW: High/Low signal regex weights for fine-grained control
+            Real(0.5, 2.0, name="high_signal_financial_weight"),
+            Real(0.2, 1.0, name="low_signal_financial_weight"),
+            Real(0.5, 2.0, name="high_signal_settlement_weight"),
+            Real(0.2, 1.0, name="low_signal_settlement_weight"),
+            Real(
+                1.0, 3.0, name="calculation_boost_multiplier"
+            ),  # Fine-tune calculation boost
         ]
 
     def _hyperparams_to_dict(self, x: List) -> Dict[str, Any]:
@@ -176,6 +184,11 @@ class BayesianOptimizer:
             "all_caps_titles_weight",
             "document_titles_weight",
             "header_chars",
+            "high_signal_financial_weight",
+            "low_signal_financial_weight",
+            "high_signal_settlement_weight",
+            "low_signal_settlement_weight",
+            "calculation_boost_multiplier",
         ]
 
         return dict(zip(param_names, x))
@@ -190,7 +203,7 @@ class BayesianOptimizer:
         # Convert to hyperparameter dictionary
         hyperparams = self._hyperparams_to_dict(x)
 
-        # Create voting weights
+        # Create voting weights with enhanced fine-grained control
         voting_weights = VotingWeights(
             proximity_pattern_weight=hyperparams["proximity_pattern_weight"],
             judgment_verbs_weight=hyperparams["judgment_verbs_weight"],
@@ -198,6 +211,11 @@ class BayesianOptimizer:
             docket_position_weight=hyperparams["docket_position_weight"],
             all_caps_titles_weight=hyperparams["all_caps_titles_weight"],
             document_titles_weight=hyperparams["document_titles_weight"],
+            high_signal_financial_weight=hyperparams["high_signal_financial_weight"],
+            low_signal_financial_weight=hyperparams["low_signal_financial_weight"],
+            high_signal_settlement_weight=hyperparams["high_signal_settlement_weight"],
+            low_signal_settlement_weight=hyperparams["low_signal_settlement_weight"],
+            calculation_boost_multiplier=hyperparams["calculation_boost_multiplier"],
         )
 
         # Update hyperparams with voting weights
@@ -415,6 +433,9 @@ class BayesianOptimizer:
         """Analyze the importance of different hyperparameters."""
         self.logger.info("🔍 Hyperparameter Impact Analysis:")
 
+        # Initialize param_analysis
+        param_analysis = {}
+
         # Analyze hyperparameter importance based on evaluation history
         for eval_record in result.optimization_history:
             for param_name, param_value in eval_record["hyperparams"].items():
@@ -547,19 +568,6 @@ class BayesianOptimizer:
         )
         self.logger.info(
             f"    docket_position_threshold: {self.best_hyperparams['docket_position_threshold']:.3f}"
-        )
-        self.logger.info(f"  Case Flag Thresholds:")
-        self.logger.info(
-            f"    fee_shifting_ratio_threshold: {self.best_hyperparams['fee_shifting_ratio_threshold']:.3f}"
-        )
-        self.logger.info(
-            f"    patent_ratio_threshold: {self.best_hyperparams['patent_ratio_threshold']:.3f}"
-        )
-        self.logger.info(
-            f"    dismissal_ratio_threshold: {self.best_hyperparams['dismissal_ratio_threshold']:.3f}"
-        )
-        self.logger.info(
-            f"    bankruptcy_ratio_threshold: {self.best_hyperparams['bankruptcy_ratio_threshold']:.3f}"
         )
         self.logger.info(f"  Voting Weights:")
         self.logger.info(

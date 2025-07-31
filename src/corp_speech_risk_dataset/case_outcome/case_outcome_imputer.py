@@ -15,6 +15,8 @@ import shutil
 import sys
 from pathlib import Path
 from typing import Iterable, List, NamedTuple
+from fractions import Fraction
+import re
 
 from src.corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 import (
     AMOUNT_REGEX,
@@ -24,6 +26,13 @@ from src.corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 impor
     USD_AMOUNTS,
     extract_spelled_out_amount,
     extract_usd_amount,
+    extract_calculated_amounts,
+    extract_damage_component_totals,
+    extract_attorney_fees_expenses,
+    extract_multi_component_settlements,
+    extract_settlement_benefit_totals,
+    extract_smart_sum_amounts,
+    is_case_definitively_dismissed,
     get_spacy_nlp,
     extract_spacy_amounts,
     passes_feature_filter,
@@ -40,6 +49,70 @@ from src.corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 impor
     VotingWeights,
     DEFAULT_VOTING_WEIGHTS,
 )
+
+# Enhanced judgment-verb context filter (new addition)
+JUDGMENT_VERBS = re.compile(
+    r"\b(?:award(?:ed)?|order(?:ed)?|grant(?:ed)?|enter(?:ed)?|assess(?:ed)?|recover(?:y|ed)?|release(?:d)?|dismiss(?:al|ed)?|preliminary\s+approval)\b",
+    re.IGNORECASE,
+)
+
+# More permissive proximity pattern to catch monetary contexts
+PROXIMITY_PATTERN = re.compile(
+    r"\b(?:settlement|judgment|judgement|damages|award|penalty|fine|amount|paid|cost|price|fee|compensation|restitution|claim|relief|recover|value|sum|settlement\s+fund|released\s+claims|actions|escrow|payment\s+into)\b",
+    re.IGNORECASE,
+)
+
+
+def extract_candidate_from_fraction(text: str) -> int:
+    """
+    From an unstructured `text` like:
+      "requested fees of $2,500,000 will represent approximately one-third of the common fund"
+    this returns the implied total fund size (fees ÷ fraction), e.g. 7500000.
+    """
+    # 1. Find the fee amount - look for patterns like "fees of $X" or "attorney fees of $X"
+    fee_patterns = [
+        r"fees?\s+of\s+\$([\d,]+(?:\.\d+)?)",
+        r"attorney\s+fees?\s+of\s+\$([\d,]+(?:\.\d+)?)",
+        r"counsel\s+fees?\s+of\s+\$([\d,]+(?:\.\d+)?)",
+        r"requested\s+fees?\s+of\s+\$([\d,]+(?:\.\d+)?)",
+        r"award\s+of\s+\$([\d,]+(?:\.\d+)?)",
+    ]
+
+    fee = None
+    for pattern in fee_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            fee = float(match.group(1).replace(",", ""))
+            break
+
+    # Fallback: if no specific fee pattern found, take the first money value
+    if fee is None:
+        money_match = re.search(r"\$([\d,]+(?:\.\d+)?)", text)
+        if not money_match:
+            raise ValueError("No monetary value found")
+        fee = float(money_match.group(1).replace(",", ""))
+
+    # 2. Look for a spelled-out fraction
+    #    support hyphens or spaces, common fractions up to thirds
+    frac_map = {
+        "one[ -]?half": Fraction(1, 2),
+        "one[ -]?third": Fraction(1, 3),
+        "two[ -]?thirds": Fraction(2, 3),
+        "one[ -]?quarter": Fraction(1, 4),
+        "three[ -]?quarters": Fraction(3, 4),
+    }
+    frac = None
+    for pat, f in frac_map.items():
+        if re.search(pat, text, re.IGNORECASE):
+            frac = f
+            break
+    if frac is None:
+        raise ValueError("No supported fraction phrase found")
+
+    # 3. Compute implied total: fee ÷ fraction
+    total = fee / float(frac)
+    return int(round(total))
+
 
 # ------------------------------------------------------------------------------
 # Data structures
@@ -137,13 +210,18 @@ def scan_stage1(
                         )
                         for candidate in spacy_candidates:
                             ctx = candidate["context"]
-                            # Enhanced filtering: require minimum feature votes including position and titles
+                            # Enhanced filtering: require minimum feature votes including all new features
                             feature_votes = compute_enhanced_feature_votes_with_titles(
                                 ctx,
                                 str(path),
                                 case_position_threshold,
                                 docket_position_threshold,
                                 voting_weights,
+                                header_chars,
+                                nlp,
+                                text,
+                                candidate.get("start", 0),
+                                candidate.get("end", 0),
                             )
                             if not fast_mode:
                                 print(
@@ -158,6 +236,10 @@ def scan_stage1(
                                 docket_position_threshold,
                                 voting_weights,
                                 header_chars,
+                                nlp,
+                                text,
+                                candidate.get("start", 0),
+                                candidate.get("end", 0),
                             ):
                                 sig = f"{candidate['amount']}:{ctx[:60]}"
                                 if sig not in seen:
@@ -183,29 +265,23 @@ def scan_stage1(
                             ctx = text[
                                 max(0, start - context_chars) : end + context_chars
                             ].replace("\n", " ")
-                            # Enhanced filtering: require minimum feature votes including position and titles
-                            if passes_enhanced_feature_filter_with_titles(
+                            # Enhanced filtering: require minimum feature votes including all new features
+                            feature_votes = compute_enhanced_feature_votes_with_titles(
                                 ctx,
                                 str(path),
-                                min_features,
                                 case_position_threshold,
                                 docket_position_threshold,
                                 voting_weights,
                                 header_chars,
-                            ):
+                                nlp,
+                                text,
+                                start,
+                                end,
+                            )
+                            if feature_votes >= min_features:
                                 sig = f"{m.group(0)}:{ctx[:60]}"
                                 if sig not in seen:
                                     seen.add(sig)
-                                    feature_votes = (
-                                        compute_enhanced_feature_votes_with_titles(
-                                            ctx,
-                                            str(path),
-                                            case_position_threshold,
-                                            docket_position_threshold,
-                                            voting_weights,
-                                            header_chars,
-                                        )
-                                    )
                                     out.append(
                                         Candidate(val, m.group(0), ctx, feature_votes)
                                     )
@@ -218,32 +294,258 @@ def scan_stage1(
                             ctx = text[
                                 max(0, start - context_chars) : end + context_chars
                             ].replace("\n", " ")
-                            # Enhanced filtering: require minimum feature votes including position and titles
-                            if passes_enhanced_feature_filter_with_titles(
+                            # Enhanced filtering: require minimum feature votes including all new features
+                            feature_votes = compute_enhanced_feature_votes_with_titles(
                                 ctx,
                                 str(path),
-                                min_features,
                                 case_position_threshold,
                                 docket_position_threshold,
                                 voting_weights,
                                 header_chars,
-                            ):
+                                nlp,
+                                text,
+                                start,
+                                end,
+                            )
+                            if feature_votes >= min_features:
                                 sig = f"{m.group(0)}:{ctx[:60]}"
                                 if sig not in seen:
                                     seen.add(sig)
-                                    feature_votes = (
-                                        compute_enhanced_feature_votes_with_titles(
-                                            ctx,
-                                            str(path),
-                                            case_position_threshold,
-                                            docket_position_threshold,
-                                            voting_weights,
-                                            header_chars,
-                                        )
-                                    )
                                     out.append(
                                         Candidate(val, m.group(0), ctx, feature_votes)
                                     )
+
+                    # QUICK WIN: Extract calculated amounts (class member multiplication, one-third, multi-fund)
+                    calculated_candidates = extract_calculated_amounts(text, min_amount)
+                    for calc in calculated_candidates:
+                        start, end = calc["start"], calc["end"]
+                        ctx = text[
+                            max(0, start - context_chars) : end + context_chars
+                        ].replace("\n", " ")
+
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
+                        )
+
+                        # Apply calculation boost to improve ranking
+                        if "calculation_boost" in calc:
+                            feature_votes += calc["calculation_boost"]
+
+                        if feature_votes >= min_features:
+                            sig = f"{calc['raw_text']}:{ctx[:60]}"
+                            if sig not in seen:
+                                seen.add(sig)
+                                out.append(
+                                    Candidate(
+                                        calc["value"],
+                                        calc["raw_text"],
+                                        ctx,
+                                        feature_votes,
+                                    )
+                                )
+
+                    # QUICK WIN: Extract damage component totals
+                    damage_candidates = extract_damage_component_totals(
+                        text, min_amount
+                    )
+                    for damage in damage_candidates:
+                        start, end = damage["start"], damage["end"]
+                        ctx = text[
+                            max(0, start - context_chars) : end + context_chars
+                        ].replace("\n", " ")
+
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
+                        )
+
+                        # Apply calculation boost to improve ranking
+                        if "calculation_boost" in damage:
+                            feature_votes += damage["calculation_boost"]
+
+                        if feature_votes >= min_features:
+                            sig = f"{damage['raw_text']}:{ctx[:60]}"
+                            if sig not in seen:
+                                seen.add(sig)
+                                out.append(
+                                    Candidate(
+                                        damage["value"],
+                                        damage["raw_text"],
+                                        ctx,
+                                        feature_votes,
+                                    )
+                                )
+
+                    # NEW: Extract attorney fees + expenses calculations
+                    attorney_candidates = extract_attorney_fees_expenses(
+                        text, min_amount
+                    )
+                    for attorney in attorney_candidates:
+                        start, end = attorney["start"], attorney["end"]
+                        ctx = text[
+                            max(0, start - context_chars) : end + context_chars
+                        ].replace("\n", " ")
+
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
+                        )
+
+                        if "calculation_boost" in attorney:
+                            feature_votes += attorney["calculation_boost"]
+
+                        if feature_votes >= min_features:
+                            sig = f"{attorney['raw_text']}:{ctx[:60]}"
+                            if sig not in seen:
+                                seen.add(sig)
+                                out.append(
+                                    Candidate(
+                                        attorney["value"],
+                                        attorney["raw_text"],
+                                        ctx,
+                                        feature_votes,
+                                    )
+                                )
+
+                    # NEW: Extract multi-component settlements
+                    multi_candidates = extract_multi_component_settlements(
+                        text, min_amount
+                    )
+                    for multi in multi_candidates:
+                        start, end = multi["start"], multi["end"]
+                        ctx = text[
+                            max(0, start - context_chars) : end + context_chars
+                        ].replace("\n", " ")
+
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
+                        )
+
+                        if "calculation_boost" in multi:
+                            feature_votes += multi["calculation_boost"]
+
+                        if feature_votes >= min_features:
+                            sig = f"{multi['raw_text']}:{ctx[:60]}"
+                            if sig not in seen:
+                                seen.add(sig)
+                                out.append(
+                                    Candidate(
+                                        multi["value"],
+                                        multi["raw_text"],
+                                        ctx,
+                                        feature_votes,
+                                    )
+                                )
+
+                    # NEW: Extract settlement benefit totals
+                    benefit_candidates = extract_settlement_benefit_totals(
+                        text, min_amount
+                    )
+                    for benefit in benefit_candidates:
+                        start, end = benefit["start"], benefit["end"]
+                        ctx = text[
+                            max(0, start - context_chars) : end + context_chars
+                        ].replace("\n", " ")
+
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
+                        )
+
+                        if "calculation_boost" in benefit:
+                            feature_votes += benefit["calculation_boost"]
+
+                        if feature_votes >= min_features:
+                            sig = f"{benefit['raw_text']}:{ctx[:60]}"
+                            if sig not in seen:
+                                seen.add(sig)
+                                out.append(
+                                    Candidate(
+                                        benefit["value"],
+                                        benefit["raw_text"],
+                                        ctx,
+                                        feature_votes,
+                                    )
+                                )
+
+                    # NEW: Extract smart sum amounts (multiple amounts with additive language)
+                    smart_sum_candidates = extract_smart_sum_amounts(text, min_amount)
+                    for smart_sum in smart_sum_candidates:
+                        start, end = smart_sum["start"], smart_sum["end"]
+                        ctx = text[
+                            max(0, start - context_chars) : end + context_chars
+                        ].replace("\n", " ")
+
+                        feature_votes = compute_enhanced_feature_votes_with_titles(
+                            ctx,
+                            str(path),
+                            case_position_threshold,
+                            docket_position_threshold,
+                            voting_weights,
+                            header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
+                        )
+
+                        if "calculation_boost" in smart_sum:
+                            feature_votes += smart_sum["calculation_boost"]
+
+                        if feature_votes >= min_features:
+                            sig = f"{smart_sum['raw_text']}:{ctx[:60]}"
+                            if sig not in seen:
+                                seen.add(sig)
+                                out.append(
+                                    Candidate(
+                                        smart_sum["value"],
+                                        smart_sum["raw_text"],
+                                        ctx,
+                                        feature_votes,
+                                    )
+                                )
 
                     # Continue with existing regex extraction (enhanced with judgment-verb filtering)
                     for m in AMOUNT_REGEX.finditer(text):
@@ -282,7 +584,7 @@ def scan_stage1(
                             max(0, start - context_chars) : end + context_chars
                         ].replace("\n", " ")
 
-                        # Enhanced filtering: require minimum feature votes including position and titles
+                        # Enhanced filtering: require minimum feature votes including all new features
                         feature_votes = compute_enhanced_feature_votes_with_titles(
                             ctx,
                             str(path),
@@ -290,21 +592,17 @@ def scan_stage1(
                             docket_position_threshold,
                             voting_weights,
                             header_chars,
+                            nlp,
+                            text,
+                            start,
+                            end,
                         )
                         if not fast_mode:
                             print(
                                 f"🔍 Regex candidate '{amt}' -> {feature_votes} votes (need {min_features})"
                             )
 
-                        if not passes_enhanced_feature_filter_with_titles(
-                            ctx,
-                            str(path),
-                            min_features,
-                            case_position_threshold,
-                            docket_position_threshold,
-                            voting_weights,
-                            header_chars,
-                        ):
+                        if feature_votes < min_features:
                             if not fast_mode:
                                 print(
                                     f"❌ Filtered out: '{amt}' (votes: {feature_votes}, need: {min_features})"
@@ -365,7 +663,9 @@ def impute_for_case(
     docket_position_threshold: float = 0.5,
     fee_shifting_ratio_threshold: float = 1.0,
     patent_ratio_threshold: float = 20.0,
-    dismissal_ratio_threshold: float = 0.5,
+    dismissal_ratio_threshold: float = 0.05,
+    dismissal_use_weighted_scoring: bool = True,
+    dismissal_document_type_weight: float = 2.0,
     bankruptcy_ratio_threshold: float = 0.5,
     voting_weights: VotingWeights = DEFAULT_VOTING_WEIGHTS,
     header_chars: int = 2000,
@@ -381,6 +681,8 @@ def impute_for_case(
         patent_ratio_threshold,
         dismissal_ratio_threshold,
         bankruptcy_ratio_threshold,
+        dismissal_use_weighted_scoring,
+        dismissal_document_type_weight,
     )
 
     # Check if this is a bankruptcy court case
@@ -390,13 +692,42 @@ def impute_for_case(
         print(
             f"▶ {case_root.relative_to(tokenized_root)} → BANKRUPTCY COURT (auto-null)"
         )
+    # Check if this is a high patent ratio case (hard filter)
+    elif flags["has_large_patent_amounts"]:
+        amount = None
+        print(
+            f"▶ {case_root.relative_to(tokenized_root)} → HIGH PATENT RATIO (auto-null)"
+        )
     else:
-        # Check if this is a dismissed case
-        if flags["is_dismissed"]:
+        # Check if this is a DEFINITIVELY dismissed case (using more nuanced logic)
+        is_definitively_dismissed = is_case_definitively_dismissed(
+            extracted_case_root,
+            strict_dismissal_threshold=0.9,  # Very high threshold
+            document_type_weight=3.0,
+        )
+
+        if is_definitively_dismissed:
             amount = 0.0
             print(
-                f"▶ {case_root.relative_to(tokenized_root)} → DISMISSED CASE (auto-zero)"
+                f"▶ {case_root.relative_to(tokenized_root)} → DEFINITIVELY DISMISSED (auto-zero)"
             )
+        # For regular dismissal flags, use reduced thresholds but still proceed with extraction
+        elif flags["is_dismissed"]:
+            # Proceed with extraction but use more permissive parameters
+            print(
+                f"▶ {case_root.relative_to(tokenized_root)} → Possible dismissal (proceeding with relaxed parameters)"
+            )
+            candidates = scan_stage1(
+                extracted_case_root,
+                min_amount * 0.5,  # Lower minimum amount
+                context_chars,
+                min_features - 1,  # Lower feature threshold
+                case_position_threshold,
+                docket_position_threshold,
+                voting_weights,
+                header_chars,
+            )
+            amount = selector.choose(candidates)
         else:
             candidates = scan_stage1(
                 extracted_case_root,
@@ -411,12 +742,10 @@ def impute_for_case(
             amount = selector.choose(candidates)
             print(f"▶ {case_root.relative_to(tokenized_root)} → {amount!r}")
 
-    # Print flags if any are raised
+    # Print flags if any are raised (excluding the ones that trigger hard filters)
     flag_messages = []
     if flags["has_fee_shifting"]:
         flag_messages.append("🚩 FEE-SHIFTING")
-    if flags["has_large_patent_amounts"]:
-        flag_messages.append("🚩 LARGE PATENT AMOUNTS")
 
     if flag_messages:
         print(f"   {' | '.join(flag_messages)}")
@@ -501,14 +830,26 @@ def parse_args():
     p.add_argument(
         "--patent-ratio-threshold",
         type=float,
-        default=20.0,
-        help="Minimum ratio of patent occurrences per document to flag (default: 20.0)",
+        default=50.0,  # Increased from 20.0 to 50.0 for hard filter
+        help="Minimum ratio of patent occurrences per document to trigger hard filter (default: 50.0)",
     )
     p.add_argument(
         "--dismissal-ratio-threshold",
         type=float,
-        default=0.5,
-        help="Minimum ratio of documents with dismissal language to flag (default: 0.5)",
+        default=0.05,
+        help="Minimum ratio of documents with dismissal language to flag (default: 0.05)",
+    )
+    p.add_argument(
+        "--use-weighted-dismissal-scoring",
+        action="store_true",
+        default=True,
+        help="Use weighted scoring for dismissal detection (default: True)",
+    )
+    p.add_argument(
+        "--dismissal-document-type-weight",
+        type=float,
+        default=2.0,
+        help="Weight for document type matches in dismissal scoring (default: 2.0)",
     )
     p.add_argument(
         "--bankruptcy-ratio-threshold",
@@ -607,6 +948,8 @@ def main():
             args.fee_shifting_ratio_threshold,
             args.patent_ratio_threshold,
             args.dismissal_ratio_threshold,
+            args.use_weighted_dismissal_scoring,
+            args.dismissal_document_type_weight,
             args.bankruptcy_ratio_threshold,
             voting_weights,
             args.header_chars,

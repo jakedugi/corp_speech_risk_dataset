@@ -90,7 +90,7 @@ def test_case_data_access():
 
 
 def test_single_prediction():
-    """Test that a single prediction can be made."""
+    """Test that a single prediction can be made with optimized parameters."""
     print("\n🧪 Testing single prediction...")
 
     # Use paths relative to project root
@@ -105,24 +105,24 @@ def test_single_prediction():
             extracted_data_root=str(extracted_data_root),
         )
 
-        # Test with default hyperparameters
+        # Test with optimized hyperparameters from best results
         test_hyperparams = {
-            "min_amount": 10000,
-            "context_chars": 100,
-            "min_features": 2,
-            "case_position_threshold": 0.5,
-            "docket_position_threshold": 0.5,
-            "fee_shifting_ratio_threshold": 1.0,
-            "patent_ratio_threshold": 20.0,
-            "dismissal_ratio_threshold": 0.5,
-            "bankruptcy_ratio_threshold": 0.5,
-            "proximity_pattern_weight": 1.0,
-            "judgment_verbs_weight": 1.0,
-            "case_position_weight": 1.0,
-            "docket_position_weight": 1.0,
-            "all_caps_titles_weight": 1.0,
-            "document_titles_weight": 1.0,
-            "header_chars": 2000,
+            "min_amount": 976,
+            "context_chars": 510,
+            "min_features": 7,
+            "case_position_threshold": 0.634,
+            "docket_position_threshold": 0.832,
+            "fee_shifting_ratio_threshold": 1.017,
+            "patent_ratio_threshold": 1.088,
+            "dismissal_ratio_threshold": 0.596,
+            "bankruptcy_ratio_threshold": 0.552,
+            "proximity_pattern_weight": 1.000,
+            "judgment_verbs_weight": 0.690,
+            "case_position_weight": 1.752,
+            "docket_position_weight": 2.609,
+            "all_caps_titles_weight": 1.741,
+            "document_titles_weight": 1.027,
+            "header_chars": 1686,
         }
 
         # Test on first accessible case

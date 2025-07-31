@@ -206,81 +206,73 @@ class GridSearchOptimizer:
     def _predict_case_outcome(
         self, case_id: str, hyperparams: Dict[str, Any]
     ) -> Optional[float]:
-        """
-        Predict the outcome for a single case using given hyperparameters.
-
-        Args:
-            case_id: The case ID to predict
-            hyperparams: Dictionary of hyperparameters
-
-        Returns:
-            Predicted amount or None if no prediction
-        """
+        """Predict case outcome using given hyperparameters."""
         case_path = self._get_case_data_path(case_id)
         if not case_path:
-            print(f"⚠ Case data not found for {case_id}")
             return None
 
-        try:
-            # Create voting weights from hyperparameters
-            voting_weights = VotingWeights(
-                proximity_pattern_weight=hyperparams["proximity_pattern_weight"],
-                judgment_verbs_weight=hyperparams["judgment_verbs_weight"],
-                case_position_weight=hyperparams["case_position_weight"],
-                docket_position_weight=hyperparams["docket_position_weight"],
-                all_caps_titles_weight=hyperparams["all_caps_titles_weight"],
-                document_titles_weight=hyperparams["document_titles_weight"],
-            )
+        # Create voting weights from hyperparameters
+        voting_weights = VotingWeights(
+            proximity_pattern_weight=hyperparams["proximity_pattern_weight"],
+            judgment_verbs_weight=hyperparams["judgment_verbs_weight"],
+            case_position_weight=hyperparams["case_position_weight"],
+            docket_position_weight=hyperparams["docket_position_weight"],
+            all_caps_titles_weight=hyperparams["all_caps_titles_weight"],
+            document_titles_weight=hyperparams["document_titles_weight"],
+        )
 
-            # Get case flags
-            flags = get_case_flags(
-                case_path,
-                fee_shifting_ratio_threshold=hyperparams[
-                    "fee_shifting_ratio_threshold"
-                ],
-                patent_ratio_threshold=hyperparams["patent_ratio_threshold"],
-                dismissal_ratio_threshold=hyperparams["dismissal_ratio_threshold"],
-                bankruptcy_ratio_threshold=hyperparams["bankruptcy_ratio_threshold"],
-            )
+        # Check dismissal logic first with hyperparameters
+        from extract_cash_amounts_stage1 import get_case_flags, get_case_court_type
 
-            # Check for bankruptcy court
-            court_type = get_case_court_type(
-                case_path,
-                bankruptcy_ratio_threshold=hyperparams["bankruptcy_ratio_threshold"],
-            )
-            if court_type == "BANKRUPTCY":
-                return None
+        flags = get_case_flags(
+            case_path,
+            fee_shifting_ratio_threshold=1.0,
+            patent_ratio_threshold=50.0,
+            dismissal_ratio_threshold=hyperparams["dismissal_ratio_threshold"],
+            bankruptcy_ratio_threshold=0.5,
+            use_weighted_dismissal_scoring=hyperparams[
+                "use_weighted_dismissal_scoring"
+            ],
+            dismissal_document_type_weight=hyperparams[
+                "dismissal_document_type_weight"
+            ],
+        )
 
-            # Check for dismissed case
-            if flags["is_dismissed"]:
-                return 0.0
-
-            # Scan for amounts
-            candidates = scan_stage1(
-                case_path,
-                min_amount=hyperparams["min_amount"],
-                context_chars=hyperparams["context_chars"],
-                min_features=hyperparams["min_features"],
-                case_position_threshold=hyperparams["case_position_threshold"],
-                docket_position_threshold=hyperparams["docket_position_threshold"],
-                voting_weights=voting_weights,
-                header_chars=hyperparams.get("header_chars", 2000),
-                fast_mode=True,  # Enable fast mode for optimization
-            )
-
-            # Return the highest voted amount, or None if no candidates
-            if candidates:
-                # Sort by feature votes (descending), then by value (descending)
-                sorted_candidates = sorted(
-                    candidates, key=lambda c: (c.feature_votes, c.value), reverse=True
-                )
-                return sorted_candidates[0].value
-
+        # Check if this is a bankruptcy court case
+        court_type = get_case_court_type(case_path, bankruptcy_ratio_threshold=0.5)
+        if court_type == "BANKRUPTCY":
             return None
 
-        except Exception as e:
-            print(f"❌ Error predicting case {case_id}: {e}")
+        # Check if this is a high patent ratio case (hard filter)
+        if flags["has_large_patent_amounts"]:
             return None
+
+        # Check if this is a dismissed case
+        if flags["is_dismissed"]:
+            return 0.0
+
+        # Get candidates using hyperparameters
+        candidates = scan_stage1(
+            case_path,
+            min_amount=hyperparams["min_amount"],
+            context_chars=hyperparams["context_chars"],
+            min_features=hyperparams["min_features"],
+            case_position_threshold=hyperparams["case_position_threshold"],
+            docket_position_threshold=hyperparams["docket_position_threshold"],
+            voting_weights=voting_weights,
+            header_chars=hyperparams["header_chars"],
+            fast_mode=True,  # Use fast mode for optimization
+        )
+
+        # Choose best candidate
+        if not candidates:
+            return None
+
+        # Sort by feature votes (descending), then by value (descending)
+        sorted_candidates = sorted(
+            candidates, key=lambda c: (c.feature_votes, c.value), reverse=True
+        )
+        return sorted_candidates[0].value
 
     def _evaluate_hyperparameters(
         self, hyperparams: Dict[str, Any], test_case_id: str, test_actual: float
@@ -377,16 +369,80 @@ class GridSearchOptimizer:
         )
 
     def _generate_hyperparameter_combinations(self) -> List[Dict[str, Any]]:
-        """Generate all combinations of hyperparameters from the grid."""
-        keys = self.search_grid.keys()
-        values = self.search_grid.values()
-
+        """Generate all hyperparameter combinations for grid search."""
         combinations = []
-        for combination in itertools.product(*values):
-            hyperparams = dict(zip(keys, combination))
-            combinations.append(hyperparams)
 
-        print(f"Generated {len(combinations)} hyperparameter combinations")
+        # Core parameters
+        min_amounts = [100, 500, 1000, 2000, 5000]
+        context_chars = [100, 200, 300, 500, 1000]
+        min_features = [1, 2, 3, 4, 5]
+        case_position_thresholds = [0.3, 0.5, 0.7, 0.8]
+        docket_position_thresholds = [0.3, 0.5, 0.7, 0.8]
+
+        # Voting weights
+        proximity_pattern_weights = [0.5, 1.0, 1.5, 2.0]
+        judgment_verbs_weights = [0.5, 1.0, 1.5, 2.0]
+        case_position_weights = [0.5, 1.0, 1.5, 2.0]
+        docket_position_weights = [0.5, 1.0, 1.5, 2.0]
+        all_caps_titles_weights = [0.5, 1.0, 1.5, 2.0]
+        document_titles_weights = [0.5, 1.0, 1.5, 2.0]
+
+        # Dismissal parameters (new)
+        dismissal_ratio_thresholds = [0.05, 0.1, 0.2, 0.3, 0.5]
+        dismissal_document_type_weights = [1.0, 2.0, 3.0, 5.0]
+        use_weighted_dismissal_scoring_options = [True, False]
+
+        # Other parameters
+        header_chars = [1000, 2000, 3000]
+
+        for min_amount in min_amounts:
+            for context_char in context_chars:
+                for min_feature in min_features:
+                    for case_pos_thresh in case_position_thresholds:
+                        for docket_pos_thresh in docket_position_thresholds:
+                            for prox_weight in proximity_pattern_weights:
+                                for judgment_weight in judgment_verbs_weights:
+                                    for case_pos_weight in case_position_weights:
+                                        for (
+                                            docket_pos_weight
+                                        ) in docket_position_weights:
+                                            for caps_weight in all_caps_titles_weights:
+                                                for (
+                                                    doc_weight
+                                                ) in document_titles_weights:
+                                                    for (
+                                                        dismissal_thresh
+                                                    ) in dismissal_ratio_thresholds:
+                                                        for (
+                                                            dismissal_doc_weight
+                                                        ) in dismissal_document_type_weights:
+                                                            for (
+                                                                use_weighted
+                                                            ) in use_weighted_dismissal_scoring_options:
+                                                                for (
+                                                                    header_char
+                                                                ) in header_chars:
+                                                                    combination = {
+                                                                        "min_amount": min_amount,
+                                                                        "context_chars": context_char,
+                                                                        "min_features": min_feature,
+                                                                        "case_position_threshold": case_pos_thresh,
+                                                                        "docket_position_threshold": docket_pos_thresh,
+                                                                        "proximity_pattern_weight": prox_weight,
+                                                                        "judgment_verbs_weight": judgment_weight,
+                                                                        "case_position_weight": case_pos_weight,
+                                                                        "docket_position_weight": docket_pos_weight,
+                                                                        "all_caps_titles_weight": caps_weight,
+                                                                        "document_titles_weight": doc_weight,
+                                                                        "dismissal_ratio_threshold": dismissal_thresh,
+                                                                        "dismissal_document_type_weight": dismissal_doc_weight,
+                                                                        "use_weighted_dismissal_scoring": use_weighted,
+                                                                        "header_chars": header_char,
+                                                                    }
+                                                                    combinations.append(
+                                                                        combination
+                                                                    )
+
         return combinations
 
     def optimize(

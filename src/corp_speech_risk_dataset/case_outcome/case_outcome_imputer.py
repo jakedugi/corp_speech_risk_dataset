@@ -18,6 +18,22 @@ from typing import Iterable, List, NamedTuple
 from fractions import Fraction
 import re
 
+# High-performance JSON parser for Apple M1/ARM64 optimization
+try:
+    import orjson
+
+    # Fast JSON loading function
+    def fast_json_loads(data: str) -> dict:
+        """Fast JSON parsing using orjson (optimized for ARM64/M1)."""
+        return orjson.loads(data)
+
+except ImportError:
+    # Fallback to standard json if orjson not available
+    def fast_json_loads(data: str) -> dict:
+        """Fallback JSON parsing using standard library."""
+        return json.loads(data)
+
+
 from src.corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 import (
     AMOUNT_REGEX,
     PROXIMITY_PATTERN,
@@ -49,6 +65,18 @@ from src.corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 impor
     VotingWeights,
     DEFAULT_VOTING_WEIGHTS,
 )
+
+# 🚀 OPTIMIZATION: Import fast text processing for vectorized operations
+try:
+    from src.corp_speech_risk_dataset.case_outcome.fast_text_processing import (
+        FastTextProcessor,
+        get_fast_processor,
+        compute_position_scores_vectorized,
+    )
+
+    FAST_PROCESSING_AVAILABLE = True
+except ImportError:
+    FAST_PROCESSING_AVAILABLE = False
 
 # Enhanced judgment-verb context filter (new addition)
 JUDGMENT_VERBS = re.compile(
@@ -191,14 +219,62 @@ def scan_stage1(
     seen = set()
     out = []
 
-    # Initialize spaCy pipeline once for reuse (skip in fast mode for speed)
+    # 🚀 OPTIMIZATION: Completely disable spaCy in fast mode for maximum speed
     nlp = None if fast_mode else get_spacy_nlp()
 
+    # 🚀 ULTRA-FAST MODE: Use vectorized processing for maximum speed
+    if fast_mode and FAST_PROCESSING_AVAILABLE:
+        fast_processor = get_fast_processor(fast_mode=True)
+
+        # Collect all texts for batch processing
+        all_texts = []
+        text_metadata = []
+
+        for path in case_root.rglob("*_stage1.jsonl"):
+            with open(path, "r", encoding="utf8") as f:
+                for line_num, line in enumerate(f):
+                    try:
+                        data = fast_json_loads(line)
+                        text = data.get("text", "")
+                        if text:
+                            all_texts.append(text)
+                            text_metadata.append(
+                                {"path": str(path), "line_num": line_num, "data": data}
+                            )
+                    except json.JSONDecodeError:
+                        continue
+
+        if all_texts:
+            # Batch extract amounts using vectorized operations
+            batch_amounts = fast_processor.extract_amounts_vectorized(all_texts)
+
+            # Process results
+            for text_amounts, metadata in zip(batch_amounts, text_metadata):
+                for amount_info in text_amounts:
+                    if amount_info["value"] >= min_amount:
+                        # Quick feature scoring (simplified for speed)
+                        feature_votes = 2  # Base score for fast mode
+
+                        sig = f"{amount_info['raw_text']}:{amount_info['context'][:60]}"
+                        if sig not in seen:
+                            seen.add(sig)
+                            out.append(
+                                Candidate(
+                                    amount_info["value"],
+                                    amount_info["raw_text"],
+                                    amount_info["context"],
+                                    feature_votes,
+                                )
+                            )
+
+        return out
+
+    # Standard processing mode
     for path in case_root.rglob("*_stage1.jsonl"):
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
+                    data = fast_json_loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -642,7 +718,7 @@ def rewrite_stage_file(
         "w", encoding="utf8"
     ) as fout:
         for line in fin:
-            rec = json.loads(line)
+            rec = fast_json_loads(line)
             rec["final_judgement_real"] = amount
             fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
     tmp.replace(target / outname)

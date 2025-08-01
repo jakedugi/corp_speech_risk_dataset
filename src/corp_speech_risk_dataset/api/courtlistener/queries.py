@@ -11,7 +11,10 @@ import csv
 
 # ---- 1. Raw templates (exactly what you had) -------------------------------
 STATUTE_QUERIES: dict[str, str] = {
-    "FTC Section 5": """(
+    "FTC Section 5 (9th Cir.)": """
+    court_id:ca9
+    AND
+    (
             "FTC Act"
             OR "Section 5"
             OR "15 U.S.C. § 45"
@@ -85,6 +88,10 @@ def build_queries(
         company_file: Optional CSV file with company names
         chunk_size: Number of companies per query chunk (default 50)
     """
+    if statute not in STATUTE_QUERIES:
+        raise KeyError(
+            f"Statute '{statute}' not found in STATUTE_QUERIES. Available: {list(STATUTE_QUERIES.keys())}"
+        )
     base_q = STATUTE_QUERIES[statute].strip()
     if not company_file:
         return [base_q]  # no chunking needed

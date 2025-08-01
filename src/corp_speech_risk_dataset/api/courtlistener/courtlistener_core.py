@@ -20,7 +20,7 @@ from loguru import logger
 
 from corp_speech_risk_dataset.custom_types.base_types import APIConfig
 from corp_speech_risk_dataset.api.courtlistener.queries import STATUTE_QUERIES
-from .client import CourtListenerClient
+from .courtlistener_client import CourtListenerClient
 
 
 def slugify(text: str) -> str:
@@ -411,7 +411,9 @@ def process_full_docket(
     from pathlib import Path
     import json
     from loguru import logger
-    from corp_speech_risk_dataset.api.courtlistener.client import CourtListenerClient
+    from corp_speech_risk_dataset.api.courtlistener.courtlistener_client import (
+        CourtListenerClient,
+    )
 
     client = CourtListenerClient(config, api_mode=api_mode)
     logger.info(f"Fetching complete docket {docket_id} (no RECAP docs)")

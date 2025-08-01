@@ -1,5 +1,5 @@
-from .client import CourtListenerClient
-from .core import (
+from .courtlistener_client import CourtListenerClient
+from .courtlistener_core import (
     process_search_api,
     process_recap_fetch,
     process_docket_entries,

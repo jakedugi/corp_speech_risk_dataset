@@ -22,6 +22,21 @@ from pathlib import Path
 from typing import List, Optional, Any, Dict
 from fractions import Fraction
 
+# High-performance JSON parser for Apple M1/ARM64 optimization
+try:
+    import orjson
+
+    # Fast JSON loading function
+    def fast_json_loads(data: str) -> dict:
+        """Fast JSON parsing using orjson (optimized for ARM64/M1)."""
+        return orjson.loads(data)
+
+except ImportError:
+    # Fallback to standard json if orjson not available
+    def fast_json_loads(data: str) -> dict:
+        """Fallback JSON parsing using standard library."""
+        return json.loads(data)
+
 
 DEFAULT_INPUT_PATTERN = "data/extracted/**/*_text_stage1.jsonl"
 DEFAULT_OUTPUT_FILE = "data/output_stage1_amounts.jsonl"
@@ -231,7 +246,28 @@ USD_AMOUNTS = re.compile(
 # Enhanced Pattern Inventory for Improved Coverage
 # ------------------------------------------------------------------------------
 
-# Financial terminology gazetteer - comprehensive financial/legal terms
+# Financial terminology gazetteer - split into high and low signal
+# High signal financial terms (direct monetary awards/judgments)
+HIGH_SIGNAL_FINANCIAL_TERMS = re.compile(
+    r"\b(?:settlement\s+fund|common\s+fund|escrow\s+account)\b",
+    re.IGNORECASE,
+)
+
+# Low signal financial terms (general financial vocabulary)
+LOW_SIGNAL_FINANCIAL_TERMS = re.compile(
+    r"\b(?:net\s+present\s+value|trust\s+fund|reserve\s+fund|contingency\s+fund|"
+    r"fair\s+market\s+value|book\s+value|asset\s+value|enterprise\s+value|equity\s+value|"
+    r"contingent\s+value\s+right|working\s+capital|net\s+worth|shareholders?\s+equity|"
+    r"retained\s+earnings|accounts\s+receivable|accounts\s+payable|notes\s+payable|"
+    r"debt\s+service|interest\s+expense|dividend\s+payment|capital\s+expenditure|"
+    r"operating\s+expense|gross\s+revenue|net\s+revenue|ebitda|net\s+income|"
+    r"gross\s+profit|operating\s+income|total\s+consideration|"
+    r"purchase\s+price|sale\s+price|transaction\s+value|deal\s+value|merger\s+consideration|"
+    r"acquisition\s+cost|breakup\s+fee|termination\s+fee|earnout|liquidation\s+value)\b",
+    re.IGNORECASE,
+)
+
+# Legacy pattern for backward compatibility
 FINANCIAL_TERMS = re.compile(
     r"\b(?:net\s+present\s+value|total\s+consideration|common\s+fund|escrow\s+account|"
     r"settlement\s+fund|trust\s+fund|reserve\s+fund|contingency\s+fund|liquidation\s+value|"
@@ -245,7 +281,29 @@ FINANCIAL_TERMS = re.compile(
     re.IGNORECASE,
 )
 
-# Settlement-specific terminology
+# Settlement-specific terminology - split into high and low signal
+# High signal settlement terms (direct settlement amounts/awards)
+HIGH_SIGNAL_SETTLEMENT_TERMS = re.compile(
+    r"\b(?:settlement\s+agreement|final\s+approval|preliminary\s+approval|"
+    r"class\s+action\s+settlement|mediation\s+settlement|arbitration\s+award|"
+    r"consent\s+judgment|settlement\s+fund|qualified\s+settlement\s+fund|"
+    r"attorney\s+fees\s+award|incentive\s+award|service\s+award)\b",
+    re.IGNORECASE,
+)
+
+# Low signal settlement terms (procedural/administrative)
+LOW_SIGNAL_SETTLEMENT_TERMS = re.compile(
+    r"\b(?:consent\s+decree|stipulated\s+order|collective\s+action\s+settlement|"
+    r"stipulation|release\s+agreement|distribution\s+plan|claims\s+administrator|"
+    r"settlement\s+administrator|notice\s+to\s+class\s+members|opt-out\s+period|"
+    r"fairness\s+hearing|objection\s+deadline|settlement\s+class|qsf|"
+    r"cy\s+pres|residual\s+funds|unclaimed\s+funds|pro\s+rata\s+distribution|"
+    r"claims\s+process|claim\s+form|settlement\s+website|settlement\s+notice|"
+    r"representative\s+enhancement)\b",
+    re.IGNORECASE,
+)
+
+# Legacy pattern for backward compatibility
 SETTLEMENT_TERMS = re.compile(
     r"\b(?:settlement\s+agreement|consent\s+decree|stipulated\s+order|final\s+approval|"
     r"preliminary\s+approval|class\s+action\s+settlement|collective\s+action\s+settlement|"
@@ -259,7 +317,29 @@ SETTLEMENT_TERMS = re.compile(
     re.IGNORECASE,
 )
 
-# Legal proceedings vocabulary
+# Legal proceedings vocabulary - split into high and low signal
+# High signal legal proceedings (direct monetary outcomes)
+HIGH_SIGNAL_LEGAL_PROCEEDINGS = re.compile(
+    r"\b(?:default\s+judgment|summary\s+judgment|directed\s+verdict|"
+    r"judgment\s+as\s+a\s+matter\s+of\s+law|jury\s+verdict|trial\s+verdict|"
+    r"final\s+judgment|restitution|disgorgement)\b",
+    re.IGNORECASE,
+)
+
+# Low signal legal proceedings (procedural/case management)
+LOW_SIGNAL_LEGAL_PROCEEDINGS = re.compile(
+    r"\b(?:complaint|counterclaim|cross-claim|third-party\s+complaint|amended\s+complaint|"
+    r"motion\s+to\s+dismiss|motion\s+for\s+summary\s+judgment|motion\s+in\s+limine|"
+    r"daubert\s+motion|class\s+certification|preliminary\s+injunction|"
+    r"temporary\s+restraining\s+order|discovery\s+motion|motion\s+to\s+compel|"
+    r"protective\s+order|sanctions\s+motion|bench\s+trial|interlocutory\s+appeal|"
+    r"appeal|remand|reversal|affirmance|mandamus|certiorari|writ\s+of\s+error|"
+    r"stipulation|consent\s+decree|injunctive\s+relief|declaratory\s+judgment|"
+    r"constructive\s+trust|receive|accounting|receivership)\b",
+    re.IGNORECASE,
+)
+
+# Legacy pattern for backward compatibility
 LEGAL_PROCEEDINGS = re.compile(
     r"\b(?:complaint|counterclaim|cross-claim|third-party\s+complaint|amended\s+complaint|"
     r"motion\s+to\s+dismiss|motion\s+for\s+summary\s+judgment|motion\s+in\s+limine|"
@@ -273,7 +353,31 @@ LEGAL_PROCEEDINGS = re.compile(
     re.IGNORECASE,
 )
 
-# Enhanced monetary phrases
+# Enhanced monetary phrases - split into high and low signal
+# High signal monetary phrases (direct financial awards)
+HIGH_SIGNAL_MONETARY_PHRASES = re.compile(
+    r"\b(?:monetary\s+relief|compensatory\s+damages|punitive\s+damages|exemplary\s+damages|"
+    r"liquidated\s+damages|actual\s+damages|direct\s+damages|lost\s+profits|"
+    r"lost\s+revenue|lost\s+income|attorney\s+fees|attorneys?\s+fees\s+and\s+costs|"
+    r"civil\s+penalty|civil\s+fine|restitution\s+order|disgorgement\s+order|"
+    r"treble\s+damages|double\s+damages|enhanced\s+damages|statutory\s+damages)\b",
+    re.IGNORECASE,
+)
+
+# Low signal monetary phrases (procedural/incidental)
+LOW_SIGNAL_MONETARY_PHRASES = re.compile(
+    r"\b(?:equitable\s+relief|injunctive\s+relief|declaratory\s+relief|"
+    r"consequential\s+damages|incidental\s+damages|special\s+damages|general\s+damages|"
+    r"out-of-pocket\s+expenses|reasonable\s+expenses|necessary\s+expenses|"
+    r"litigation\s+costs|court\s+costs|expert\s+witness\s+fees|discovery\s+costs|"
+    r"trial\s+costs|appeal\s+costs|pre-judgment\s+interest|post-judgment\s+interest|"
+    r"statutory\s+interest|compound\s+interest|simple\s+interest|interest\s+rate|"
+    r"discount\s+rate|criminal\s+fine|criminal\s+penalty|forfeiture|accounting\s+order|"
+    r"minimum\s+damages|maximum\s+damages|damage\s+cap|liability\s+cap)\b",
+    re.IGNORECASE,
+)
+
+# Legacy pattern for backward compatibility
 MONETARY_PHRASES = re.compile(
     r"\b(?:monetary\s+relief|equitable\s+relief|injunctive\s+relief|declaratory\s+relief|"
     r"compensatory\s+damages|punitive\s+damages|exemplary\s+damages|liquidated\s+damages|"
@@ -426,6 +530,12 @@ NUMERIC_GAZETTEER = {
     "tenth": 0.1,
 }
 
+# 🚀 PERFORMANCE: Pre-compile regex patterns for numeric gazetteer
+_NUMERIC_GAZETTEER_COMPILED_PATTERNS = {
+    word: re.compile(r"\b" + re.escape(word) + r"\b")
+    for word in NUMERIC_GAZETTEER.keys()
+}
+
 # Document structure patterns
 TABLE_PATTERNS = re.compile(
     r"(?:table\s+\d+|exhibit\s+\d+|schedule\s+\d+|appendix\s+[a-z]|attachment\s+[a-z]|"
@@ -513,7 +623,61 @@ DOCUMENT_TITLES = [
     re.compile(r"\bORDER DENYING PLAINTIFF\b"),
 ]
 
-# Dismissal patterns that indicate class action dismissals (enhanced)
+# Dismissal patterns that indicate class action dismissals (enhanced) - split into high and low signal
+# High signal dismissal patterns (definitive case endings)
+HIGH_SIGNAL_DISMISSAL_PATTERNS = [
+    re.compile(r"\bDefendants' motion to dismiss is granted\b", re.IGNORECASE),
+    re.compile(r"\bcase is hereby dismissed\b", re.IGNORECASE),
+    re.compile(r"\bcase dismissed\b", re.IGNORECASE),
+    re.compile(r"\bwith prejudice\b", re.IGNORECASE),
+    re.compile(r"\bcase terminated\b", re.IGNORECASE),
+    re.compile(r"\bAccordingly, the Court decertifies the classes\b", re.IGNORECASE),
+    re.compile(
+        r"\bDefendants' motion to decertify the classes is GRANTED\b", re.IGNORECASE
+    ),
+    re.compile(r"\bclass.*decertified\b", re.IGNORECASE),
+    re.compile(r"\bclass.*dismissed\b", re.IGNORECASE),
+    re.compile(r"\bFINAL.*DISMISS\b", re.IGNORECASE),
+    re.compile(r"\bJUDGMENT.*DISMISS\b", re.IGNORECASE),
+]
+
+# Low signal dismissal patterns (procedural/potentially reversible)
+LOW_SIGNAL_DISMISSAL_PATTERNS = [
+    re.compile(r"\bDISMISSED\b", re.IGNORECASE),
+    re.compile(r"\bwithout prejudice\b", re.IGNORECASE),
+    re.compile(r"\bterminated\b", re.IGNORECASE),
+    re.compile(r"\bclass certification.*denied\b", re.IGNORECASE),
+    re.compile(r"\bclass certification.*dismissed\b", re.IGNORECASE),
+    re.compile(r"\bCourt hereby DENIES Plaintiff's Amended Motion\b", re.IGNORECASE),
+    re.compile(
+        r"\bCourt hereby DENIES Plaintiff's Amended Motion for Class Certification\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bTherefore, the Court declines Plaintiff's motion to certify a damages class\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bCourt hereby DENIES Plaintiff's Motion for Class\b", re.IGNORECASE),
+    re.compile(r"\bORDER DENYING PLAINTIFF'S.*MOTION FOR CLASS\b", re.IGNORECASE),
+    re.compile(r"\bCourt.*DENIES.*Class\b", re.IGNORECASE),
+    re.compile(r"\bMotion.*DENIED\b", re.IGNORECASE),
+    re.compile(r"\bMotion.*DISMISSED\b", re.IGNORECASE),
+    re.compile(r"\bcase closed\b", re.IGNORECASE),
+    re.compile(r"\baction dismissed\b", re.IGNORECASE),
+    re.compile(r"\bsuit dismissed\b", re.IGNORECASE),
+    re.compile(r"\blawsuit dismissed\b", re.IGNORECASE),
+    re.compile(r"\bcomplaint dismissed\b", re.IGNORECASE),
+    re.compile(r"\bpetition dismissed\b", re.IGNORECASE),
+    re.compile(r"\bappeal dismissed\b", re.IGNORECASE),
+    re.compile(r"\bsettlement.*dismissed\b", re.IGNORECASE),
+    re.compile(r"\bcase.*settled.*dismissed\b", re.IGNORECASE),
+    re.compile(r"\bvoluntary dismissal\b", re.IGNORECASE),
+    re.compile(r"\bstipulated dismissal\b", re.IGNORECASE),
+    re.compile(r"\bORDER.*DISMISS\b", re.IGNORECASE),
+    re.compile(r"\bORDER.*DENY\b", re.IGNORECASE),
+]
+
+# Legacy pattern for backward compatibility
 DISMISSAL_PATTERNS = [
     # Core dismissal phrases
     re.compile(r"\bDefendants' motion to dismiss is granted\b", re.IGNORECASE),
@@ -665,7 +829,7 @@ def get_case_court_type(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
+                    data = fast_json_loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -727,6 +891,7 @@ def count_document_titles(text: str, header_chars: int = 2000) -> int:
 def count_dismissal_patterns(text: str) -> int:
     """
     Count the number of dismissal patterns in the text.
+    OPTIMIZED: Early termination after finding patterns for speed.
 
     Args:
         text: Document text to search
@@ -735,9 +900,13 @@ def count_dismissal_patterns(text: str) -> int:
         int: Number of dismissal patterns found
     """
     count = 0
+    # 🚀 PERFORMANCE OPTIMIZATION - Early termination after reasonable count
     for pattern in DISMISSAL_PATTERNS:
         matches = pattern.findall(text)
         count += len(matches)
+        # Early termination: if we found dismissal patterns, we have enough signal
+        if count >= 3:  # Stop after finding sufficient dismissal evidence
+            break
     return count
 
 
@@ -791,6 +960,56 @@ def count_legal_proceedings(text: str) -> int:
 def count_monetary_phrases(text: str) -> int:
     """Count enhanced monetary phrase matches in text."""
     return len(MONETARY_PHRASES.findall(text))
+
+
+def count_high_signal_financial_terms(text: str) -> int:
+    """Count high signal financial terminology matches in text."""
+    return len(HIGH_SIGNAL_FINANCIAL_TERMS.findall(text))
+
+
+def count_low_signal_financial_terms(text: str) -> int:
+    """Count low signal financial terminology matches in text."""
+    return len(LOW_SIGNAL_FINANCIAL_TERMS.findall(text))
+
+
+def count_high_signal_settlement_terms(text: str) -> int:
+    """Count high signal settlement terminology matches in text."""
+    return len(HIGH_SIGNAL_SETTLEMENT_TERMS.findall(text))
+
+
+def count_low_signal_settlement_terms(text: str) -> int:
+    """Count low signal settlement terminology matches in text."""
+    return len(LOW_SIGNAL_SETTLEMENT_TERMS.findall(text))
+
+
+def count_high_signal_legal_proceedings(text: str) -> int:
+    """Count high signal legal proceedings matches in text."""
+    return len(HIGH_SIGNAL_LEGAL_PROCEEDINGS.findall(text))
+
+
+def count_low_signal_legal_proceedings(text: str) -> int:
+    """Count low signal legal proceedings matches in text."""
+    return len(LOW_SIGNAL_LEGAL_PROCEEDINGS.findall(text))
+
+
+def count_high_signal_monetary_phrases(text: str) -> int:
+    """Count high signal monetary phrase matches in text."""
+    return len(HIGH_SIGNAL_MONETARY_PHRASES.findall(text))
+
+
+def count_low_signal_monetary_phrases(text: str) -> int:
+    """Count low signal monetary phrase matches in text."""
+    return len(LOW_SIGNAL_MONETARY_PHRASES.findall(text))
+
+
+def count_high_signal_dismissal_patterns(text: str) -> int:
+    """Count high signal dismissal pattern matches in text."""
+    return sum(len(pattern.findall(text)) for pattern in HIGH_SIGNAL_DISMISSAL_PATTERNS)
+
+
+def count_low_signal_dismissal_patterns(text: str) -> int:
+    """Count low signal dismissal pattern matches in text."""
+    return sum(len(pattern.findall(text)) for pattern in LOW_SIGNAL_DISMISSAL_PATTERNS)
 
 
 def count_high_confidence_patterns(text: str) -> int:
@@ -1284,11 +1503,15 @@ def extract_dependency_features(text: str, nlp: Optional[Any] = None) -> int:
         return 0
 
 
-def extract_enhanced_fractions(text: str) -> List[Dict[str, Any]]:
+def extract_enhanced_fractions(text: str, weights=None) -> List[Dict[str, Any]]:
     """
     Extract enhanced fraction patterns including mixed numbers.
     Returns list of fraction matches with their computed values.
     """
+    # 🚀 CRITICAL DROPOUT FIX - Skip expensive regex if disabled
+    if weights and weights.fraction_extraction_weight == 0.0:
+        return []
+
     fractions = []
 
     # Find fraction patterns
@@ -1358,14 +1581,16 @@ def count_document_structure_features(text: str) -> int:
 
 
 def count_numeric_gazetteer_matches(text: str) -> int:
-    """Count matches from the comprehensive numeric gazetteer."""
+    """Count matches from the comprehensive numeric gazetteer.
+
+    🚀 PERFORMANCE OPTIMIZED: Uses pre-compiled regex patterns for speed.
+    """
     count = 0
     text_lower = text.lower()
 
-    for word, value in NUMERIC_GAZETTEER.items():
-        # Count occurrences of spelled-out numbers
-        word_pattern = r"\b" + re.escape(word) + r"\b"
-        matches = re.findall(word_pattern, text_lower)
+    # Use pre-compiled patterns for much faster matching
+    for word, compiled_pattern in _NUMERIC_GAZETTEER_COMPILED_PATTERNS.items():
+        matches = compiled_pattern.findall(text_lower)
         count += len(matches)
 
     return count
@@ -1596,7 +1821,7 @@ def is_case_dismissed(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
+                    data = fast_json_loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -1680,7 +1905,7 @@ def is_case_definitively_dismissed(
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
+                    data = fast_json_loads(line)
                     text = data.get("text", "")
 
                     if definitive_pattern.search(text):
@@ -1727,7 +1952,7 @@ def has_fee_shifting(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
+                    data = fast_json_loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -1770,7 +1995,7 @@ def has_large_patent_amounts(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = json.loads(line)
+                    data = fast_json_loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -1800,6 +2025,7 @@ def get_case_flags(
     bankruptcy_ratio_threshold: float = 0.5,
     use_weighted_dismissal_scoring: bool = True,
     dismissal_document_type_weight: float = 2.0,
+    fast_mode: bool = False,
 ) -> dict[str, bool]:
     """
     Get all flags for a case (dismissal, fee-shifting, large patent amounts, bankruptcy court).
@@ -1817,22 +2043,35 @@ def get_case_flags(
     Returns:
         dict[str, bool]: Dictionary with flag information
     """
-    flags = {
-        "is_dismissed": is_case_dismissed(
-            case_root,
-            dismissal_ratio_threshold,
-            use_weighted_dismissal_scoring,
-            dismissal_document_type_weight,
-        ),
-        "has_fee_shifting": has_fee_shifting(case_root, fee_shifting_ratio_threshold),
-        "has_large_patent_amounts": has_large_patent_amounts(
-            case_root, patent_ratio_threshold
-        ),
-        "is_bankruptcy_court": get_case_court_type(
-            case_root, bankruptcy_ratio_threshold
-        )
-        == "BANKRUPTCY",
-    }
+    # 🚀 FAST MODE - Skip expensive flag calculations during optimization
+    if fast_mode:
+        # Return minimal flags for optimization speed
+        flags = {
+            "is_dismissed": False,  # Skip expensive dismissal detection
+            "has_fee_shifting": False,  # Skip fee shifting analysis
+            "has_large_patent_amounts": False,  # Skip patent detection
+            "is_bankruptcy_court": False,  # Skip court type analysis
+        }
+    else:
+        # Full flag calculation for production use
+        flags = {
+            "is_dismissed": is_case_dismissed(
+                case_root,
+                dismissal_ratio_threshold,
+                use_weighted_dismissal_scoring,
+                dismissal_document_type_weight,
+            ),
+            "has_fee_shifting": has_fee_shifting(
+                case_root, fee_shifting_ratio_threshold
+            ),
+            "has_large_patent_amounts": has_large_patent_amounts(
+                case_root, patent_ratio_threshold
+            ),
+            "is_bankruptcy_court": get_case_court_type(
+                case_root, bankruptcy_ratio_threshold
+            )
+            == "BANKRUPTCY",
+        }
 
     return flags
 
@@ -2370,38 +2609,129 @@ def compute_feature_votes(context: str, weights: VotingWeights) -> int:
     """
     feature_count = 0.0
 
-    # Original features
-    proximity_matches = PROXIMITY_PATTERN.findall(context)
-    feature_count += len(proximity_matches) * weights.proximity_pattern_weight
+    # 🚨 ULTRA-FAST MODE - Bypass ALL expensive operations if most weights are 0
+    expensive_weights = [
+        weights.numeric_gazetteer_weight,
+        weights.dependency_parsing_weight,
+        weights.fraction_extraction_weight,
+        weights.document_structure_weight,
+        weights.table_detection_weight,
+        weights.sentence_boundary_weight,
+        weights.paragraph_boundary_weight,
+    ]
 
-    judgment_matches = JUDGMENT_VERBS.findall(context)
-    feature_count += len(judgment_matches) * weights.judgment_verbs_weight
+    if all(w == 0.0 for w in expensive_weights):
+        # 🚀 EMERGENCY SPEED MODE: Only count basic patterns
+        feature_count = 0
 
-    # New enhanced features
-    financial_count = count_financial_terms(context)
-    feature_count += financial_count * weights.financial_terms_weight
+        # Count basic monetary amounts (fastest possible)
+        basic_amount_matches = len(re.findall(r"\$[\d,]+", context))
+        if basic_amount_matches > 0:
+            feature_count += (
+                basic_amount_matches * 10.0
+            )  # High weight for actual amounts
 
-    settlement_count = count_settlement_terms(context)
-    feature_count += settlement_count * weights.settlement_terms_weight
+        # Quick settlement terms
+        if "settlement" in context.lower():
+            feature_count += 5.0
+        if "damages" in context.lower():
+            feature_count += 3.0
 
-    legal_proceedings_count = count_legal_proceedings(context)
-    feature_count += legal_proceedings_count * weights.legal_proceedings_weight
+        return int(feature_count)
 
-    monetary_phrases_count = count_monetary_phrases(context)
-    feature_count += monetary_phrases_count * weights.monetary_phrases_weight
+    # 🚀 CRITICAL FIX - Original features with DROPOUT protection
+    if weights.proximity_pattern_weight > 0.0:
+        proximity_matches = PROXIMITY_PATTERN.findall(context)
+        feature_count += len(proximity_matches) * weights.proximity_pattern_weight
 
-    document_structure_count = count_document_structure_features(context)
-    feature_count += document_structure_count * weights.document_structure_weight
+    if weights.judgment_verbs_weight > 0.0:
+        judgment_matches = JUDGMENT_VERBS.findall(context)
+        feature_count += len(judgment_matches) * weights.judgment_verbs_weight
 
-    numeric_gazetteer_count = count_numeric_gazetteer_matches(context)
-    feature_count += numeric_gazetteer_count * weights.numeric_gazetteer_weight
+    # 🚀 ULTRA-FAST DROPOUT OPTIMIZATION - Skip expensive regex when weight = 0
+    # New enhanced features with high/low signal separation
+    if weights.financial_terms_weight > 0.0:
+        financial_count = count_financial_terms(context)
+        feature_count += financial_count * weights.financial_terms_weight
 
-    # Add confidence boost features
-    high_confidence_count = count_high_confidence_patterns(context)
-    feature_count += high_confidence_count * weights.high_confidence_patterns_weight
+    # High/Low signal financial terms
+    if weights.high_signal_financial_weight > 0.0:
+        high_signal_financial_count = count_high_signal_financial_terms(context)
+        feature_count += (
+            high_signal_financial_count * weights.high_signal_financial_weight
+        )
 
-    adjacent_keywords_count = count_amount_adjacent_keywords(context)
-    feature_count += adjacent_keywords_count * weights.amount_adjacent_keywords_weight
+    if weights.low_signal_financial_weight > 0.0:
+        low_signal_financial_count = count_low_signal_financial_terms(context)
+        feature_count += (
+            low_signal_financial_count * weights.low_signal_financial_weight
+        )
+
+    if weights.settlement_terms_weight > 0.0:
+        settlement_count = count_settlement_terms(context)
+        feature_count += settlement_count * weights.settlement_terms_weight
+
+    # High/Low signal settlement terms
+    if weights.high_signal_settlement_weight > 0.0:
+        high_signal_settlement_count = count_high_signal_settlement_terms(context)
+        feature_count += (
+            high_signal_settlement_count * weights.high_signal_settlement_weight
+        )
+
+    if weights.low_signal_settlement_weight > 0.0:
+        low_signal_settlement_count = count_low_signal_settlement_terms(context)
+        feature_count += (
+            low_signal_settlement_count * weights.low_signal_settlement_weight
+        )
+
+    if weights.legal_proceedings_weight > 0.0:
+        legal_proceedings_count = count_legal_proceedings(context)
+        feature_count += legal_proceedings_count * weights.legal_proceedings_weight
+
+    # High/Low signal legal proceedings (skip expensive regex if weight = 0)
+    if weights.high_signal_financial_weight > 0.0:
+        high_signal_legal_count = count_high_signal_legal_proceedings(context)
+        feature_count += high_signal_legal_count * weights.high_signal_financial_weight
+
+    if weights.low_signal_financial_weight > 0.0:
+        low_signal_legal_count = count_low_signal_legal_proceedings(context)
+        feature_count += low_signal_legal_count * weights.low_signal_financial_weight
+
+    if weights.monetary_phrases_weight > 0.0:
+        monetary_phrases_count = count_monetary_phrases(context)
+        feature_count += monetary_phrases_count * weights.monetary_phrases_weight
+
+    # High/Low signal monetary phrases (skip expensive regex if weight = 0)
+    if weights.high_signal_settlement_weight > 0.0:
+        high_signal_monetary_count = count_high_signal_monetary_phrases(context)
+        feature_count += (
+            high_signal_monetary_count * weights.high_signal_settlement_weight
+        )
+
+    if weights.low_signal_settlement_weight > 0.0:
+        low_signal_monetary_count = count_low_signal_monetary_phrases(context)
+        feature_count += (
+            low_signal_monetary_count * weights.low_signal_settlement_weight
+        )
+
+    if weights.document_structure_weight > 0.0:
+        document_structure_count = count_document_structure_features(context)
+        feature_count += document_structure_count * weights.document_structure_weight
+
+    if weights.numeric_gazetteer_weight > 0.0:
+        numeric_gazetteer_count = count_numeric_gazetteer_matches(context)
+        feature_count += numeric_gazetteer_count * weights.numeric_gazetteer_weight
+
+    # 🚀 CRITICAL FIX - Add confidence boost features with DROPOUT protection
+    if weights.high_confidence_patterns_weight > 0.0:
+        high_confidence_count = count_high_confidence_patterns(context)
+        feature_count += high_confidence_count * weights.high_confidence_patterns_weight
+
+    if weights.amount_adjacent_keywords_weight > 0.0:
+        adjacent_keywords_count = count_amount_adjacent_keywords(context)
+        feature_count += (
+            adjacent_keywords_count * weights.amount_adjacent_keywords_weight
+        )
 
     # Add overall confidence boost score
     confidence_boost = compute_confidence_boost_score(context)
@@ -2550,9 +2880,9 @@ def compute_enhanced_feature_votes_with_titles(
         )
         votes += dependency_votes
 
-    # Add enhanced fraction extraction features
+    # Add enhanced fraction extraction features - with DROPOUT support
     if full_text and match_start >= 0 and match_end > match_start:
-        fractions = extract_enhanced_fractions(context)
+        fractions = extract_enhanced_fractions(context, weights)
         fraction_votes = len(fractions) * weights.fraction_extraction_weight
         votes += fraction_votes
 
@@ -2568,10 +2898,13 @@ def compute_enhanced_feature_votes_with_titles(
         )
         votes += implied_total_votes
 
-        # Add boundary-aware context features
-        sentence_context = extract_sentence_boundary_context(
-            full_text, match_start, match_end
-        )
+        # 🚀 CRITICAL FIX - Add boundary-aware context features with DROPOUT protection
+        if weights.sentence_boundary_weight > 0.0:
+            sentence_context = extract_sentence_boundary_context(
+                full_text, match_start, match_end
+            )
+        else:
+            sentence_context = context  # Skip expensive sentence boundary extraction
         if len(sentence_context) > len(
             context
         ):  # If sentence boundary provides more context
@@ -2582,9 +2915,13 @@ def compute_enhanced_feature_votes_with_titles(
             )
             votes += sentence_votes
 
-        paragraph_context = extract_paragraph_boundary_context(
-            full_text, match_start, match_end
-        )
+        # 🚀 CRITICAL FIX - Paragraph boundary context with DROPOUT protection
+        if weights.paragraph_boundary_weight > 0.0:
+            paragraph_context = extract_paragraph_boundary_context(
+                full_text, match_start, match_end
+            )
+        else:
+            paragraph_context = sentence_context  # Skip expensive paragraph extraction
         if len(paragraph_context) > len(
             sentence_context
         ):  # If paragraph boundary provides even more context
@@ -3211,7 +3548,7 @@ def main(
 
             with open(path, encoding="utf-8") as in_f:
                 for line in in_f:
-                    text = json.loads(line).get("text", "")
+                    text = fast_json_loads(line).get("text", "")
 
                     # Procedural-doc filter: Skip any Stage-1 file that contains no money pattern and no judgment verb
                     if not (AMOUNT_REGEX.search(text) or JUDGMENT_VERBS.search(text)):

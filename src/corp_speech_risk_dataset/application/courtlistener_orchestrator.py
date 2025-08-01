@@ -8,7 +8,7 @@ from httpx import HTTPStatusError
 import asyncio
 import random
 
-from corp_speech_risk_dataset.api.courtlistener.client import (
+from corp_speech_risk_dataset.api.courtlistener.courtlistener_client import (
     CourtListenerClient,
     AsyncCourtListenerClient,
 )

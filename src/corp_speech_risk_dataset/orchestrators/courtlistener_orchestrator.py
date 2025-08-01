@@ -8,7 +8,7 @@ from httpx import HTTPStatusError
 import asyncio
 import random
 
-from corp_speech_risk_dataset.api.courtlistener.client import (
+from corp_speech_risk_dataset.api.courtlistener.courtlistener_client import (
     CourtListenerClient,
     AsyncCourtListenerClient,
 )
@@ -16,7 +16,7 @@ from corp_speech_risk_dataset.api.courtlistener.queries import (
     STATUTE_QUERIES,
     build_queries,
 )
-from corp_speech_risk_dataset.api.courtlistener.core import (
+from corp_speech_risk_dataset.api.courtlistener.courtlistener_core import (
     process_full_docket,
     process_and_save,
     process_docket_entries,

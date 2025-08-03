@@ -10,7 +10,7 @@ counts of `_stage3.jsonl` entries in hit vs. no‐hit cases.
 """
 
 import re
-import json
+import orjson as json
 import glob
 import os
 import hashlib
@@ -21,21 +21,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional, Any, Dict
 from fractions import Fraction
-
-# High-performance JSON parser for Apple M1/ARM64 optimization
-try:
-    import orjson
-
-    # Fast JSON loading function
-    def fast_json_loads(data: str) -> dict:
-        """Fast JSON parsing using orjson (optimized for ARM64/M1)."""
-        return orjson.loads(data)
-
-except ImportError:
-    # Fallback to standard json if orjson not available
-    def fast_json_loads(data: str) -> dict:
-        """Fallback JSON parsing using standard library."""
-        return json.loads(data)
 
 
 DEFAULT_INPUT_PATTERN = "data/extracted/**/*_text_stage1.jsonl"
@@ -200,7 +185,38 @@ class VotingWeights:
 
 
 # Default voting weights
-DEFAULT_VOTING_WEIGHTS = VotingWeights()
+DEFAULT_VOTING_WEIGHTS = VotingWeights(
+    proximity_pattern_weight=1.296,
+    judgment_verbs_weight=0.736,
+    case_position_weight=1.914,
+    docket_position_weight=0.281,
+    all_caps_titles_weight=1.740,
+    document_titles_weight=0.947,
+    high_signal_financial_weight=1.602,
+    low_signal_financial_weight=1.041,
+    high_signal_settlement_weight=1.358,
+    low_signal_settlement_weight=1.441,
+    financial_terms_weight=1.164,
+    settlement_terms_weight=1.075,
+    fraction_extraction_weight=1.517,
+    percentage_extraction_weight=0.212,
+    implied_totals_weight=0.947,
+    legal_proceedings_weight=0.342,
+    monetary_phrases_weight=0.716,
+    dependency_parsing_weight=1.501,
+    document_structure_weight=1.216,
+    table_detection_weight=0.650,
+    header_detection_weight=0.077,
+    section_boundaries_weight=1.269,
+    numeric_gazetteer_weight=1.918,
+    mixed_numbers_weight=1.306,
+    sentence_boundary_weight=1.270,
+    paragraph_boundary_weight=1.991,
+    high_confidence_patterns_weight=1.164,
+    amount_adjacent_keywords_weight=0.829,
+    confidence_boost_weight=0.949,
+    calculation_boost_multiplier=1.247,
+)
 
 # Improved regexes for better cash amount detection - ordered by specificity
 AMOUNT_REGEX = re.compile(
@@ -246,28 +262,7 @@ USD_AMOUNTS = re.compile(
 # Enhanced Pattern Inventory for Improved Coverage
 # ------------------------------------------------------------------------------
 
-# Financial terminology gazetteer - split into high and low signal
-# High signal financial terms (direct monetary awards/judgments)
-HIGH_SIGNAL_FINANCIAL_TERMS = re.compile(
-    r"\b(?:settlement\s+fund|common\s+fund|escrow\s+account)\b",
-    re.IGNORECASE,
-)
-
-# Low signal financial terms (general financial vocabulary)
-LOW_SIGNAL_FINANCIAL_TERMS = re.compile(
-    r"\b(?:net\s+present\s+value|trust\s+fund|reserve\s+fund|contingency\s+fund|"
-    r"fair\s+market\s+value|book\s+value|asset\s+value|enterprise\s+value|equity\s+value|"
-    r"contingent\s+value\s+right|working\s+capital|net\s+worth|shareholders?\s+equity|"
-    r"retained\s+earnings|accounts\s+receivable|accounts\s+payable|notes\s+payable|"
-    r"debt\s+service|interest\s+expense|dividend\s+payment|capital\s+expenditure|"
-    r"operating\s+expense|gross\s+revenue|net\s+revenue|ebitda|net\s+income|"
-    r"gross\s+profit|operating\s+income|total\s+consideration|"
-    r"purchase\s+price|sale\s+price|transaction\s+value|deal\s+value|merger\s+consideration|"
-    r"acquisition\s+cost|breakup\s+fee|termination\s+fee|earnout|liquidation\s+value)\b",
-    re.IGNORECASE,
-)
-
-# Legacy pattern for backward compatibility
+# Financial terminology gazetteer - comprehensive financial/legal terms
 FINANCIAL_TERMS = re.compile(
     r"\b(?:net\s+present\s+value|total\s+consideration|common\s+fund|escrow\s+account|"
     r"settlement\s+fund|trust\s+fund|reserve\s+fund|contingency\s+fund|liquidation\s+value|"
@@ -281,29 +276,7 @@ FINANCIAL_TERMS = re.compile(
     re.IGNORECASE,
 )
 
-# Settlement-specific terminology - split into high and low signal
-# High signal settlement terms (direct settlement amounts/awards)
-HIGH_SIGNAL_SETTLEMENT_TERMS = re.compile(
-    r"\b(?:settlement\s+agreement|final\s+approval|preliminary\s+approval|"
-    r"class\s+action\s+settlement|mediation\s+settlement|arbitration\s+award|"
-    r"consent\s+judgment|settlement\s+fund|qualified\s+settlement\s+fund|"
-    r"attorney\s+fees\s+award|incentive\s+award|service\s+award)\b",
-    re.IGNORECASE,
-)
-
-# Low signal settlement terms (procedural/administrative)
-LOW_SIGNAL_SETTLEMENT_TERMS = re.compile(
-    r"\b(?:consent\s+decree|stipulated\s+order|collective\s+action\s+settlement|"
-    r"stipulation|release\s+agreement|distribution\s+plan|claims\s+administrator|"
-    r"settlement\s+administrator|notice\s+to\s+class\s+members|opt-out\s+period|"
-    r"fairness\s+hearing|objection\s+deadline|settlement\s+class|qsf|"
-    r"cy\s+pres|residual\s+funds|unclaimed\s+funds|pro\s+rata\s+distribution|"
-    r"claims\s+process|claim\s+form|settlement\s+website|settlement\s+notice|"
-    r"representative\s+enhancement)\b",
-    re.IGNORECASE,
-)
-
-# Legacy pattern for backward compatibility
+# Settlement-specific terminology
 SETTLEMENT_TERMS = re.compile(
     r"\b(?:settlement\s+agreement|consent\s+decree|stipulated\s+order|final\s+approval|"
     r"preliminary\s+approval|class\s+action\s+settlement|collective\s+action\s+settlement|"
@@ -317,29 +290,7 @@ SETTLEMENT_TERMS = re.compile(
     re.IGNORECASE,
 )
 
-# Legal proceedings vocabulary - split into high and low signal
-# High signal legal proceedings (direct monetary outcomes)
-HIGH_SIGNAL_LEGAL_PROCEEDINGS = re.compile(
-    r"\b(?:default\s+judgment|summary\s+judgment|directed\s+verdict|"
-    r"judgment\s+as\s+a\s+matter\s+of\s+law|jury\s+verdict|trial\s+verdict|"
-    r"final\s+judgment|restitution|disgorgement)\b",
-    re.IGNORECASE,
-)
-
-# Low signal legal proceedings (procedural/case management)
-LOW_SIGNAL_LEGAL_PROCEEDINGS = re.compile(
-    r"\b(?:complaint|counterclaim|cross-claim|third-party\s+complaint|amended\s+complaint|"
-    r"motion\s+to\s+dismiss|motion\s+for\s+summary\s+judgment|motion\s+in\s+limine|"
-    r"daubert\s+motion|class\s+certification|preliminary\s+injunction|"
-    r"temporary\s+restraining\s+order|discovery\s+motion|motion\s+to\s+compel|"
-    r"protective\s+order|sanctions\s+motion|bench\s+trial|interlocutory\s+appeal|"
-    r"appeal|remand|reversal|affirmance|mandamus|certiorari|writ\s+of\s+error|"
-    r"stipulation|consent\s+decree|injunctive\s+relief|declaratory\s+judgment|"
-    r"constructive\s+trust|receive|accounting|receivership)\b",
-    re.IGNORECASE,
-)
-
-# Legacy pattern for backward compatibility
+# Legal proceedings vocabulary
 LEGAL_PROCEEDINGS = re.compile(
     r"\b(?:complaint|counterclaim|cross-claim|third-party\s+complaint|amended\s+complaint|"
     r"motion\s+to\s+dismiss|motion\s+for\s+summary\s+judgment|motion\s+in\s+limine|"
@@ -353,31 +304,7 @@ LEGAL_PROCEEDINGS = re.compile(
     re.IGNORECASE,
 )
 
-# Enhanced monetary phrases - split into high and low signal
-# High signal monetary phrases (direct financial awards)
-HIGH_SIGNAL_MONETARY_PHRASES = re.compile(
-    r"\b(?:monetary\s+relief|compensatory\s+damages|punitive\s+damages|exemplary\s+damages|"
-    r"liquidated\s+damages|actual\s+damages|direct\s+damages|lost\s+profits|"
-    r"lost\s+revenue|lost\s+income|attorney\s+fees|attorneys?\s+fees\s+and\s+costs|"
-    r"civil\s+penalty|civil\s+fine|restitution\s+order|disgorgement\s+order|"
-    r"treble\s+damages|double\s+damages|enhanced\s+damages|statutory\s+damages)\b",
-    re.IGNORECASE,
-)
-
-# Low signal monetary phrases (procedural/incidental)
-LOW_SIGNAL_MONETARY_PHRASES = re.compile(
-    r"\b(?:equitable\s+relief|injunctive\s+relief|declaratory\s+relief|"
-    r"consequential\s+damages|incidental\s+damages|special\s+damages|general\s+damages|"
-    r"out-of-pocket\s+expenses|reasonable\s+expenses|necessary\s+expenses|"
-    r"litigation\s+costs|court\s+costs|expert\s+witness\s+fees|discovery\s+costs|"
-    r"trial\s+costs|appeal\s+costs|pre-judgment\s+interest|post-judgment\s+interest|"
-    r"statutory\s+interest|compound\s+interest|simple\s+interest|interest\s+rate|"
-    r"discount\s+rate|criminal\s+fine|criminal\s+penalty|forfeiture|accounting\s+order|"
-    r"minimum\s+damages|maximum\s+damages|damage\s+cap|liability\s+cap)\b",
-    re.IGNORECASE,
-)
-
-# Legacy pattern for backward compatibility
+# Enhanced monetary phrases
 MONETARY_PHRASES = re.compile(
     r"\b(?:monetary\s+relief|equitable\s+relief|injunctive\s+relief|declaratory\s+relief|"
     r"compensatory\s+damages|punitive\s+damages|exemplary\s+damages|liquidated\s+damages|"
@@ -530,12 +457,6 @@ NUMERIC_GAZETTEER = {
     "tenth": 0.1,
 }
 
-# 🚀 PERFORMANCE: Pre-compile regex patterns for numeric gazetteer
-_NUMERIC_GAZETTEER_COMPILED_PATTERNS = {
-    word: re.compile(r"\b" + re.escape(word) + r"\b")
-    for word in NUMERIC_GAZETTEER.keys()
-}
-
 # Document structure patterns
 TABLE_PATTERNS = re.compile(
     r"(?:table\s+\d+|exhibit\s+\d+|schedule\s+\d+|appendix\s+[a-z]|attachment\s+[a-z]|"
@@ -623,61 +544,7 @@ DOCUMENT_TITLES = [
     re.compile(r"\bORDER DENYING PLAINTIFF\b"),
 ]
 
-# Dismissal patterns that indicate class action dismissals (enhanced) - split into high and low signal
-# High signal dismissal patterns (definitive case endings)
-HIGH_SIGNAL_DISMISSAL_PATTERNS = [
-    re.compile(r"\bDefendants' motion to dismiss is granted\b", re.IGNORECASE),
-    re.compile(r"\bcase is hereby dismissed\b", re.IGNORECASE),
-    re.compile(r"\bcase dismissed\b", re.IGNORECASE),
-    re.compile(r"\bwith prejudice\b", re.IGNORECASE),
-    re.compile(r"\bcase terminated\b", re.IGNORECASE),
-    re.compile(r"\bAccordingly, the Court decertifies the classes\b", re.IGNORECASE),
-    re.compile(
-        r"\bDefendants' motion to decertify the classes is GRANTED\b", re.IGNORECASE
-    ),
-    re.compile(r"\bclass.*decertified\b", re.IGNORECASE),
-    re.compile(r"\bclass.*dismissed\b", re.IGNORECASE),
-    re.compile(r"\bFINAL.*DISMISS\b", re.IGNORECASE),
-    re.compile(r"\bJUDGMENT.*DISMISS\b", re.IGNORECASE),
-]
-
-# Low signal dismissal patterns (procedural/potentially reversible)
-LOW_SIGNAL_DISMISSAL_PATTERNS = [
-    re.compile(r"\bDISMISSED\b", re.IGNORECASE),
-    re.compile(r"\bwithout prejudice\b", re.IGNORECASE),
-    re.compile(r"\bterminated\b", re.IGNORECASE),
-    re.compile(r"\bclass certification.*denied\b", re.IGNORECASE),
-    re.compile(r"\bclass certification.*dismissed\b", re.IGNORECASE),
-    re.compile(r"\bCourt hereby DENIES Plaintiff's Amended Motion\b", re.IGNORECASE),
-    re.compile(
-        r"\bCourt hereby DENIES Plaintiff's Amended Motion for Class Certification\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\bTherefore, the Court declines Plaintiff's motion to certify a damages class\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\bCourt hereby DENIES Plaintiff's Motion for Class\b", re.IGNORECASE),
-    re.compile(r"\bORDER DENYING PLAINTIFF'S.*MOTION FOR CLASS\b", re.IGNORECASE),
-    re.compile(r"\bCourt.*DENIES.*Class\b", re.IGNORECASE),
-    re.compile(r"\bMotion.*DENIED\b", re.IGNORECASE),
-    re.compile(r"\bMotion.*DISMISSED\b", re.IGNORECASE),
-    re.compile(r"\bcase closed\b", re.IGNORECASE),
-    re.compile(r"\baction dismissed\b", re.IGNORECASE),
-    re.compile(r"\bsuit dismissed\b", re.IGNORECASE),
-    re.compile(r"\blawsuit dismissed\b", re.IGNORECASE),
-    re.compile(r"\bcomplaint dismissed\b", re.IGNORECASE),
-    re.compile(r"\bpetition dismissed\b", re.IGNORECASE),
-    re.compile(r"\bappeal dismissed\b", re.IGNORECASE),
-    re.compile(r"\bsettlement.*dismissed\b", re.IGNORECASE),
-    re.compile(r"\bcase.*settled.*dismissed\b", re.IGNORECASE),
-    re.compile(r"\bvoluntary dismissal\b", re.IGNORECASE),
-    re.compile(r"\bstipulated dismissal\b", re.IGNORECASE),
-    re.compile(r"\bORDER.*DISMISS\b", re.IGNORECASE),
-    re.compile(r"\bORDER.*DENY\b", re.IGNORECASE),
-]
-
-# Legacy pattern for backward compatibility
+# Dismissal patterns that indicate class action dismissals (enhanced)
 DISMISSAL_PATTERNS = [
     # Core dismissal phrases
     re.compile(r"\bDefendants' motion to dismiss is granted\b", re.IGNORECASE),
@@ -829,7 +696,7 @@ def get_case_court_type(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = fast_json_loads(line)
+                    data = json.loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -891,7 +758,6 @@ def count_document_titles(text: str, header_chars: int = 2000) -> int:
 def count_dismissal_patterns(text: str) -> int:
     """
     Count the number of dismissal patterns in the text.
-    OPTIMIZED: Early termination after finding patterns for speed.
 
     Args:
         text: Document text to search
@@ -900,13 +766,9 @@ def count_dismissal_patterns(text: str) -> int:
         int: Number of dismissal patterns found
     """
     count = 0
-    # 🚀 PERFORMANCE OPTIMIZATION - Early termination after reasonable count
     for pattern in DISMISSAL_PATTERNS:
         matches = pattern.findall(text)
         count += len(matches)
-        # Early termination: if we found dismissal patterns, we have enough signal
-        if count >= 3:  # Stop after finding sufficient dismissal evidence
-            break
     return count
 
 
@@ -960,56 +822,6 @@ def count_legal_proceedings(text: str) -> int:
 def count_monetary_phrases(text: str) -> int:
     """Count enhanced monetary phrase matches in text."""
     return len(MONETARY_PHRASES.findall(text))
-
-
-def count_high_signal_financial_terms(text: str) -> int:
-    """Count high signal financial terminology matches in text."""
-    return len(HIGH_SIGNAL_FINANCIAL_TERMS.findall(text))
-
-
-def count_low_signal_financial_terms(text: str) -> int:
-    """Count low signal financial terminology matches in text."""
-    return len(LOW_SIGNAL_FINANCIAL_TERMS.findall(text))
-
-
-def count_high_signal_settlement_terms(text: str) -> int:
-    """Count high signal settlement terminology matches in text."""
-    return len(HIGH_SIGNAL_SETTLEMENT_TERMS.findall(text))
-
-
-def count_low_signal_settlement_terms(text: str) -> int:
-    """Count low signal settlement terminology matches in text."""
-    return len(LOW_SIGNAL_SETTLEMENT_TERMS.findall(text))
-
-
-def count_high_signal_legal_proceedings(text: str) -> int:
-    """Count high signal legal proceedings matches in text."""
-    return len(HIGH_SIGNAL_LEGAL_PROCEEDINGS.findall(text))
-
-
-def count_low_signal_legal_proceedings(text: str) -> int:
-    """Count low signal legal proceedings matches in text."""
-    return len(LOW_SIGNAL_LEGAL_PROCEEDINGS.findall(text))
-
-
-def count_high_signal_monetary_phrases(text: str) -> int:
-    """Count high signal monetary phrase matches in text."""
-    return len(HIGH_SIGNAL_MONETARY_PHRASES.findall(text))
-
-
-def count_low_signal_monetary_phrases(text: str) -> int:
-    """Count low signal monetary phrase matches in text."""
-    return len(LOW_SIGNAL_MONETARY_PHRASES.findall(text))
-
-
-def count_high_signal_dismissal_patterns(text: str) -> int:
-    """Count high signal dismissal pattern matches in text."""
-    return sum(len(pattern.findall(text)) for pattern in HIGH_SIGNAL_DISMISSAL_PATTERNS)
-
-
-def count_low_signal_dismissal_patterns(text: str) -> int:
-    """Count low signal dismissal pattern matches in text."""
-    return sum(len(pattern.findall(text)) for pattern in LOW_SIGNAL_DISMISSAL_PATTERNS)
 
 
 def count_high_confidence_patterns(text: str) -> int:
@@ -1503,15 +1315,11 @@ def extract_dependency_features(text: str, nlp: Optional[Any] = None) -> int:
         return 0
 
 
-def extract_enhanced_fractions(text: str, weights=None) -> List[Dict[str, Any]]:
+def extract_enhanced_fractions(text: str) -> List[Dict[str, Any]]:
     """
     Extract enhanced fraction patterns including mixed numbers.
     Returns list of fraction matches with their computed values.
     """
-    # 🚀 CRITICAL DROPOUT FIX - Skip expensive regex if disabled
-    if weights and weights.fraction_extraction_weight == 0.0:
-        return []
-
     fractions = []
 
     # Find fraction patterns
@@ -1580,20 +1388,13 @@ def count_document_structure_features(text: str) -> int:
     return structure_count
 
 
+_NUMERIC_GAZETTEER_PATTERN = re.compile(
+    r"\b(" + "|".join(map(re.escape, NUMERIC_GAZETTEER.keys())) + r")\b"
+)
+
+
 def count_numeric_gazetteer_matches(text: str) -> int:
-    """Count matches from the comprehensive numeric gazetteer.
-
-    🚀 PERFORMANCE OPTIMIZED: Uses pre-compiled regex patterns for speed.
-    """
-    count = 0
-    text_lower = text.lower()
-
-    # Use pre-compiled patterns for much faster matching
-    for word, compiled_pattern in _NUMERIC_GAZETTEER_COMPILED_PATTERNS.items():
-        matches = compiled_pattern.findall(text_lower)
-        count += len(matches)
-
-    return count
+    return len(_NUMERIC_GAZETTEER_PATTERN.findall(text.lower()))
 
 
 def extract_sentence_boundary_context(
@@ -1821,7 +1622,7 @@ def is_case_dismissed(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = fast_json_loads(line)
+                    data = json.loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -1905,7 +1706,7 @@ def is_case_definitively_dismissed(
         with open(jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 try:
-                    data = fast_json_loads(line)
+                    data = json.loads(line)
                     text = data.get("text", "")
 
                     if definitive_pattern.search(text):
@@ -1952,7 +1753,7 @@ def has_fee_shifting(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = fast_json_loads(line)
+                    data = json.loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -1995,7 +1796,7 @@ def has_large_patent_amounts(
         with open(path, "r", encoding="utf8") as f:
             for line in f:
                 try:
-                    data = fast_json_loads(line)
+                    data = json.loads(line)
                     text = data.get("text", "")
                     if not text:
                         continue
@@ -2025,7 +1826,6 @@ def get_case_flags(
     bankruptcy_ratio_threshold: float = 0.5,
     use_weighted_dismissal_scoring: bool = True,
     dismissal_document_type_weight: float = 2.0,
-    fast_mode: bool = False,
 ) -> dict[str, bool]:
     """
     Get all flags for a case (dismissal, fee-shifting, large patent amounts, bankruptcy court).
@@ -2043,35 +1843,22 @@ def get_case_flags(
     Returns:
         dict[str, bool]: Dictionary with flag information
     """
-    # 🚀 FAST MODE - Skip expensive flag calculations during optimization
-    if fast_mode:
-        # Return minimal flags for optimization speed
-        flags = {
-            "is_dismissed": False,  # Skip expensive dismissal detection
-            "has_fee_shifting": False,  # Skip fee shifting analysis
-            "has_large_patent_amounts": False,  # Skip patent detection
-            "is_bankruptcy_court": False,  # Skip court type analysis
-        }
-    else:
-        # Full flag calculation for production use
-        flags = {
-            "is_dismissed": is_case_dismissed(
-                case_root,
-                dismissal_ratio_threshold,
-                use_weighted_dismissal_scoring,
-                dismissal_document_type_weight,
-            ),
-            "has_fee_shifting": has_fee_shifting(
-                case_root, fee_shifting_ratio_threshold
-            ),
-            "has_large_patent_amounts": has_large_patent_amounts(
-                case_root, patent_ratio_threshold
-            ),
-            "is_bankruptcy_court": get_case_court_type(
-                case_root, bankruptcy_ratio_threshold
-            )
-            == "BANKRUPTCY",
-        }
+    flags = {
+        "is_dismissed": is_case_dismissed(
+            case_root,
+            dismissal_ratio_threshold,
+            use_weighted_dismissal_scoring,
+            dismissal_document_type_weight,
+        ),
+        "has_fee_shifting": has_fee_shifting(case_root, fee_shifting_ratio_threshold),
+        "has_large_patent_amounts": has_large_patent_amounts(
+            case_root, patent_ratio_threshold
+        ),
+        "is_bankruptcy_court": get_case_court_type(
+            case_root, bankruptcy_ratio_threshold
+        )
+        == "BANKRUPTCY",
+    }
 
     return flags
 
@@ -2308,7 +2095,7 @@ def extract_spacy_amounts(
     nlp: Optional[Any],
     min_amount: float,
     context_chars: int,
-    fast_mode: bool = False,
+    fast_mode: bool = True,
 ) -> List[Dict[str, Any]]:
     """Extract amounts using spaCy EntityRuler for spelled-out and USD amounts."""
     # Skip spaCy processing entirely in fast mode for speed
@@ -2609,129 +2396,38 @@ def compute_feature_votes(context: str, weights: VotingWeights) -> int:
     """
     feature_count = 0.0
 
-    # 🚨 ULTRA-FAST MODE - Bypass ALL expensive operations if most weights are 0
-    expensive_weights = [
-        weights.numeric_gazetteer_weight,
-        weights.dependency_parsing_weight,
-        weights.fraction_extraction_weight,
-        weights.document_structure_weight,
-        weights.table_detection_weight,
-        weights.sentence_boundary_weight,
-        weights.paragraph_boundary_weight,
-    ]
+    # Original features
+    proximity_matches = PROXIMITY_PATTERN.findall(context)
+    feature_count += len(proximity_matches) * weights.proximity_pattern_weight
 
-    if all(w == 0.0 for w in expensive_weights):
-        # 🚀 EMERGENCY SPEED MODE: Only count basic patterns
-        feature_count = 0
+    judgment_matches = JUDGMENT_VERBS.findall(context)
+    feature_count += len(judgment_matches) * weights.judgment_verbs_weight
 
-        # Count basic monetary amounts (fastest possible)
-        basic_amount_matches = len(re.findall(r"\$[\d,]+", context))
-        if basic_amount_matches > 0:
-            feature_count += (
-                basic_amount_matches * 10.0
-            )  # High weight for actual amounts
+    # New enhanced features
+    financial_count = count_financial_terms(context)
+    feature_count += financial_count * weights.financial_terms_weight
 
-        # Quick settlement terms
-        if "settlement" in context.lower():
-            feature_count += 5.0
-        if "damages" in context.lower():
-            feature_count += 3.0
+    settlement_count = count_settlement_terms(context)
+    feature_count += settlement_count * weights.settlement_terms_weight
 
-        return int(feature_count)
+    legal_proceedings_count = count_legal_proceedings(context)
+    feature_count += legal_proceedings_count * weights.legal_proceedings_weight
 
-    # 🚀 CRITICAL FIX - Original features with DROPOUT protection
-    if weights.proximity_pattern_weight > 0.0:
-        proximity_matches = PROXIMITY_PATTERN.findall(context)
-        feature_count += len(proximity_matches) * weights.proximity_pattern_weight
+    monetary_phrases_count = count_monetary_phrases(context)
+    feature_count += monetary_phrases_count * weights.monetary_phrases_weight
 
-    if weights.judgment_verbs_weight > 0.0:
-        judgment_matches = JUDGMENT_VERBS.findall(context)
-        feature_count += len(judgment_matches) * weights.judgment_verbs_weight
+    document_structure_count = count_document_structure_features(context)
+    feature_count += document_structure_count * weights.document_structure_weight
 
-    # 🚀 ULTRA-FAST DROPOUT OPTIMIZATION - Skip expensive regex when weight = 0
-    # New enhanced features with high/low signal separation
-    if weights.financial_terms_weight > 0.0:
-        financial_count = count_financial_terms(context)
-        feature_count += financial_count * weights.financial_terms_weight
+    numeric_gazetteer_count = count_numeric_gazetteer_matches(context)
+    feature_count += numeric_gazetteer_count * weights.numeric_gazetteer_weight
 
-    # High/Low signal financial terms
-    if weights.high_signal_financial_weight > 0.0:
-        high_signal_financial_count = count_high_signal_financial_terms(context)
-        feature_count += (
-            high_signal_financial_count * weights.high_signal_financial_weight
-        )
+    # Add confidence boost features
+    high_confidence_count = count_high_confidence_patterns(context)
+    feature_count += high_confidence_count * weights.high_confidence_patterns_weight
 
-    if weights.low_signal_financial_weight > 0.0:
-        low_signal_financial_count = count_low_signal_financial_terms(context)
-        feature_count += (
-            low_signal_financial_count * weights.low_signal_financial_weight
-        )
-
-    if weights.settlement_terms_weight > 0.0:
-        settlement_count = count_settlement_terms(context)
-        feature_count += settlement_count * weights.settlement_terms_weight
-
-    # High/Low signal settlement terms
-    if weights.high_signal_settlement_weight > 0.0:
-        high_signal_settlement_count = count_high_signal_settlement_terms(context)
-        feature_count += (
-            high_signal_settlement_count * weights.high_signal_settlement_weight
-        )
-
-    if weights.low_signal_settlement_weight > 0.0:
-        low_signal_settlement_count = count_low_signal_settlement_terms(context)
-        feature_count += (
-            low_signal_settlement_count * weights.low_signal_settlement_weight
-        )
-
-    if weights.legal_proceedings_weight > 0.0:
-        legal_proceedings_count = count_legal_proceedings(context)
-        feature_count += legal_proceedings_count * weights.legal_proceedings_weight
-
-    # High/Low signal legal proceedings (skip expensive regex if weight = 0)
-    if weights.high_signal_financial_weight > 0.0:
-        high_signal_legal_count = count_high_signal_legal_proceedings(context)
-        feature_count += high_signal_legal_count * weights.high_signal_financial_weight
-
-    if weights.low_signal_financial_weight > 0.0:
-        low_signal_legal_count = count_low_signal_legal_proceedings(context)
-        feature_count += low_signal_legal_count * weights.low_signal_financial_weight
-
-    if weights.monetary_phrases_weight > 0.0:
-        monetary_phrases_count = count_monetary_phrases(context)
-        feature_count += monetary_phrases_count * weights.monetary_phrases_weight
-
-    # High/Low signal monetary phrases (skip expensive regex if weight = 0)
-    if weights.high_signal_settlement_weight > 0.0:
-        high_signal_monetary_count = count_high_signal_monetary_phrases(context)
-        feature_count += (
-            high_signal_monetary_count * weights.high_signal_settlement_weight
-        )
-
-    if weights.low_signal_settlement_weight > 0.0:
-        low_signal_monetary_count = count_low_signal_monetary_phrases(context)
-        feature_count += (
-            low_signal_monetary_count * weights.low_signal_settlement_weight
-        )
-
-    if weights.document_structure_weight > 0.0:
-        document_structure_count = count_document_structure_features(context)
-        feature_count += document_structure_count * weights.document_structure_weight
-
-    if weights.numeric_gazetteer_weight > 0.0:
-        numeric_gazetteer_count = count_numeric_gazetteer_matches(context)
-        feature_count += numeric_gazetteer_count * weights.numeric_gazetteer_weight
-
-    # 🚀 CRITICAL FIX - Add confidence boost features with DROPOUT protection
-    if weights.high_confidence_patterns_weight > 0.0:
-        high_confidence_count = count_high_confidence_patterns(context)
-        feature_count += high_confidence_count * weights.high_confidence_patterns_weight
-
-    if weights.amount_adjacent_keywords_weight > 0.0:
-        adjacent_keywords_count = count_amount_adjacent_keywords(context)
-        feature_count += (
-            adjacent_keywords_count * weights.amount_adjacent_keywords_weight
-        )
+    adjacent_keywords_count = count_amount_adjacent_keywords(context)
+    feature_count += adjacent_keywords_count * weights.amount_adjacent_keywords_weight
 
     # Add overall confidence boost score
     confidence_boost = compute_confidence_boost_score(context)
@@ -2880,9 +2576,9 @@ def compute_enhanced_feature_votes_with_titles(
         )
         votes += dependency_votes
 
-    # Add enhanced fraction extraction features - with DROPOUT support
+    # Add enhanced fraction extraction features
     if full_text and match_start >= 0 and match_end > match_start:
-        fractions = extract_enhanced_fractions(context, weights)
+        fractions = extract_enhanced_fractions(context)
         fraction_votes = len(fractions) * weights.fraction_extraction_weight
         votes += fraction_votes
 
@@ -2898,13 +2594,10 @@ def compute_enhanced_feature_votes_with_titles(
         )
         votes += implied_total_votes
 
-        # 🚀 CRITICAL FIX - Add boundary-aware context features with DROPOUT protection
-        if weights.sentence_boundary_weight > 0.0:
-            sentence_context = extract_sentence_boundary_context(
-                full_text, match_start, match_end
-            )
-        else:
-            sentence_context = context  # Skip expensive sentence boundary extraction
+        # Add boundary-aware context features
+        sentence_context = extract_sentence_boundary_context(
+            full_text, match_start, match_end
+        )
         if len(sentence_context) > len(
             context
         ):  # If sentence boundary provides more context
@@ -2915,13 +2608,9 @@ def compute_enhanced_feature_votes_with_titles(
             )
             votes += sentence_votes
 
-        # 🚀 CRITICAL FIX - Paragraph boundary context with DROPOUT protection
-        if weights.paragraph_boundary_weight > 0.0:
-            paragraph_context = extract_paragraph_boundary_context(
-                full_text, match_start, match_end
-            )
-        else:
-            paragraph_context = sentence_context  # Skip expensive paragraph extraction
+        paragraph_context = extract_paragraph_boundary_context(
+            full_text, match_start, match_end
+        )
         if len(paragraph_context) > len(
             sentence_context
         ):  # If paragraph boundary provides even more context
@@ -3110,7 +2799,7 @@ def apply_csv_labels_to_jsonl(csv_path, jsonl_input_path, jsonl_output_path):
                 data["annotation_notes"] = annotation["notes"]
                 applied_count += 1
 
-            outfile.write(json.dumps(data) + "\n")
+            outfile.write(json.dumps(data).decode() + "\n")
 
     print(f"✓ Applied {applied_count} annotations to {jsonl_output_path}")
 
@@ -3498,6 +3187,30 @@ def parse_args():
         default=0.5,
         help="Threshold for docket position voting (0.5 = latter half of docket gets vote)",
     )
+    # Disable flags for pipeline stages
+    p.add_argument(
+        "--disable-spacy",
+        action="store_true",
+        help="Turn off all spaCy-based extraction",
+    )
+    p.add_argument(
+        "--disable-spelled",
+        action="store_true",
+        help="Turn off spelled-out-number extraction",
+    )
+    p.add_argument(
+        "--disable-usd", action="store_true", help="Turn off USD-prefix extraction"
+    )
+    p.add_argument(
+        "--disable-calcs",
+        action="store_true",
+        help="Turn off any calculation-based extraction (fractions, sums, etc.)",
+    )
+    p.add_argument(
+        "--disable-regex",
+        action="store_true",
+        help="Turn off the standard AMOUNT_REGEX pass",
+    )
     return p.parse_args()
 
 
@@ -3513,6 +3226,11 @@ def main(
     apply_csv_labels: Optional[str] = None,
     case_position_threshold: float = 0.5,
     docket_position_threshold: float = 0.5,
+    disable_spacy: bool = False,
+    disable_spelled: bool = False,
+    disable_usd: bool = False,
+    disable_calcs: bool = False,
+    disable_regex: bool = False,
 ):
     # Handle CSV label application mode
     if apply_csv_labels:
@@ -3548,110 +3266,19 @@ def main(
 
             with open(path, encoding="utf-8") as in_f:
                 for line in in_f:
-                    text = fast_json_loads(line).get("text", "")
+                    text = json.loads(line).get("text", "")
 
                     # Procedural-doc filter: Skip any Stage-1 file that contains no money pattern and no judgment verb
                     if not (AMOUNT_REGEX.search(text) or JUDGMENT_VERBS.search(text)):
                         continue  # drop as procedural
 
                     # Process spaCy EntityRuler amounts (new - highest priority)
-                    spacy_candidates = extract_spacy_amounts(
-                        text, nlp, min_amount, context_chars
-                    )
-                    for candidate in spacy_candidates:
-                        ctx = candidate["context"]
-                        # Enhanced filtering: require minimum feature votes
-                        if passes_enhanced_feature_filter_with_titles(
-                            ctx,
-                            path,
-                            min_features,
-                            case_position_threshold,
-                            docket_position_threshold,
-                        ):
-                            sim = compute_simhash(ctx)
-                            if sim not in seen:
-                                seen.add(sim)
-                                file_hit = True
-                                case_with_hits.add(case_id)
-                                candidate_data = {
-                                    "file": os.path.basename(path),
-                                    "amount": candidate["amount"],
-                                    "context": ctx,
-                                    "simhash": sim,
-                                    "type": candidate["type"],
-                                    "case_id": case_id,
-                                }
-                                out_f.write(json.dumps(candidate_data) + "\n")
-                                if csv_output:
-                                    candidates_for_csv.append(candidate_data)
-
-                    # Process fraction-based implied amounts (new)
-                    try:
-                        implied_total = extract_candidate_from_fraction(text)
-                        if implied_total >= min_amount:
-                            # Create context around the fraction pattern
-                            fraction_patterns = [
-                                "one-third",
-                                "one-half",
-                                "one-quarter",
-                                "two-thirds",
-                                "three-quarters",
-                            ]
-                            for pattern in fraction_patterns:
-                                if pattern in text.lower():
-                                    # Find the pattern in the text
-                                    pattern_match = re.search(
-                                        pattern, text, re.IGNORECASE
-                                    )
-                                    if pattern_match:
-                                        start, end = pattern_match.span()
-                                        ctx = text[
-                                            max(0, start - context_chars) : end
-                                            + context_chars
-                                        ].replace("\n", " ")
-
-                                        # Enhanced filtering: require minimum feature votes
-                                        if passes_enhanced_feature_filter_with_titles(
-                                            ctx,
-                                            path,
-                                            min_features,
-                                            case_position_threshold,
-                                            docket_position_threshold,
-                                        ):
-                                            sim = compute_simhash(ctx)
-                                            if sim not in seen:
-                                                seen.add(sim)
-                                                file_hit = True
-                                                case_with_hits.add(case_id)
-                                                candidate_data = {
-                                                    "file": os.path.basename(path),
-                                                    "amount": f"${implied_total:,}",
-                                                    "context": ctx,
-                                                    "simhash": sim,
-                                                    "type": "fraction_implied",
-                                                    "case_id": case_id,
-                                                }
-                                                out_f.write(
-                                                    json.dumps(candidate_data) + "\n"
-                                                )
-                                                if csv_output:
-                                                    candidates_for_csv.append(
-                                                        candidate_data
-                                                    )
-                                                break  # Only process the first fraction pattern found
-                    except (ValueError, Exception):
-                        # Skip if fraction extraction fails
-                        pass
-
-                    # Process enhanced spelled-out amounts (new)
-                    for m in SPELLED_OUT_AMOUNTS.finditer(text):
-                        val = extract_spelled_out_amount(text, m)
-                        if val >= min_amount:
-                            start, end = m.span()
-                            pre = text[max(0, start - context_chars) : start]
-                            post = text[end : end + context_chars]
-                            ctx = (pre + m.group(0) + post).replace("\n", " ")
-
+                    if not disable_spacy:
+                        spacy_candidates = extract_spacy_amounts(
+                            text, nlp, min_amount, context_chars
+                        )
+                        for candidate in spacy_candidates:
+                            ctx = candidate["context"]
                             # Enhanced filtering: require minimum feature votes
                             if passes_enhanced_feature_filter_with_titles(
                                 ctx,
@@ -3667,103 +3294,206 @@ def main(
                                     case_with_hits.add(case_id)
                                     candidate_data = {
                                         "file": os.path.basename(path),
-                                        "amount": m.group(0),
+                                        "amount": candidate["amount"],
                                         "context": ctx,
                                         "simhash": sim,
-                                        "type": "spelled_out",
+                                        "type": candidate["type"],
                                         "case_id": case_id,
                                     }
-                                    out_f.write(json.dumps(candidate_data) + "\n")
+                                    out_f.write(
+                                        json.dumps(candidate_data).decode() + "\n"
+                                    )
                                     if csv_output:
                                         candidates_for_csv.append(candidate_data)
 
+                    # Process fraction-based implied amounts (new)
+                    if not disable_calcs:
+                        try:
+                            implied_total = extract_candidate_from_fraction(text)
+                            if implied_total >= min_amount:
+                                # Create context around the fraction pattern
+                                fraction_patterns = [
+                                    "one-third",
+                                    "one-half",
+                                    "one-quarter",
+                                    "two-thirds",
+                                    "three-quarters",
+                                ]
+                                for pattern in fraction_patterns:
+                                    if pattern in text.lower():
+                                        # Find the pattern in the text
+                                        pattern_match = re.search(
+                                            pattern, text, re.IGNORECASE
+                                        )
+                                        if pattern_match:
+                                            start, end = pattern_match.span()
+                                            ctx = text[
+                                                max(0, start - context_chars) : end
+                                                + context_chars
+                                            ].replace("\n", " ")
+
+                                            # Enhanced filtering: require minimum feature votes
+                                            if passes_enhanced_feature_filter_with_titles(
+                                                ctx,
+                                                path,
+                                                min_features,
+                                                case_position_threshold,
+                                                docket_position_threshold,
+                                            ):
+                                                sim = compute_simhash(ctx)
+                                                if sim not in seen:
+                                                    seen.add(sim)
+                                                    file_hit = True
+                                                    case_with_hits.add(case_id)
+                                                    candidate_data = {
+                                                        "file": os.path.basename(path),
+                                                        "amount": f"${implied_total:,}",
+                                                        "context": ctx,
+                                                        "simhash": sim,
+                                                        "type": "fraction_implied",
+                                                        "case_id": case_id,
+                                                    }
+                                                    out_f.write(
+                                                        json.dumps(
+                                                            candidate_data
+                                                        ).decode()
+                                                        + "\n"
+                                                    )
+                                                    if csv_output:
+                                                        candidates_for_csv.append(
+                                                            candidate_data
+                                                        )
+                                                    break  # Only process the first fraction pattern found
+                        except (ValueError, Exception):
+                            # Skip if fraction extraction fails
+                            pass
+
+                    # Process enhanced spelled-out amounts (new)
+                    if not disable_spelled:
+                        for m in SPELLED_OUT_AMOUNTS.finditer(text):
+                            val = extract_spelled_out_amount(text, m)
+                            if val >= min_amount:
+                                start, end = m.span()
+                                pre = text[max(0, start - context_chars) : start]
+                                post = text[end : end + context_chars]
+                                ctx = (pre + m.group(0) + post).replace("\n", " ")
+
+                                # Enhanced filtering: require minimum feature votes
+                                if passes_enhanced_feature_filter_with_titles(
+                                    ctx,
+                                    path,
+                                    min_features,
+                                    case_position_threshold,
+                                    docket_position_threshold,
+                                ):
+                                    sim = compute_simhash(ctx)
+                                    if sim not in seen:
+                                        seen.add(sim)
+                                        file_hit = True
+                                        case_with_hits.add(case_id)
+                                        candidate_data = {
+                                            "file": os.path.basename(path),
+                                            "amount": m.group(0),
+                                            "context": ctx,
+                                            "simhash": sim,
+                                            "type": "spelled_out",
+                                            "case_id": case_id,
+                                        }
+                                        out_f.write(
+                                            json.dumps(candidate_data).decode() + "\n"
+                                        )
+                                        if csv_output:
+                                            candidates_for_csv.append(candidate_data)
+
                     # Process enhanced USD amounts (new)
-                    for m in USD_AMOUNTS.finditer(text):
-                        val = extract_usd_amount(text, m)
-                        if val >= min_amount:
+                    if not disable_usd:
+                        for m in USD_AMOUNTS.finditer(text):
+                            val = extract_usd_amount(text, m)
+                            if val >= min_amount:
+                                start, end = m.span()
+                                pre = text[max(0, start - context_chars) : start]
+                                post = text[end : end + context_chars]
+                                ctx = (pre + m.group(0) + post).replace("\n", " ")
+
+                                # Enhanced filtering: require minimum feature votes
+                                if passes_enhanced_feature_filter_with_titles(
+                                    ctx,
+                                    path,
+                                    min_features,
+                                    case_position_threshold,
+                                    docket_position_threshold,
+                                ):
+                                    sim = compute_simhash(ctx)
+                                    if sim not in seen:
+                                        seen.add(sim)
+                                        file_hit = True
+                                        case_with_hits.add(case_id)
+                                        out_f.write(
+                                            json.dumps(
+                                                {
+                                                    "file": os.path.basename(path),
+                                                    "amount": m.group(0),
+                                                    "context": ctx,
+                                                    "simhash": sim,
+                                                    "type": "usd_prefix",
+                                                }
+                                            ).decode()
+                                            + "\n"
+                                        )
+
+                    # Continue with existing regex extraction (enhanced with judgment-verb filtering)
+                    if not disable_regex:
+                        for m in AMOUNT_REGEX.finditer(text):
+                            amt = m.group(0)
+                            norm = amt.lower().replace(",", "").replace("$", "").strip()
+
+                            # numeric threshold
+                            if "million" not in norm and "billion" not in norm:
+                                try:
+                                    search_result = re.search(r"[0-9.]+", norm)
+                                    if search_result is None:
+                                        continue
+                                    val = float(search_result.group(0))
+                                    if val < min_amount:
+                                        continue
+                                except Exception:
+                                    continue
+
                             start, end = m.span()
                             pre = text[max(0, start - context_chars) : start]
                             post = text[end : end + context_chars]
-                            ctx = (pre + m.group(0) + post).replace("\n", " ")
+                            ctx = (pre + amt + post).replace("\n", " ")
 
                             # Enhanced filtering: require minimum feature votes
-                            if passes_enhanced_feature_filter_with_titles(
+                            if not passes_enhanced_feature_filter_with_titles(
                                 ctx,
                                 path,
                                 min_features,
                                 case_position_threshold,
                                 docket_position_threshold,
                             ):
-                                sim = compute_simhash(ctx)
-                                if sim not in seen:
-                                    seen.add(sim)
-                                    file_hit = True
-                                    case_with_hits.add(case_id)
-                                    out_f.write(
-                                        json.dumps(
-                                            {
-                                                "file": os.path.basename(path),
-                                                "amount": m.group(0),
-                                                "context": ctx,
-                                                "simhash": sim,
-                                                "type": "usd_prefix",
-                                            }
-                                        )
-                                        + "\n"
-                                    )
-
-                    # Continue with existing regex extraction (enhanced with judgment-verb filtering)
-                    for m in AMOUNT_REGEX.finditer(text):
-                        amt = m.group(0)
-                        norm = amt.lower().replace(",", "").replace("$", "").strip()
-
-                        # numeric threshold
-                        if "million" not in norm and "billion" not in norm:
-                            try:
-                                search_result = re.search(r"[0-9.]+", norm)
-                                if search_result is None:
-                                    continue
-                                val = float(search_result.group(0))
-                                if val < min_amount:
-                                    continue
-                            except Exception:
                                 continue
 
-                        start, end = m.span()
-                        pre = text[max(0, start - context_chars) : start]
-                        post = text[end : end + context_chars]
-                        ctx = (pre + amt + post).replace("\n", " ")
+                            sim = compute_simhash(ctx)
+                            if sim in seen:
+                                continue
 
-                        # Enhanced filtering: require minimum feature votes
-                        if not passes_enhanced_feature_filter_with_titles(
-                            ctx,
-                            path,
-                            min_features,
-                            case_position_threshold,
-                            docket_position_threshold,
-                        ):
-                            continue
+                            seen.add(sim)
+                            file_hit = True
+                            case_with_hits.add(case_id)
 
-                        sim = compute_simhash(ctx)
-                        if sim in seen:
-                            continue
-
-                        seen.add(sim)
-                        file_hit = True
-                        case_with_hits.add(case_id)
-
-                        out_f.write(
-                            json.dumps(
-                                {
-                                    "file": os.path.basename(path),
-                                    "amount": amt,
-                                    "context": ctx,
-                                    "simhash": sim,
-                                    "type": "standard",
-                                }
+                            out_f.write(
+                                json.dumps(
+                                    {
+                                        "file": os.path.basename(path),
+                                        "amount": amt,
+                                        "context": ctx,
+                                        "simhash": sim,
+                                        "type": "standard",
+                                    }
+                                ).decode()
+                                + "\n"
                             )
-                            + "\n"
-                        )
 
             if file_hit:
                 files_with_hits += 1
@@ -3813,4 +3543,9 @@ if __name__ == "__main__":
         args.apply_csv_labels,
         args.case_position_threshold,
         args.docket_position_threshold,
+        args.disable_spacy,
+        args.disable_spelled,
+        args.disable_usd,
+        args.disable_calcs,
+        args.disable_regex,
     )

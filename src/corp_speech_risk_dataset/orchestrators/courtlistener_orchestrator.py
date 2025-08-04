@@ -121,6 +121,13 @@ class CourtListenerOrchestrator:
             json.dump(data, f, indent=2)
         logger.info(f"Saved search results to {search_path}")
         for dk in data.get("results", []):
+            # Skip if already fetched
+            dk_id = dk["docket_id"]
+            slug = f"{dk.get('docketNumber')}_{dk.get('court_id')}"
+            case_dir = self.outdir / slug
+            if case_dir.exists():
+                logger.info(f"Skipping existing case {slug}")
+                continue
             self._hydrate_docket(dk)
 
     async def _search_and_hydrate_async(self, query: str, search_dir: Path):
@@ -132,10 +139,17 @@ class CourtListenerOrchestrator:
         with open(search_path, "w") as f:
             json.dump(data, f, indent=2)
         logger.info(f"Saved search results to {search_path}")
-        # Hydrate dockets in parallel
-        await asyncio.gather(
-            *(self._hydrate_docket_async(dk) for dk in data.get("results", []))
-        )
+        # Fetch each docket, skipping ones already on disk
+        tasks = []
+        for dk in data.get("results", []):
+            slug = f"{dk.get('docketNumber')}_{dk.get('court_id')}"
+            case_dir = self.outdir / slug
+            if case_dir.exists():
+                logger.info(f"Skipping existing case {slug}")
+                continue
+            tasks.append(self._hydrate_docket_async(dk))
+        if tasks:
+            await asyncio.gather(*tasks)
 
     def _hydrate_docket(self, dk: dict):
         """

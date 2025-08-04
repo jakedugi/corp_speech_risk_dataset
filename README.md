@@ -450,4 +450,25 @@ python -m coral_ordinal.cli --data path/to/data.jsonl --buckets Low Medium High 
 
 
 
+
+
+(corp_speech_risk_dataset)  corp_speech_risk_dataset % uv run python src/corp_speech_risk_dataset/case_outcome/final_evaluate.py \
+    --annotations data/gold_standard/case_outcome_amounts_hand_annotated.csv \
+    --extracted-root data/extracted/courtlistener
+
+uv run python src/corp_speech_risk_dataset/case_outcome/case_outcome_imputer.py \
+  --root data/tokenized/courtlistener_v5_final \
+  --stage1-root data/extracted/courtlistener \
+  --outdir data/outcomes/courtlistener_v1 \
+  --mode auto \
+  --context-chars 561 \
+  --min-amount 29309.97970771781 \
+  --min-features 15 \
+  --case-position-threshold 0.5423630428751168 \
+  --docket-position-threshold 0.7947200838693315 \
+  --dismissal-ratio-threshold 200.0 \
+  --bankruptcy-ratio-threshold 6e22 \
+  --patent-ratio-threshold 6e22 \
+
+
 """

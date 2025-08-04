@@ -600,15 +600,27 @@ def run_dismissal_optimization(df, tokenized_root, extracted_root, n_calls=30):
 
     space = [
         Real(
-            0.4, 0.8, name="dismissal_ratio_threshold"
-        ),  # Much more restrictive: need 40-80% of docs
+            100.0, 200.0, name="dismissal_ratio_threshold"
+        ),  # 1.95 - 2.5 is meaningful range maybe 1.7 to 3.0?
         Real(
-            0.6, 0.9, name="strict_dismissal_threshold"
-        ),  # Much more restrictive: need 60-90% confidence
-        Real(1.0, 5.0, name="dismissal_document_type_weight"),
-        Real(1.0, 5.0, name="strict_dismissal_document_type_weight"),
-        Real(0.3, 0.9, name="bankruptcy_ratio_threshold"),
-        Real(20.0, 100.0, name="patent_ratio_threshold"),  # Back to higher range
+            100,
+            200,
+            name="strict_dismissal_threshold",  # 10-40% weighted confidence (allows for mixed signals)
+        ),  # 0.1 - 0.5 is meaningful range, not working
+        Real(
+            0.0, 0.000000000000000001, name="dismissal_document_type_weight"
+        ),  # Document type weighting
+        Real(
+            0.0, 0.000000000000000001, name="strict_dismissal_document_type_weight"
+        ),  # Document type weighting
+        Real(
+            600000000000000.0, 60000000000000000000.0, name="bankruptcy_ratio_threshold"
+        ),  # Bankruptcy court filtering
+        Real(
+            6000000000000000000.0,
+            60000000000000000000000.0,
+            name="patent_ratio_threshold",
+        ),  # 50-150 patent mentions per doc (very high bar)
     ]
 
     def objective(dismissal_params):

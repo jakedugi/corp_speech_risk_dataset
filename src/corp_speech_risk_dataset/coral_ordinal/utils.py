@@ -8,12 +8,13 @@ from pathlib import Path
 
 
 def choose_device(requested: str | None):
+    """Choose device with priority: GPU (CUDA) > Apple Silicon (MPS) > CPU."""
     if requested:
         return torch.device(requested)
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
     if torch.cuda.is_available():
         return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
     return torch.device("cpu")
 
 

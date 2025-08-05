@@ -12,7 +12,7 @@ import csv
 # ---- 1. Raw templates (exactly what you had) -------------------------------
 STATUTE_QUERIES: dict[str, str] = {
     "FTC Section 5 (9th Cir.)": """
-    court_id:cadc
+    court_id:ca2
     AND
     (
             "FTC Act"

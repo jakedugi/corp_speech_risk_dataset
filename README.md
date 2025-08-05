@@ -471,4 +471,21 @@ uv run python src/corp_speech_risk_dataset/case_outcome/case_outcome_imputer.py 
   --patent-ratio-threshold 6e22 \
 
 
+# Run complete analysis
+uv run python scripts/outcome_summary_statistics.py \
+    --outcomes-dir data/outcomes/courtlistener_v1 \
+    --max-threshold 5000000000.00 \
+    --export-csv data/outcomes/detailed_export.csv
+
+# Generate visualizations
+uv run python scripts/outcome_distribution_plots.py \
+    --outcomes-dir data/outcomes/courtlistener_v1 \
+    --output-dir plots/outcomes \
+    --max-threshold 5000000000.00
+
+
+uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes/courtlistener_v1/*/doc_*_text_stage9.jsonl" --output similarity_by_outcomes.html --max-threshold 15500000000 --exclude-speakers "Unknown,Court,FTC,Fed,Plaintiff,State,Commission,Congress,Circuit,FDA"
+
+
+uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes/courtlistener_v1/*/doc_*_text_stage9.jsonl" --output similarity_by_outcomes_no_missing.html --max-threshold 15500000000 --exclude-speakers "Unknown,Court,FTC,Fed,Plaintiff,State,Commission,Congress,Circuit,FDA" --exclude-missing
 """

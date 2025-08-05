@@ -301,6 +301,7 @@ def train_model(
     val_loader: DataLoader,
     config: Config,
     tracker: TrainingTracker,
+    input_dim: int,
 ) -> torch.nn.Module:
     """Train the CORAL model with progress tracking."""
     device = choose_device(config.device)
@@ -361,11 +362,13 @@ def train_model(
         val_score = val_metrics["exact"].value
         if val_score > best_val_score:
             best_val_score = val_score
-            save_checkpoint(model, tracker.output_dir / "best_model.pt", config)
+            save_checkpoint(
+                model, tracker.output_dir / "best_model.pt", config, input_dim
+            )
             logger.info(f"New best model saved (exact accuracy: {val_score:.3f})")
 
     # Save final model
-    save_checkpoint(model, tracker.output_dir / "final_model.pt", config)
+    save_checkpoint(model, tracker.output_dir / "final_model.pt", config, input_dim)
 
     return model
 
@@ -460,7 +463,7 @@ def main():
 
     # Create model
     model = CORALMLP(
-        input_dim=input_dim,
+        in_dim=input_dim,
         num_classes=len(args.buckets),
         hidden_dims=tuple(args.hidden_dims),
         dropout=args.dropout,
@@ -471,7 +474,9 @@ def main():
 
     # Train model
     logger.info("Starting training...")
-    trained_model = train_model(model, train_loader, val_loader, config, tracker)
+    trained_model = train_model(
+        model, train_loader, val_loader, config, tracker, input_dim
+    )
 
     # Save training history and plots
     tracker.save_history()
@@ -483,7 +488,10 @@ def main():
 
     # Load best model for testing
     best_model = CORALMLP(
-        input_dim, len(args.buckets), tuple(args.hidden_dims), args.dropout
+        in_dim=input_dim,
+        num_classes=len(args.buckets),
+        hidden_dims=tuple(args.hidden_dims),
+        dropout=args.dropout,
     )
     checkpoint = torch.load(output_dir / "best_model.pt", map_location=device)
     best_model.load_state_dict(checkpoint["model_state_dict"])

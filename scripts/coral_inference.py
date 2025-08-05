@@ -133,7 +133,7 @@ def load_model(model_path: str, device: torch.device) -> Tuple[CORALMLP, Config]
         raise ValueError("Model checkpoint missing input_dim information")
 
     model = CORALMLP(
-        input_dim=input_dim,
+        in_dim=input_dim,
         num_classes=len(config.buckets),
         hidden_dims=config.hidden_dims,
         dropout=config.dropout,

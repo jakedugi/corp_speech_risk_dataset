@@ -25,22 +25,86 @@ class CORALHead(nn.Module):
 
 
 class CORALMLP(nn.Module):
+    """Multi-layer perceptron with CORAL ordinal head and residual connections."""
+
     def __init__(
-        self, in_dim: int, num_classes: int, hidden_dims=(512, 128), dropout=0.1
+        self, in_dim: int, num_classes: int, hidden_dims=(768, 512, 256), dropout=0.1
     ):
         super().__init__()
-        layers = []
-        prev = in_dim
-        for h in hidden_dims:
-            layers += [nn.Linear(prev, h), nn.ReLU(), nn.Dropout(dropout)]
+
+        # Optional input normalization
+        self.input_bn = nn.BatchNorm1d(in_dim)
+
+        # Input projection for first residual connection
+        self.input_proj = (
+            nn.Linear(in_dim, hidden_dims[0])
+            if in_dim != hidden_dims[0]
+            else nn.Identity()
+        )
+
+        # Initialize input projection properly
+        if in_dim != hidden_dims[0]:
+            nn.init.kaiming_normal_(
+                self.input_proj.weight, mode="fan_out", nonlinearity="relu"
+            )
+            nn.init.constant_(self.input_proj.bias, 0)
+
+        # Build residual blocks
+        self.blocks = nn.ModuleList()
+        self.res_projs = nn.ModuleList()
+
+        prev = hidden_dims[0]
+        for i, h in enumerate(hidden_dims):
+            # Create residual block: [Linear, BatchNorm, ReLU, Dropout]
+            linear = nn.Linear(prev, h)
+            nn.init.kaiming_normal_(linear.weight, mode="fan_out", nonlinearity="relu")
+            nn.init.constant_(linear.bias, 0)
+
+            block = nn.Sequential(
+                linear,
+                nn.BatchNorm1d(h),
+                nn.ReLU(),
+                nn.Dropout(dropout * (i + 1)),  # Progressive dropout
+            )
+            self.blocks.append(block)
+
+            # Projection for next residual connection if dimensions differ
+            next_dim = hidden_dims[i + 1] if i + 1 < len(hidden_dims) else h
+            if h != next_dim:
+                res_proj = nn.Linear(h, next_dim)
+                nn.init.kaiming_normal_(
+                    res_proj.weight, mode="fan_out", nonlinearity="relu"
+                )
+                nn.init.constant_(res_proj.bias, 0)
+                self.res_projs.append(res_proj)
+            else:
+                self.res_projs.append(nn.Identity())
+
             prev = h
-        self.backbone = nn.Sequential(*layers) if layers else nn.Identity()
+
         self.head = CORALHead(prev, num_classes)
         self.num_classes = num_classes
 
     def forward(self, x):
-        feats = self.backbone(x)
-        logits = self.head(feats)  # (B, K-1)
+        # Input normalization and projection
+        x = self.input_bn(x)
+        out = self.input_proj(x)
+
+        # Apply residual blocks
+        for i, block in enumerate(self.blocks):
+            residual = block(out)
+
+            # Apply residual connection
+            if i == 0:
+                # First block: direct residual
+                out = out + residual
+            else:
+                # Subsequent blocks: project previous output if needed
+                projected_out = self.res_projs[i - 1](out)
+                out = projected_out + residual
+
+        # Final CORAL head
+        logits = self.head(out)  # (B, K-1)
         return logits
 
     @torch.no_grad()

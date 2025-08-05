@@ -28,9 +28,11 @@ import time
 from typing import Dict, List, Tuple, Any
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import OneCycleLR
 from torch.cuda.amp import autocast, GradScaler
+from sklearn.model_selection import StratifiedShuffleSplit
 from loguru import logger
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -42,7 +44,10 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 from corp_speech_risk_dataset.coral_ordinal.config import Config
 from corp_speech_risk_dataset.coral_ordinal.model import CORALMLP
-from corp_speech_risk_dataset.coral_ordinal.losses import coral_loss
+from corp_speech_risk_dataset.coral_ordinal.losses import (
+    coral_loss,
+    coral_threshold_prevalences,
+)
 from corp_speech_risk_dataset.coral_ordinal.metrics import compute_metrics
 from corp_speech_risk_dataset.coral_ordinal.utils import (
     set_seed,
@@ -215,26 +220,54 @@ def create_datasets(
     test_split: float,
     seed: int,
 ) -> Tuple[CORALDataset, CORALDataset, CORALDataset]:
-    """Create train/validation/test datasets."""
-    dataset = CORALDataset(data, buckets)
+    """Create train/validation/test datasets with stratified splits."""
+    # Use stratified splits to preserve bucket distribution
+    y = np.array([buckets.index(d["bucket"]) for d in data])
 
-    # Calculate split sizes
-    total_size = len(dataset)
-    test_size = int(test_split * total_size)
-    val_size = int(val_split * total_size)
-    train_size = total_size - val_size - test_size
+    # First split: train+val vs test
+    sss = StratifiedShuffleSplit(n_splits=1, test_size=test_split, random_state=seed)
+    train_val_idx, test_idx = next(sss.split(np.zeros_like(y), y))
+
+    # Second split: train vs val
+    y_tv = y[train_val_idx]
+    val_split_adjusted = val_split / (1 - test_split)
+    sss2 = StratifiedShuffleSplit(
+        n_splits=1, test_size=val_split_adjusted, random_state=seed
+    )
+    train_idx_rel, val_idx_rel = next(sss2.split(np.zeros_like(y_tv), y_tv))
+
+    # Map back to absolute indices
+    train_idx = train_val_idx[train_idx_rel]
+    val_idx = train_val_idx[val_idx_rel]
 
     logger.info(
-        f"Dataset splits - Train: {train_size}, Val: {val_size}, Test: {test_size}"
+        f"Stratified splits - Train: {len(train_idx)}, Val: {len(val_idx)}, Test: {len(test_idx)}"
     )
 
-    # Split dataset
-    generator = torch.Generator().manual_seed(seed)
-    train_dataset, val_dataset, test_dataset = random_split(
-        dataset, [train_size, val_size, test_size], generator=generator
-    )
+    # Create datasets
+    def to_dataset(idxs):
+        return CORALDataset([data[i] for i in idxs], buckets)
+
+    train_dataset = to_dataset(train_idx)
+    val_dataset = to_dataset(val_idx)
+    test_dataset = to_dataset(test_idx)
 
     return train_dataset, val_dataset, test_dataset
+
+
+def choose_best_threshold(model, val_loader, device, metric="exact"):
+    """Auto-tune threshold on validation set"""
+    model.eval()
+    best_t, best_score = 0.5, -1
+
+    for t in torch.linspace(0.3, 0.7, 21):
+        m, _, _ = evaluate_model(model, val_loader, device, threshold=float(t))
+        score = m["exact"].value if metric == "exact" else m["spearman_r"].value
+        if score > best_score:
+            best_t, best_score = float(t), score
+
+    logger.info(f"Best threshold: {best_t:.3f} with {metric}={best_score:.3f}")
+    return best_t
 
 
 def evaluate_model(
@@ -302,6 +335,7 @@ def train_model(
     config: Config,
     tracker: TrainingTracker,
     input_dim: int,
+    train_dataset=None,
 ) -> torch.nn.Module:
     """Train the CORAL model with progress tracking."""
     device = choose_device(config.device)
@@ -311,15 +345,72 @@ def train_model(
         model.parameters(), lr=config.lr, weight_decay=config.weight_decay
     )
 
+    # Choose scheduler based on config
+    if config.use_onecycle_lr:
+        scheduler = OneCycleLR(
+            optimizer,
+            max_lr=config.lr * 3,  # 3x peak learning rate
+            epochs=config.num_epochs,
+            steps_per_epoch=len(train_loader),
+            pct_start=0.3,
+            div_factor=25.0,
+            final_div_factor=1e4,
+        )
+        step_per_batch = True
+    else:
+        # Learning rate scheduler with warmup
+        def lr_lambda(epoch):
+            if epoch < config.warmup_epochs:
+                return (epoch + 1) / config.warmup_epochs
+            else:
+                # Cosine annealing after warmup
+                import math
+
+                return 0.5 * (
+                    1
+                    + math.cos(
+                        math.pi
+                        * (epoch - config.warmup_epochs)
+                        / (config.num_epochs - config.warmup_epochs)
+                    )
+                )
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        step_per_batch = False
+
     # Enable mixed precision for GPU, disable for MPS/CPU due to compatibility issues
     use_amp = device.type == "cuda"
     scaler = GradScaler(enabled=use_amp)
 
     set_seed(config.seed)
     best_val_score = -1
+    patience_counter = 0
+
+    # Compute threshold reweighting if enabled
+    lambda_k = None
+    if config.use_imbalance_weights:
+        train_labels = [
+            int(train_dataset[i][1].item()) for i in range(len(train_dataset))
+        ]
+        prev = coral_threshold_prevalences(train_labels, len(config.buckets))
+        eps = 1e-3
+        lambda_k = 1.0 / np.clip(prev * (1 - prev), eps, None)
+        lambda_k = torch.tensor(lambda_k, dtype=torch.float32, device=device)
+        logger.info(f"Threshold prevalences: {prev}")
+        logger.info(f"Threshold weights: {lambda_k.cpu().numpy()}")
+
+    # Initialize bias with class priors
+    if config.use_imbalance_weights and lambda_k is not None:
+        with torch.no_grad():
+            p = torch.clamp(torch.tensor(prev, dtype=torch.float32), 1e-4, 1 - 1e-4)
+            model.head.bias.copy_(torch.log(p / (1 - p)))
+            logger.info("Initialized bias with class priors")
 
     logger.info(f"Training on device: {device}")
     logger.info(f"Mixed precision enabled: {use_amp}")
+    logger.info(f"OneCycle LR: {config.use_onecycle_lr}")
+    logger.info(f"Label smoothing: {config.label_smoothing}")
+    logger.info(f"Feature noise: {config.feature_noise}")
     logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     for epoch in range(1, config.num_epochs + 1):
@@ -330,22 +421,42 @@ def train_model(
         for batch_idx, (features, labels) in enumerate(train_loader):
             features, labels = features.to(device), labels.to(device)
 
+            # Add feature noise for regularization during training
+            if model.training and config.feature_noise > 0:
+                noise = config.feature_noise * torch.randn_like(features)
+                features = features + noise
+
             optimizer.zero_grad()
 
             with autocast(enabled=use_amp):
                 logits = model(features)
-                loss = coral_loss(logits, labels, model.num_classes)
+                loss = coral_loss(
+                    logits,
+                    labels,
+                    model.num_classes,
+                    lambda_k=lambda_k,
+                    label_smoothing=config.label_smoothing,
+                )
 
             # Use gradient scaling for mixed precision
             if use_amp:
                 scaler.scale(loss).backward()
+                # Gradient clipping
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             total_train_loss += loss.item() * features.size(0)
+
+            # Step OneCycle scheduler per batch
+            if step_per_batch:
+                scheduler.step()
 
         avg_train_loss = total_train_loss / len(train_loader.dataset)
 
@@ -358,14 +469,29 @@ def train_model(
         current_lr = optimizer.param_groups[0]["lr"]
         tracker.log_epoch(epoch, avg_train_loss, val_metrics, current_lr)
 
-        # Save best model
+        # Save best model and early stopping
         val_score = val_metrics["exact"].value
         if val_score > best_val_score:
             best_val_score = val_score
+            patience_counter = 0
             save_checkpoint(
                 model, tracker.output_dir / "best_model.pt", config, input_dim
             )
             logger.info(f"New best model saved (exact accuracy: {val_score:.3f})")
+        else:
+            patience_counter += 1
+            if patience_counter >= config.patience:
+                logger.info(
+                    f"Early stopping triggered after {epoch} epochs (patience: {config.patience})"
+                )
+                break
+
+        # Step learning rate scheduler
+        if step_per_batch:
+            # OneCycle steps every batch - already done in training loop
+            pass
+        else:
+            scheduler.step()
 
     # Save final model
     save_checkpoint(model, tracker.output_dir / "final_model.pt", config, input_dim)
@@ -389,16 +515,16 @@ def main():
         "--hidden-dims",
         nargs="+",
         type=int,
-        default=[512, 128],
-        help="Hidden layer dimensions",
+        default=[768, 512, 256],
+        help="Hidden layer dimensions (wider & deeper with residual connections)",
     )
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument(
         "--epochs", type=int, default=50, help="Number of training epochs"
     )
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size")
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument("--weight-decay", type=float, default=1e-4, help="Weight decay")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--weight-decay", type=float, default=1e-3, help="Weight decay")
     parser.add_argument(
         "--val-split", type=float, default=0.2, help="Validation split ratio"
     )
@@ -407,6 +533,34 @@ def main():
     )
     parser.add_argument(
         "--threshold", type=float, default=0.5, help="Decision threshold"
+    )
+    parser.add_argument(
+        "--patience", type=int, default=10, help="Early stopping patience"
+    )
+    parser.add_argument(
+        "--warmup-epochs", type=int, default=5, help="Learning rate warmup epochs"
+    )
+    parser.add_argument(
+        "--label-smoothing", type=float, default=0.03, help="Label smoothing epsilon"
+    )
+    parser.add_argument(
+        "--feature-noise",
+        type=float,
+        default=0.01,
+        help="Input noise for regularization",
+    )
+    parser.add_argument(
+        "--no-imbalance-weights",
+        action="store_true",
+        help="Disable threshold reweighting",
+    )
+    parser.add_argument(
+        "--no-onecycle-lr",
+        action="store_true",
+        help="Use cosine LR instead of OneCycle",
+    )
+    parser.add_argument(
+        "--no-tune-threshold", action="store_true", help="Disable auto threshold tuning"
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", default=None, help="Device (cpu/cuda/mps/auto)")
@@ -440,6 +594,13 @@ def main():
         device=args.device,
         output_dir=str(output_dir),
         prob_threshold=args.threshold,
+        patience=args.patience,
+        warmup_epochs=args.warmup_epochs,
+        label_smoothing=args.label_smoothing,
+        use_imbalance_weights=not args.no_imbalance_weights,
+        use_onecycle_lr=not args.no_onecycle_lr,
+        feature_noise=args.feature_noise,
+        tune_threshold=not args.no_tune_threshold,
     )
 
     # Save config
@@ -475,8 +636,10 @@ def main():
     # Train model
     logger.info("Starting training...")
     trained_model = train_model(
-        model, train_loader, val_loader, config, tracker, input_dim
+        model, train_loader, val_loader, config, tracker, input_dim, train_dataset
     )
+
+    # val_loader will be used for threshold tuning below
 
     # Save training history and plots
     tracker.save_history()
@@ -495,9 +658,15 @@ def main():
     )
     checkpoint = torch.load(output_dir / "best_model.pt", map_location=device)
     best_model.load_state_dict(checkpoint["model_state_dict"])
+    best_model.to(device)  # Ensure model is on correct device
+
+    # Auto-tune threshold on validation set if enabled
+    test_threshold = args.threshold
+    if config.tune_threshold:
+        test_threshold = choose_best_threshold(best_model, val_loader, device)
 
     test_metrics, y_true, y_pred = evaluate_model(
-        best_model, test_loader, device, args.threshold
+        best_model, test_loader, device, test_threshold
     )
 
     # Log test results

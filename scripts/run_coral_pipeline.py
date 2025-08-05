@@ -80,16 +80,16 @@ def main():
         "--hidden-dims",
         nargs="+",
         type=int,
-        default=[512, 128],
-        help="Hidden layer dimensions",
+        default=[768, 512, 256],
+        help="Hidden layer dimensions (wider & deeper with residual connections)",
     )
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout rate")
     parser.add_argument(
         "--epochs", type=int, default=50, help="Number of training epochs"
     )
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size")
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument("--weight-decay", type=float, default=1e-4, help="Weight decay")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--weight-decay", type=float, default=1e-3, help="Weight decay")
     parser.add_argument(
         "--val-split", type=float, default=0.2, help="Validation split ratio"
     )

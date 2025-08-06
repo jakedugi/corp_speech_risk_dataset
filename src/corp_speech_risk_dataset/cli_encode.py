@@ -458,6 +458,76 @@ def _flush(
     show_default=True,
     help="Enable/disable Automatic Mixed Precision for GPU efficiency.",
 )
+@click.option(
+    "--fusion-epochs",
+    type=int,
+    default=15,
+    show_default=True,
+    help="Number of CrossModal fusion training epochs.",
+)
+@click.option(
+    "--fusion-batch-size",
+    type=int,
+    default=256,
+    show_default=True,
+    help="Batch size for CrossModal fusion training.",
+)
+@click.option(
+    "--fusion-temperature",
+    type=float,
+    default=0.07,
+    show_default=True,
+    help="Temperature for InfoNCE loss in CrossModal fusion.",
+)
+@click.option(
+    "--fusion-patience",
+    type=int,
+    default=3,
+    show_default=True,
+    help="Early stopping patience for CrossModal fusion.",
+)
+@click.option(
+    "--fusion-dropout",
+    type=float,
+    default=0.1,
+    show_default=True,
+    help="Dropout rate for CrossModal fusion stability.",
+)
+@click.option(
+    "--fusion-heads",
+    type=int,
+    default=4,
+    show_default=True,
+    help="Number of attention heads for CrossModal fusion.",
+)
+@click.option(
+    "--adaptive-temperature",
+    is_flag=True,
+    default=True,
+    show_default=True,
+    help="Use adaptive temperature in InfoNCE loss for legal text.",
+)
+@click.option(
+    "--hard-negative-weight",
+    type=float,
+    default=1.2,
+    show_default=True,
+    help="Weight for hard negative mining in contrastive loss.",
+)
+@click.option(
+    "--hidden-dim",
+    type=int,
+    default=256,
+    show_default=True,
+    help="Hidden dimensions for GraphSAGE.",
+)
+@click.option(
+    "--epochs",
+    type=int,
+    default=40,
+    show_default=True,
+    help="Number of training epochs for GraphSAGE.",
+)
 @click.pass_context
 def cli(
     ctx,
@@ -469,6 +539,16 @@ def cli(
     fuse_graph,
     embed_batch_size,
     use_amp,
+    fusion_epochs,
+    fusion_batch_size,
+    fusion_temperature,
+    fusion_patience,
+    fusion_dropout,
+    fusion_heads,
+    adaptive_temperature,
+    hard_negative_weight,
+    hidden_dim,
+    epochs,
 ):
     """
     Chainable pipeline: tokenize → embed → graph → fuse.
@@ -497,6 +577,16 @@ def cli(
         "fuse_graph": fuse_graph,  # New: Fusion control
         "embed_batch_size": embed_batch_size,  # New: Embedding batch size
         "use_amp": use_amp,  # New: AMP for efficiency
+        "fusion_epochs": fusion_epochs,  # New: Fusion training epochs
+        "fusion_batch_size": fusion_batch_size,  # New: Fusion batch size
+        "fusion_temperature": fusion_temperature,  # New: Fusion temperature
+        "fusion_patience": fusion_patience,  # New: Fusion patience
+        "fusion_dropout": fusion_dropout,  # New: Fusion dropout
+        "fusion_heads": fusion_heads,  # New: Fusion attention heads
+        "adaptive_temperature": adaptive_temperature,  # New: Adaptive temperature
+        "hard_negative_weight": hard_negative_weight,  # New: Hard negative weight
+        "hidden_dim": hidden_dim,  # New: GraphSAGE hidden dimensions
+        "epochs": epochs,  # New: GraphSAGE training epochs
     }
     # schedule full encode if no subcommands
     if ctx.invoked_subcommand is None:

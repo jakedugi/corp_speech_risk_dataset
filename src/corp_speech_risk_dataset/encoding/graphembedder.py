@@ -596,6 +596,8 @@ def train_crossmodal_fusion(
     temperature: float = 0.07,  # InfoNCE temperature
     patience: int = 3,  # Early stopping patience
     use_amp: bool = False,  # Automatic Mixed Precision
+    adaptive_temperature: bool = True,  # New: Adaptive temperature for legal text
+    hard_negative_weight: float = 1.2,  # New: Hard negative mining weight
 ) -> CrossModalFusion:
     """
     Train CrossModalFusion with InfoNCE contrastive learning - optimized for legal text.
@@ -608,6 +610,9 @@ def train_crossmodal_fusion(
         batch_size: Batch size for contrastive learning (default 256)
         temperature: Temperature parameter for InfoNCE (default 0.07)
         patience: Early stopping patience (default 3)
+        use_amp: Automatic Mixed Precision for speedup (default False)
+        adaptive_temperature: Use adaptive temperature in InfoNCE (default True)
+        hard_negative_weight: Weight for hard negative mining (default 1.2)
 
     Returns:
         Trained fusion model
@@ -686,8 +691,8 @@ def train_crossmodal_fusion(
                     batch_graph,
                     temperature=temperature,
                     use_nt_xent=use_amp,
-                    adaptive_temp=True,
-                    hard_negative_weight=1.2,  # Slight emphasis on hard negatives for legal complexity
+                    adaptive_temp=adaptive_temperature,
+                    hard_negative_weight=hard_negative_weight,
                 )
 
             batch_loss.backward()

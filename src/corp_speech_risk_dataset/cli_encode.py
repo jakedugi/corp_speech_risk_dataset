@@ -995,6 +995,8 @@ def cmd_graph(
                     temperature=fusion_temperature,
                     patience=fusion_patience,
                     use_amp=use_amp,
+                    adaptive_temperature=adaptive_temperature,
+                    hard_negative_weight=hard_negative_weight,
                 )
 
                 print(f"[CROSSMODAL FUSION] Fusion training completed!")

@@ -412,8 +412,8 @@ def train_model(
         logger.info(f"Threshold prevalences: {prev}")
         logger.info(f"Threshold weights: {lambda_k.cpu().numpy()}")
 
-    # Initialize bias with class priors
-    if config.use_imbalance_weights and lambda_k is not None:
+    # Initialize bias with class priors (only for CORALMLP which has .head)
+    if config.use_imbalance_weights and lambda_k is not None and hasattr(model, "head"):
         with torch.no_grad():
             p = torch.clamp(torch.tensor(prev, dtype=torch.float32), 1e-4, 1 - 1e-4)
             model.head.bias.copy_(torch.log(p / (1 - p)))

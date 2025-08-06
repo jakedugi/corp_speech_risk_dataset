@@ -691,44 +691,46 @@ def cmd_tokenize(ctx, text_model, st_model):
 def cmd_embed(ctx, st_model):
     """Embed text via SentenceTransformer, GPT2, or Legal-BERT."""
 
+    # LOAD MODEL ONCE OUTSIDE THE PROCESSOR (FIXED!)
+    text_embedder = ctx.obj["text_embedder"]
+    embed_batch_size = ctx.obj["embed_batch_size"]
+    use_amp = ctx.obj["use_amp"]
+
+    # Initialize the appropriate model ONCE
+    model = None
+    embedding_dim = None
+    emb_field = None
+
+    if text_embedder == "legal-bert":
+        print(f"[TEXT EMBEDDING] Loading Legal-BERT model (ONCE)")
+        from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
+            get_legal_bert_embedder,
+        )
+
+        model = get_legal_bert_embedder(use_amp=use_amp)
+        embedding_dim = model.get_sentence_embedding_dimension()
+        emb_field = "legal_bert_emb"
+    elif text_embedder == "st" and st_model:
+        print(f"[TEXT EMBEDDING] Loading SentenceTransformer model (ONCE): {st_model}")
+        from src.corp_speech_risk_dataset.encoding.stembedder import (
+            get_sentence_embedder,
+        )
+
+        model = get_sentence_embedder(st_model)
+        embedding_dim = model.get_sentence_embedding_dimension()
+        emb_field = "st_emb"
+    else:
+        raise ValueError(
+            f"Embed subcommand requires either --st-model with --text-embedder st, or --text-embedder legal-bert"
+        )
+
+    print(f"[TEXT EMBEDDING] Model output dimension: {embedding_dim}D")
+    print(f"[TEXT EMBEDDING] Batch size: {embed_batch_size}")
+
     def processor(lines):
         import time
 
         start_time = time.time()
-        text_embedder = ctx.obj["text_embedder"]
-        embed_batch_size = ctx.obj["embed_batch_size"]
-        use_amp = ctx.obj["use_amp"]
-
-        # Initialize the appropriate model
-        model = None
-        embedding_dim = None
-        emb_field = None
-
-        if text_embedder == "legal-bert":
-            print(f"[TEXT EMBEDDING] Loading Legal-BERT model")
-            from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
-                get_legal_bert_embedder,
-            )
-
-            model = get_legal_bert_embedder(use_amp=use_amp)
-            embedding_dim = model.get_sentence_embedding_dimension()
-            emb_field = "legal_bert_emb"
-        elif text_embedder == "st" and st_model:
-            print(f"[TEXT EMBEDDING] Loading SentenceTransformer model: {st_model}")
-            from src.corp_speech_risk_dataset.encoding.stembedder import (
-                get_sentence_embedder,
-            )
-
-            model = get_sentence_embedder(st_model)
-            embedding_dim = model.get_sentence_embedding_dimension()
-            emb_field = "st_emb"
-        else:
-            raise ValueError(
-                f"Embed subcommand requires either --st-model with --text-embedder st, or --text-embedder legal-bert"
-            )
-
-        print(f"[TEXT EMBEDDING] Model output dimension: {embedding_dim}D")
-        print(f"[TEXT EMBEDDING] Batch size: {embed_batch_size}")
 
         batch, metas = [], []
         try:

@@ -505,10 +505,15 @@ def get_graphsage_embedder(
 
 class CrossModalFusion(nn.Module):
     """
-    Simple two-stream cross-attention fusion:
+    Enhanced two-stream cross-attention fusion with stability improvements:
       - text_embs: [B, Tdim]
       - graph_embs: [B, Gdim]
     returns fused [B, Fdim] where Fdim = fusion_dim
+
+    Enhancements for Legal-BERT integration:
+    - LayerNorm for gradient stability on legal quotes
+    - Dropout for regularization during long training runs
+    - Adaptive dimensions for Legal-BERT (768D) compatibility
     """
 
     def __init__(
@@ -516,36 +521,70 @@ class CrossModalFusion(nn.Module):
         text_dim: int,
         graph_dim: Optional[int] = None,
         fusion_dim: Optional[int] = None,
+        dropout: float = 0.1,
+        num_heads: int = 4,
     ):
         super().__init__()
-        # Set default dimensions
+        # Set default dimensions - prioritize Legal-BERT compatibility
         graph_dim = graph_dim or text_dim
         fusion_dim = fusion_dim or max(
             text_dim, graph_dim
-        )  # Use larger dimension as default
+        )  # Use larger dimension as default (768 for Legal-BERT)
+
+        self.fusion_dim = fusion_dim
 
         # Project text and graph embeddings into the same fusion space
         self.text_proj = nn.Linear(text_dim, fusion_dim)
         self.graph_proj = nn.Linear(graph_dim, fusion_dim)
+
+        # Stability improvements: dropout after projections
+        self.text_dropout = nn.Dropout(dropout)
+        self.graph_dropout = nn.Dropout(dropout)
+
+        # Cross-attention with configurable heads
         self.attn = nn.MultiheadAttention(
-            embed_dim=fusion_dim, num_heads=4, batch_first=True
+            embed_dim=fusion_dim, num_heads=num_heads, batch_first=True, dropout=dropout
         )
+
+        # LayerNorm for gradient stability (critical for legal quote complexity)
+        self.norm1 = nn.LayerNorm(fusion_dim)
+        self.norm2 = nn.LayerNorm(fusion_dim)
+
+        # Final projection with residual connection
         self.proj = nn.Linear(fusion_dim * 2, fusion_dim)
+        self.final_norm = nn.LayerNorm(fusion_dim)
+        self.final_dropout = nn.Dropout(dropout)
 
     def forward(self, txt: torch.Tensor, gph: torch.Tensor) -> torch.Tensor:
-        # Project into shared fusion dimension
-        txt_up = self.text_proj(txt)  # [B, fusion_dim]
-        gph_up = self.graph_proj(gph)  # [B, fusion_dim]
+        # Project into shared fusion dimension with dropout
+        txt_up = self.text_dropout(self.text_proj(txt))  # [B, fusion_dim]
+        gph_up = self.graph_dropout(self.graph_proj(gph))  # [B, fusion_dim]
+
         # Add a sequence dimension of 1 for attention
         txt_seq = txt_up.unsqueeze(1)  # [B,1,fusion_dim]
         gph_seq = gph_up.unsqueeze(1)  # [B,1,fusion_dim]
-        # Cross-attend: text attends to graph
+
+        # Cross-attend: text attends to graph with normalization
         o1, _ = self.attn(txt_seq, gph_seq, gph_seq)
-        # Graph attends to text
+        o1_norm = self.norm1(o1.squeeze(1))  # [B, fusion_dim]
+
+        # Graph attends to text with normalization
         o2, _ = self.attn(gph_seq, txt_seq, txt_seq)
-        # Remove sequence dim, concatenate, then project
-        fused = torch.cat([o1.squeeze(1), o2.squeeze(1)], dim=-1)  # [B,2*fusion_dim]
-        return self.proj(fused)  # [B,fusion_dim]
+        o2_norm = self.norm2(o2.squeeze(1))  # [B, fusion_dim]
+
+        # Concatenate attended outputs
+        fused = torch.cat([o1_norm, o2_norm], dim=-1)  # [B, 2*fusion_dim]
+
+        # Final projection with normalization and dropout
+        output = self.proj(fused)  # [B, fusion_dim]
+        output = self.final_norm(output)
+        output = self.final_dropout(output)
+
+        return output
+
+    def get_fusion_dim(self) -> int:
+        """Return the fusion dimension for external compatibility checks."""
+        return self.fusion_dim
 
 
 def train_crossmodal_fusion(
@@ -600,19 +639,32 @@ def train_crossmodal_fusion(
     best_loss = float("inf")
     patience_counter = 0
 
-    # Enable MPS optimizations if available
-    if device.type == "mps":
+    # Enhanced tracking for alignment monitoring
+    epoch_metrics = {
+        "text_alignment": [],
+        "graph_alignment": [],
+        "adaptive_temperature": [],
+    }
+
+    # Enable AMP if requested for T4 efficiency
+    if use_amp and device.type == "cuda":
+        autocast_context = torch.autocast(device_type="cuda", dtype=torch.float16)
+        print(f"[CROSSMODAL TRAINING] AMP enabled for CUDA speedup")
+    elif device.type == "mps":
         try:
             # Use autocast for MPS speedup
             autocast_context = torch.autocast(device_type="mps", dtype=torch.float16)
         except:
             autocast_context = torch.no_grad()  # Fallback
     else:
-        autocast_context = torch.no_grad()  # No autocast for CPU/CUDA
+        autocast_context = torch.no_grad()  # No autocast for CPU
 
     for epoch in range(epochs):
         total_loss = 0.0
         num_batches = 0
+        epoch_text_alignment = []
+        epoch_graph_alignment = []
+        epoch_adaptive_temp = []
 
         # Process in batches for better gradients
         for i in range(0, len(text_embeddings), batch_size):
@@ -627,9 +679,15 @@ def train_crossmodal_fusion(
                 # Forward pass
                 fused = fusion_model(batch_text, batch_graph)
 
-                # InfoNCE contrastive loss - legal text optimized
-                batch_loss = compute_infonce_loss(
-                    fused, batch_text, batch_graph, temperature, use_nt_xent=use_amp
+                # Enhanced InfoNCE contrastive loss - legal text optimized
+                batch_loss, batch_metrics = compute_infonce_loss(
+                    fused,
+                    batch_text,
+                    batch_graph,
+                    temperature=temperature,
+                    use_nt_xent=use_amp,
+                    adaptive_temp=True,
+                    hard_negative_weight=1.2,  # Slight emphasis on hard negatives for legal complexity
                 )
 
             batch_loss.backward()
@@ -638,8 +696,35 @@ def train_crossmodal_fusion(
             total_loss += batch_loss.item()
             num_batches += 1
 
+            # Collect alignment metrics for monitoring
+            epoch_text_alignment.append(batch_metrics["text_alignment"])
+            epoch_graph_alignment.append(batch_metrics["graph_alignment"])
+            epoch_adaptive_temp.append(batch_metrics["adaptive_temperature"])
+
         scheduler.step()
         avg_loss = total_loss / max(num_batches, 1)
+
+        # Compute epoch-level alignment metrics
+        avg_text_alignment = (
+            sum(epoch_text_alignment) / len(epoch_text_alignment)
+            if epoch_text_alignment
+            else 0.0
+        )
+        avg_graph_alignment = (
+            sum(epoch_graph_alignment) / len(epoch_graph_alignment)
+            if epoch_graph_alignment
+            else 0.0
+        )
+        avg_adaptive_temp = (
+            sum(epoch_adaptive_temp) / len(epoch_adaptive_temp)
+            if epoch_adaptive_temp
+            else temperature
+        )
+
+        # Store epoch metrics
+        epoch_metrics["text_alignment"].append(avg_text_alignment)
+        epoch_metrics["graph_alignment"].append(avg_graph_alignment)
+        epoch_metrics["adaptive_temperature"].append(avg_adaptive_temp)
 
         # Early stopping
         if avg_loss < best_loss:
@@ -648,21 +733,177 @@ def train_crossmodal_fusion(
         else:
             patience_counter += 1
 
+        # Enhanced progress reporting with alignment metrics
         if epoch % 3 == 0 or epoch == epochs - 1:
             lr = scheduler.get_last_lr()[0]
             print(
                 f"[CROSSMODAL TRAINING] Epoch {epoch:2d}: loss = {avg_loss:.4f}, lr = {lr:.6f}"
             )
+            print(
+                f"                     Text align: {avg_text_alignment:.3f}, "
+                f"Graph align: {avg_graph_alignment:.3f}, "
+                f"Temp: {avg_adaptive_temp:.3f}"
+            )
+
+            # Alignment quality assessment (target >0.7 for good alignment)
+            if avg_text_alignment > 0.7 and avg_graph_alignment > 0.7:
+                print(f"                     ✓ Strong cross-modal alignment achieved")
+            elif avg_text_alignment > 0.5 and avg_graph_alignment > 0.5:
+                print(
+                    f"                     ⚠ Moderate alignment - consider more epochs"
+                )
+            else:
+                print(
+                    f"                     ⚠ Weak alignment - may need hyperparameter tuning"
+                )
 
         if patience_counter >= patience and epoch > 5:
             print(f"[CROSSMODAL TRAINING] Early stopping at epoch {epoch}")
             break
 
     fusion_model.eval()
+
+    # Final evaluation on full dataset
+    print(f"[CROSSMODAL TRAINING] Evaluating final alignment quality...")
+    final_metrics = evaluate_crossmodal_alignment(
+        fusion_model, text_tensor, graph_tensor, device
+    )
+
     fusion_model = fusion_model.cpu()  # Move back for inference
     print(f"[CROSSMODAL TRAINING] Training complete! Best loss: {best_loss:.4f}")
+    print(
+        f"[CROSSMODAL TRAINING] Final alignment: Text={final_metrics['text_alignment']:.3f}, Graph={final_metrics['graph_alignment']:.3f}"
+    )
 
     return fusion_model
+
+
+def evaluate_crossmodal_alignment(
+    fusion_model: CrossModalFusion,
+    text_embeddings: torch.Tensor,
+    graph_embeddings: torch.Tensor,
+    device: torch.device,
+    eval_batch_size: int = 512,
+) -> Dict[str, float]:
+    """
+    Comprehensive evaluation of cross-modal alignment quality.
+
+    Computes alignment metrics for unsupervised assessment:
+    - Positive pair similarities (text-fused, graph-fused alignment)
+    - Negative pair discrimination capability
+    - Cross-modal retrieval accuracy (text→graph, graph→text)
+    - Alignment consistency across legal quote complexity
+
+    Args:
+        fusion_model: Trained CrossModalFusion model
+        text_embeddings: Text embeddings tensor [N, text_dim]
+        graph_embeddings: Graph embeddings tensor [N, graph_dim]
+        device: Compute device
+        eval_batch_size: Batch size for evaluation
+
+    Returns:
+        Dictionary of alignment metrics
+    """
+    fusion_model.eval()
+    fusion_model = fusion_model.to(device)
+
+    all_fused = []
+    all_text_norm = []
+    all_graph_norm = []
+
+    # Process in batches to avoid memory issues
+    with torch.no_grad():
+        for i in range(0, len(text_embeddings), eval_batch_size):
+            end_idx = min(i + eval_batch_size, len(text_embeddings))
+            batch_text = text_embeddings[i:end_idx].to(device)
+            batch_graph = graph_embeddings[i:end_idx].to(device)
+
+            # Generate fused embeddings
+            batch_fused = fusion_model(batch_text, batch_graph)
+
+            # Normalize all embeddings for cosine similarity
+            batch_fused_norm = F.normalize(batch_fused, dim=1, eps=1e-8)
+            batch_text_norm = F.normalize(batch_text, dim=1, eps=1e-8)
+            batch_graph_norm = F.normalize(batch_graph, dim=1, eps=1e-8)
+
+            all_fused.append(batch_fused_norm.cpu())
+            all_text_norm.append(batch_text_norm.cpu())
+            all_graph_norm.append(batch_graph_norm.cpu())
+
+    # Concatenate all batches
+    fused_norm = torch.cat(all_fused, dim=0)
+    text_norm = torch.cat(all_text_norm, dim=0)
+    graph_norm = torch.cat(all_graph_norm, dim=0)
+
+    n_samples = fused_norm.shape[0]
+
+    # 1. Positive Pair Alignment (diagonal similarities)
+    text_fused_sim = torch.matmul(text_norm, fused_norm.T)
+    graph_fused_sim = torch.matmul(graph_norm, fused_norm.T)
+
+    pos_text_similarities = torch.diagonal(text_fused_sim)
+    pos_graph_similarities = torch.diagonal(graph_fused_sim)
+
+    # 2. Negative Pair Discrimination (off-diagonal vs diagonal)
+    text_neg_mask = ~torch.eye(n_samples, dtype=torch.bool)
+    graph_neg_mask = ~torch.eye(n_samples, dtype=torch.bool)
+
+    text_neg_similarities = text_fused_sim[text_neg_mask]
+    graph_neg_similarities = graph_fused_sim[graph_neg_mask]
+
+    # 3. Cross-Modal Retrieval Accuracy (top-k precision)
+    def compute_retrieval_accuracy(
+        similarity_matrix: torch.Tensor, k: int = 5
+    ) -> float:
+        """Compute top-k retrieval accuracy."""
+        n = similarity_matrix.shape[0]
+        correct = 0
+        for i in range(n):
+            # Get top-k most similar items for sample i
+            _, top_indices = torch.topk(similarity_matrix[i], k=min(k, n))
+            # Check if correct match (index i) is in top-k
+            if i in top_indices:
+                correct += 1
+        return correct / n
+
+    text_to_fused_acc = compute_retrieval_accuracy(text_fused_sim, k=5)
+    graph_to_fused_acc = compute_retrieval_accuracy(graph_fused_sim, k=5)
+
+    # 4. Alignment Consistency (standard deviation of positive similarities)
+    text_alignment_consistency = (
+        1.0 - pos_text_similarities.std().item()
+    )  # Lower std = higher consistency
+    graph_alignment_consistency = 1.0 - pos_graph_similarities.std().item()
+
+    # 5. Discriminative Power (ratio of positive to negative similarities)
+    text_discrimination = (
+        pos_text_similarities.mean() - text_neg_similarities.mean()
+    ).item()
+    graph_discrimination = (
+        pos_graph_similarities.mean() - graph_neg_similarities.mean()
+    ).item()
+
+    metrics = {
+        "text_alignment": pos_text_similarities.mean().item(),
+        "graph_alignment": pos_graph_similarities.mean().item(),
+        "text_alignment_std": pos_text_similarities.std().item(),
+        "graph_alignment_std": pos_graph_similarities.std().item(),
+        "text_retrieval_acc_top5": text_to_fused_acc,
+        "graph_retrieval_acc_top5": graph_to_fused_acc,
+        "text_alignment_consistency": max(
+            0.0, text_alignment_consistency
+        ),  # Clamp to [0,1]
+        "graph_alignment_consistency": max(0.0, graph_alignment_consistency),
+        "text_discrimination_power": text_discrimination,
+        "graph_discrimination_power": graph_discrimination,
+        "overall_alignment": (
+            pos_text_similarities.mean() + pos_graph_similarities.mean()
+        ).item()
+        / 2.0,
+        "overall_retrieval_acc": (text_to_fused_acc + graph_to_fused_acc) / 2.0,
+    }
+
+    return metrics
 
 
 def compute_infonce_loss(
@@ -671,42 +912,88 @@ def compute_infonce_loss(
     graph: torch.Tensor,
     temperature: float = 0.07,
     use_nt_xent: bool = False,
-) -> torch.Tensor:
+    adaptive_temp: bool = True,
+    hard_negative_weight: float = 1.0,
+) -> Tuple[torch.Tensor, Dict[str, float]]:
     """
-    Compute InfoNCE contrastive loss for cross-modal alignment.
-    Optimized for legal text dependency graph alignment.
+    Enhanced InfoNCE contrastive loss for cross-modal alignment.
+    Optimized for legal text dependency graph alignment with stability improvements.
 
-    Handles different input dimensions by projecting to fused dimension.
+    Args:
+        fused: Fused embeddings [B, fusion_dim]
+        text: Text embeddings [B, text_dim]
+        graph: Graph embeddings [B, graph_dim]
+        temperature: Base temperature for InfoNCE
+        use_nt_xent: Use NT-Xent normalization for stability
+        adaptive_temp: Dynamically adjust temperature based on alignment
+        hard_negative_weight: Weight for hard negative mining
+
+    Returns:
+        Tuple of (loss, metrics_dict)
     """
     batch_size = fused.shape[0]
     fused_dim = fused.shape[1]
-
-    # Project text and graph to fused dimension if needed
     device = fused.device
+
+    # Project text and graph to fused dimension if needed (with proper initialization)
     if text.shape[1] != fused_dim:
         text_proj = nn.Linear(text.shape[1], fused_dim).to(device)
+        # Xavier initialization for stability
+        nn.init.xavier_uniform_(text_proj.weight)
+        nn.init.zeros_(text_proj.bias)
         text = text_proj(text)
     if graph.shape[1] != fused_dim:
         graph_proj = nn.Linear(graph.shape[1], fused_dim).to(device)
+        # Xavier initialization for stability
+        nn.init.xavier_uniform_(graph_proj.weight)
+        nn.init.zeros_(graph_proj.bias)
         graph = graph_proj(graph)
 
     # Normalize embeddings for cosine similarity
-    fused_norm = F.normalize(fused, dim=1)
-    text_norm = F.normalize(text, dim=1)
-    graph_norm = F.normalize(graph, dim=1)
+    fused_norm = F.normalize(fused, dim=1, eps=1e-8)
+    text_norm = F.normalize(text, dim=1, eps=1e-8)
+    graph_norm = F.normalize(graph, dim=1, eps=1e-8)
+
+    # Adaptive temperature based on current alignment (for legal quote complexity)
+    if adaptive_temp:
+        # Compute mean positive similarity to adjust temperature
+        pos_text_sim = torch.diagonal(torch.matmul(text_norm, fused_norm.T))
+        pos_graph_sim = torch.diagonal(torch.matmul(graph_norm, fused_norm.T))
+        mean_pos_sim = (pos_text_sim.mean() + pos_graph_sim.mean()) / 2
+
+        # Adaptive temperature: lower temp when alignment is good (higher temp for hard negatives)
+        adaptive_temperature = temperature * (2.0 - mean_pos_sim.clamp(0.1, 0.9))
+    else:
+        adaptive_temperature = temperature
 
     # Text-to-fused similarity matrix
-    text_fused_sim = torch.matmul(text_norm, fused_norm.T) / temperature
+    text_fused_sim = torch.matmul(text_norm, fused_norm.T) / adaptive_temperature
 
     # Graph-to-fused similarity matrix
-    graph_fused_sim = torch.matmul(graph_norm, fused_norm.T) / temperature
+    graph_fused_sim = torch.matmul(graph_norm, fused_norm.T) / adaptive_temperature
+
+    # Hard negative mining for legal quotes (emphasize challenging cases)
+    if hard_negative_weight > 1.0:
+        # Find hardest negatives (highest similarity non-diagonal elements)
+        text_mask = ~torch.eye(batch_size, dtype=torch.bool, device=device)
+        graph_mask = ~torch.eye(batch_size, dtype=torch.bool, device=device)
+
+        text_hard_negs = text_fused_sim.masked_fill(~text_mask, -float("inf"))
+        graph_hard_negs = graph_fused_sim.masked_fill(~graph_mask, -float("inf"))
+
+        # Weight hard negatives more heavily
+        text_fused_sim = text_fused_sim + (
+            text_hard_negs * (hard_negative_weight - 1.0)
+        ).masked_fill(text_mask, 0)
+        graph_fused_sim = graph_fused_sim + (
+            graph_hard_negs * (hard_negative_weight - 1.0)
+        ).masked_fill(graph_mask, 0)
 
     # Positive pairs are on the diagonal
-    labels = torch.arange(batch_size, device=fused.device)
+    labels = torch.arange(batch_size, device=device)
 
-    # Quick win #4: NT-Xent loss (normalized InfoNCE for stability)
+    # NT-Xent normalization for stability (critical for legal text variance)
     if use_nt_xent:
-        # NT-Xent: L2 normalize similarities before softmax for better stability
         text_fused_sim = F.normalize(text_fused_sim, p=2, dim=1)
         graph_fused_sim = F.normalize(graph_fused_sim, p=2, dim=1)
 
@@ -717,7 +1004,27 @@ def compute_infonce_loss(
     # Symmetric contrastive loss
     total_loss = (text_to_fused_loss + graph_to_fused_loss) / 2
 
-    return total_loss
+    # Compute alignment metrics for monitoring
+    with torch.no_grad():
+        # Positive pair similarities (alignment quality)
+        pos_text_similarities = torch.diagonal(torch.matmul(text_norm, fused_norm.T))
+        pos_graph_similarities = torch.diagonal(torch.matmul(graph_norm, fused_norm.T))
+
+        metrics = {
+            "text_alignment": pos_text_similarities.mean().item(),
+            "graph_alignment": pos_graph_similarities.mean().item(),
+            "text_alignment_std": pos_text_similarities.std().item(),
+            "graph_alignment_std": pos_graph_similarities.std().item(),
+            "adaptive_temperature": (
+                adaptive_temperature
+                if isinstance(adaptive_temperature, float)
+                else adaptive_temperature.item()
+            ),
+            "text_loss": text_to_fused_loss.item(),
+            "graph_loss": graph_to_fused_loss.item(),
+        }
+
+    return total_loss, metrics
 
 
 def compute_scaled_cosine_loss(

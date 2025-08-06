@@ -34,6 +34,10 @@ from src.corp_speech_risk_dataset.encoding.graphembedder import (
     get_graphsage_embedder,
     CrossModalFusion,
 )
+from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
+    get_legal_bert_embedder,
+    LegalBertEmbedder,
+)
 
 # Will look under data/models/en.wiki.bpe.vs32000.model by default
 tokenizer = SentencePieceTokenizer()
@@ -49,6 +53,10 @@ def encode_file(
     graph_embed: str = "wl",
     stage: int = 4,
     overwrite: bool = False,
+    text_embedder: str = "st",  # New: Legal-BERT extension
+    fuse_graph: bool = True,  # New: Fusion control
+    embed_batch_size: int = 32,  # New: Embedding batch size
+    use_amp: bool = True,  # New: AMP for efficiency
 ):
     file_start = time.time()  # Start timing for file encoding
     """Helper: encode one file, writing into mirrored structure."""
@@ -93,8 +101,16 @@ def encode_file(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     logger.info(f"→ Encoding {in_path} → {out_path}")
 
-    # -------- Sentence-Transformer (optional) --------------------------- #
+    # -------- Text Embedders (ST, GPT-2, Legal-BERT) ------------------ #
     st_model = get_sentence_embedder(st_model_name) if st_model_name else None
+    legal_bert_model = None
+
+    # Initialize Legal-BERT if requested
+    if text_embedder == "legal-bert":
+        legal_bert_model = get_legal_bert_embedder(use_amp=use_amp)
+        logger.info(
+            f"Legal-BERT model loaded: {legal_bert_model.get_sentence_embedding_dimension()}D embeddings"
+        )
 
     # -------- GPT-2 mean-pool (optional) ------------------------------- #
     if text_model.lower() == "gpt2":
@@ -142,10 +158,21 @@ def encode_file(
     total = sum(1 for _ in in_path.open())
     # Confirm stages & models
     print(f"[INFO] Stage: Preparing to encode {total} entries")
-    print(
-        f"[INFO] Using Text Model: {text_model} "
-        f"({st_model.__class__.__name__ if st_model else 'none'})"
-    )
+
+    # Enhanced model info display
+    if text_embedder == "legal-bert" and legal_bert_model:
+        print(
+            f"[INFO] Using Text Embedder: Legal-BERT ({legal_bert_model.get_sentence_embedding_dimension()}D)"
+        )
+        print(
+            f"[INFO] Legal-BERT Config: AMP={'ON' if use_amp else 'OFF'}, batch_size={embed_batch_size}"
+        )
+    elif text_model == "st" and st_model:
+        print(f"[INFO] Using Text Model: {text_model} ({st_model.__class__.__name__})")
+    else:
+        print(f"[INFO] Using Text Model: {text_model}")
+
+    print(f"[INFO] Fusion enabled: {fuse_graph}")
     print(
         f"[INFO] Using Graph Embed: {graph_embed} "
         f"(Node2Vec={'yes' if n2v_model else 'no'}, "
@@ -184,6 +211,11 @@ def encode_file(
                 sage_model,
                 fuse_model,
                 batch_size,
+                text_embedder=text_embedder,
+                legal_bert_model=legal_bert_model,
+                fuse_graph=fuse_graph,
+                embed_batch_size=embed_batch_size,
+                use_amp=use_amp,
             ):
                 fout.write((json.dumps(enriched, ensure_ascii=False) + "\n").encode())
             buf_json.clear()
@@ -204,6 +236,11 @@ def encode_file(
                 sage_model,
                 fuse_model,
                 batch_size,
+                text_embedder=text_embedder,
+                legal_bert_model=legal_bert_model,
+                fuse_graph=fuse_graph,
+                embed_batch_size=embed_batch_size,
+                use_amp=use_amp,
             ):
                 fout.write((json.dumps(enriched, ensure_ascii=False) + "\n").encode())
             # capture fallback info too
@@ -232,21 +269,50 @@ def _flush(
     sage_model,
     fuse_model,
     batch_size: int,
+    text_embedder: str = "st",  # New: Legal-BERT extension
+    legal_bert_model: Optional[LegalBertEmbedder] = None,  # New
+    fuse_graph: bool = True,  # New: Fusion control
+    embed_batch_size: int = 32,  # New: Embedding batch size
+    use_amp: bool = True,  # New: AMP for efficiency
 ) -> List[Dict[str, Any]]:
     """Embed a buffered batch & yield enriched JSON rows."""
     # --- Stage: Text Embedding ---
     t0 = time.time()
-    if text_model.lower() == "gpt2":
+
+    # Legal-BERT embeddings (new option)
+    if text_embedder == "legal-bert" and legal_bert_model is not None:
+        txt_embs = legal_bert_model.encode(
+            texts,
+            batch_size=embed_batch_size,
+            convert_to_numpy=True,
+            show_progress=False,
+        )
+    # Legacy text model handling (backward compatibility)
+    elif text_model.lower() == "gpt2":
         enc = gpt_tok(texts, return_tensors="pt", padding=True, truncation=True).to(
             device
         )
-        with torch.no_grad():
-            hidden = gpt_mod(**enc).last_hidden_state
+        # Use AMP if available and requested
+        if use_amp and device.type == "cuda":
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                with torch.no_grad():
+                    hidden = gpt_mod(**enc).last_hidden_state
+        else:
+            with torch.no_grad():
+                hidden = gpt_mod(**enc).last_hidden_state
         txt_embs = hidden.mean(dim=1).cpu().numpy()
-    elif text_model.lower() == "st":
-        txt_embs = st_model.encode(texts, convert_to_numpy=True, batch_size=batch_size)
+    elif text_model.lower() == "st" and st_model is not None:
+        txt_embs = st_model.encode(
+            texts, convert_to_numpy=True, batch_size=embed_batch_size
+        )
+    # MiniLM via text_embedder (preferred new path)
+    elif text_embedder == "st" and st_model is not None:
+        txt_embs = st_model.encode(
+            texts, convert_to_numpy=True, batch_size=embed_batch_size
+        )
     else:
         txt_embs = [None] * len(rows)
+
     dt_text = time.time() - t0
     # print(f"[STAGE] Text Embedding ({text_model}) for batch of {len(texts)}: {dt_text:.2f}s")
 
@@ -271,9 +337,20 @@ def _flush(
     # print(f"[STAGE] Graph Embedding ({base_method}) for batch of {len(texts)}: {dt_graph:.2f}s")
 
     # --- Stage: Fusion ({graph_embed}) ---
-    if graph_embed == "cross" and not isinstance(txt_embs, list):
+    # Enhanced fusion logic: respect fuse_graph flag and handle Legal-BERT
+    if (
+        graph_embed == "cross"
+        and fuse_graph
+        and not isinstance(txt_embs, list)
+        and gph_embs is not None
+    ):
         t2 = time.time()
-        fused_embs = fuse_model(torch.tensor(txt_embs), gph_embs).cpu().numpy()
+        # Use AMP for fusion if available and requested
+        if use_amp and torch.cuda.is_available():
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                fused_embs = fuse_model(torch.tensor(txt_embs), gph_embs).cpu().numpy()
+        else:
+            fused_embs = fuse_model(torch.tensor(txt_embs), gph_embs).cpu().numpy()
         dt_fuse = time.time() - t2
         # print(f"[STAGE] CrossModalFusion for batch of {len(texts)}: {dt_fuse:.2f}s")
     else:
@@ -288,12 +365,18 @@ def _flush(
         wl_vec = wl_vector(row["text"])
         sp_ids, used_fallback, fallback_chars = tokenizer.encode_with_flag(row["text"])
 
-        # Handle different text embedding types
+        # Handle different text embedding types (enhanced for Legal-BERT)
         gpt2_emb = None
         st_emb = None
-        if text_model.lower() == "gpt2" and txt_vec is not None:
+        legal_bert_emb = None
+
+        if text_embedder == "legal-bert" and txt_vec is not None:
+            legal_bert_emb = txt_vec.tolist()
+        elif text_model.lower() == "gpt2" and txt_vec is not None:
             gpt2_emb = txt_vec.tolist()
-        elif text_model.lower() == "st" and txt_vec is not None:
+        elif (
+            text_model.lower() == "st" or text_embedder == "st"
+        ) and txt_vec is not None:
             st_emb = txt_vec.tolist()
 
         enriched_rows.append(
@@ -311,13 +394,15 @@ def _flush(
                 "st_model": (
                     st_model._first_module().__class__.__name__ if st_model else None
                 ),
+                "text_embedder": text_embedder,  # Track which embedder was used
                 "gpt2_emb": gpt2_emb,
                 "st_emb": st_emb,
+                "legal_bert_emb": legal_bert_emb,  # New: Legal-BERT embeddings
                 "gph_method": graph_embed,
                 "gph_emb": gph_embs[i].tolist() if gph_embs is not None else None,
                 **(
                     {"fused_emb": fused_embs[i].tolist()}
-                    if graph_embed == "cross" and fused_embs is not None
+                    if graph_embed == "cross" and fused_embs is not None and fuse_graph
                     else {}
                 ),
             }
@@ -347,8 +432,44 @@ def _flush(
     show_default=True,
     help="Current stage number; used to match and bump filenames.",
 )
+@click.option(
+    "--text-embedder",
+    type=click.Choice(["st", "gpt2", "legal-bert"]),
+    default="st",
+    show_default=True,
+    help="Text embedder: st (SentenceTransformer), gpt2 (GPT-2), or legal-bert (Legal-BERT for legal documents).",
+)
+@click.option(
+    "--fuse-graph/--no-fuse-graph",
+    default=True,
+    show_default=True,
+    help="Enable/disable fusion of text embeddings with graph embeddings.",
+)
+@click.option(
+    "--embed-batch-size",
+    type=int,
+    default=32,
+    show_default=True,
+    help="Batch size for embedding generation (32 optimized for T4 GPU).",
+)
+@click.option(
+    "--use-amp/--no-amp",
+    default=True,
+    show_default=True,
+    help="Enable/disable Automatic Mixed Precision for GPU efficiency.",
+)
 @click.pass_context
-def cli(ctx, in_path, out_root, recursive, stage):
+def cli(
+    ctx,
+    in_path,
+    out_root,
+    recursive,
+    stage,
+    text_embedder,
+    fuse_graph,
+    embed_batch_size,
+    use_amp,
+):
     """
     Chainable pipeline: tokenize → embed → graph → fuse.
     If no subcommands given, runs full encode (all).
@@ -372,6 +493,10 @@ def cli(ctx, in_path, out_root, recursive, stage):
         "processors": [],
         "stage": stage,
         "input_root": input_root,  # <-- store input_root
+        "text_embedder": text_embedder,  # New: Legal-BERT extension
+        "fuse_graph": fuse_graph,  # New: Fusion control
+        "embed_batch_size": embed_batch_size,  # New: Embedding batch size
+        "use_amp": use_amp,  # New: AMP for efficiency
     }
     # schedule full encode if no subcommands
     if ctx.invoked_subcommand is None:
@@ -404,6 +529,10 @@ def all(ctx, text_model, st_model, graph_embed):
             graph_embed=graph_embed,
             stage=stage,
             overwrite=False,
+            text_embedder=ctx.obj["text_embedder"],  # New: Legal-BERT extension
+            fuse_graph=ctx.obj["fuse_graph"],  # New: Fusion control
+            embed_batch_size=ctx.obj["embed_batch_size"],  # New: Embedding batch size
+            use_amp=ctx.obj["use_amp"],  # New: AMP for efficiency
         )
 
 
@@ -613,6 +742,30 @@ def cmd_embed(ctx, st_model):
     is_flag=True,
     help="Use Automatic Mixed Precision (AMP) for speedup",
 )
+@click.option(
+    "--fusion-dropout",
+    type=float,
+    default=0.1,
+    help="Dropout rate for CrossModal fusion stability (default: 0.1)",
+)
+@click.option(
+    "--fusion-heads",
+    type=int,
+    default=4,
+    help="Number of attention heads for CrossModal fusion (default: 4)",
+)
+@click.option(
+    "--adaptive-temperature",
+    is_flag=True,
+    default=True,
+    help="Use adaptive temperature in InfoNCE loss for legal text",
+)
+@click.option(
+    "--hard-negative-weight",
+    type=float,
+    default=1.2,
+    help="Weight for hard negative mining in contrastive loss (default: 1.2)",
+)
 @click.pass_context
 def cmd_graph(
     ctx,
@@ -633,6 +786,10 @@ def cmd_graph(
     fusion_patience,
     use_compile,
     use_amp,
+    fusion_dropout,
+    fusion_heads,
+    adaptive_temperature,
+    hard_negative_weight,
 ):
     """Embed graphs via WL, Node2Vec, GraphSAGE, or Cross-Modal Fusion targeting 10^-4 MSE."""
     # Print setup information once
@@ -812,7 +969,12 @@ def cmd_graph(
                 txt_dim = st_model.get_sentence_embedding_dimension()
                 if txt_dim is None:
                     raise ValueError("Could not determine text embedding dimension")
-                fusion_model = CrossModalFusion(text_dim=txt_dim, graph_dim=hidden_dim)
+                fusion_model = CrossModalFusion(
+                    text_dim=txt_dim,
+                    graph_dim=hidden_dim,
+                    dropout=fusion_dropout,
+                    num_heads=fusion_heads,
+                )
 
                 # Apply torch.compile optimization if requested
                 if use_compile:
@@ -900,7 +1062,12 @@ def cmd_graph(
         txt_dim = st_model.get_sentence_embedding_dimension()
         if txt_dim is None:
             raise ValueError("Could not determine text embedding dimension")
-        fusion_model = CrossModalFusion(text_dim=txt_dim, graph_dim=hidden_dim)
+        fusion_model = CrossModalFusion(
+            text_dim=txt_dim,
+            graph_dim=hidden_dim,
+            dropout=fusion_dropout,
+            num_heads=fusion_heads,
+        )
         print("  Using untrained CrossModalFusion - will train on existing embeddings")
 
     if graph_embed == "node2vec":

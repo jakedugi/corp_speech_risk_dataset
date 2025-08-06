@@ -50,3 +50,53 @@ def coral_loss(
         loss = loss * lambda_k  # Reweight per threshold
 
     return loss.mean() if reduction == "mean" else loss.sum()
+
+
+def hybrid_loss(
+    class_logits: torch.Tensor,
+    reg_output: torch.Tensor,
+    labels: torch.Tensor,
+    lambda_cls: float = 0.7,
+    lambda_reg: float = 0.3,
+    label_smoothing: float = 0.0,
+) -> torch.Tensor:
+    """
+    Hybrid loss combining classification and regression for ordinal data.
+
+    Args:
+        class_logits: Classification logits (B, num_classes)
+        reg_output: Regression output (B, 1)
+        labels: True class indices (B,)
+        lambda_cls: Weight for classification loss
+        lambda_reg: Weight for regression loss
+        label_smoothing: Label smoothing factor
+    """
+    # Classification loss (cross-entropy)
+    if label_smoothing > 0:
+        # Smoothed cross-entropy
+        num_classes = class_logits.size(1)
+        confidence = 1.0 - label_smoothing
+        smooth_positives = confidence
+        smooth_negatives = label_smoothing / (num_classes - 1)
+
+        log_probs = F.log_softmax(class_logits, dim=1)
+        targets_one_hot = torch.zeros_like(log_probs).scatter_(
+            1, labels.unsqueeze(1), 1
+        )
+        targets_smooth = (
+            targets_one_hot * smooth_positives
+            + (1 - targets_one_hot) * smooth_negatives
+        )
+
+        ce_loss = -(targets_smooth * log_probs).sum(dim=1).mean()
+    else:
+        ce_loss = F.cross_entropy(class_logits, labels)
+
+    # Regression loss (MSE on ordinal labels)
+    reg_targets = labels.float().unsqueeze(1)
+    mse_loss = F.mse_loss(reg_output, reg_targets)
+
+    # Combined loss
+    total_loss = lambda_cls * ce_loss + lambda_reg * mse_loss
+
+    return total_loss

@@ -37,6 +37,11 @@ class Config:
     feature_noise: float = 0.01  # Input noise for regularization
     tune_threshold: bool = True  # Auto-tune threshold on validation
 
+    # Add these fields to the Config dataclass
+    model_type: str = "coral"  # "coral" or "hybrid"
+    lambda_cls: float = 0.7  # Classification loss weight
+    lambda_reg: float = 0.3  # Regression loss weight
+
     def save(self, path: str | Path):
         path = Path(path)
         path.write_text(json.dumps(asdict(self), indent=2))

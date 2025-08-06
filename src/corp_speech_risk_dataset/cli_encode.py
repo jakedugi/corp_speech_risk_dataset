@@ -1508,7 +1508,7 @@ def cmd_fuse(ctx):
 
 @cli.result_callback()
 @click.pass_context
-def run_pipeline(ctx, processors, in_path, out_root, recursive, stage):
+def run_pipeline(ctx, processors, **kwargs):
     files = ctx.obj["files"]
     out_root = ctx.obj["out_root"]
     stage = ctx.obj["stage"]

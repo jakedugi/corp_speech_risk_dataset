@@ -488,4 +488,31 @@ uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes
 
 
 uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes/courtlistener_v1/*/doc_*_text_stage9.jsonl" --output similarity_by_outcomes_no_missing.html --max-threshold 15500000000 --exclude-speakers "Unknown,Court,FTC,Fed,Plaintiff,State,Commission,Congress,Circuit,FDA" --exclude-missing
+
+
+!python -m src.corp_speech_risk_dataset.cli_encode \
+  --out-root /content/corp_speech_risk_dataset/data/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/outcomes/courtlistener_v2_legal_bert \
+  --recursive \
+  --stage 9 \
+  --text-embedder legal-bert \
+  --embed-batch-size 32 \
+  --use-amp \
+  /content/corp_speech_risk_dataset/data/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/outcomes/courtlistener_v1 \
+  embed
+
+
+
+!python -m src.corp_speech_risk_dataset.cli_encode \
+  --out-root /content/corp_speech_risk_dataset/data/outcomes/courtlistener_v3_legal_bert_graphsage \
+  --recursive \
+  --stage 10 \
+  --hidden-dim 768 \
+  --epochs 40 \
+  /content/corp_speech_risk_dataset/data/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/outcomes/courtlistener_v2_legal_bert \
+  graph \
+    --graph-embed graphsage \
+    --batch-size 512 \
+    --loss-type hybrid \
+    --eval-graph \
+    --use-amp
 """

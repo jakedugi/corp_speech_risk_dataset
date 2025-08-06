@@ -1078,11 +1078,12 @@ def cmd_graph(
                     )
 
                     model = get_legal_bert_embedder(use_amp=use_amp)
-                    text_embs = model.encode(
+                    text_embs_np = model.encode(
                         training_texts[:fusion_samples],
-                        convert_to_tensor=True,
+                        convert_to_numpy=True,
                         batch_size=embed_batch_size,
                     )
+                    text_embs = torch.tensor(text_embs_np)
                 else:
                     st_model = get_sentence_embedder("all-MiniLM-L6-v2")
                     text_embs = st_model.encode(
@@ -1191,8 +1192,6 @@ def cmd_graph(
                     print(
                         " Low validation loss - model is learning graph structure well"
                     )
-                else:
-                    print("⚠️ No suitable training graphs found - using untrained model")
 
                     # Handle cross-modal fusion setup for inference
     if graph_embed == "cross" and fusion_model is None:
@@ -1277,6 +1276,15 @@ def cmd_graph(
                     else "st_emb" in js
                 )
 
+                # Debug: Print what embeddings are available
+                if total_processed == 0:  # Only print for first entry
+                    available_fields = [k for k in js.keys() if "emb" in k]
+                    print(f"[DEBUG] text_embedder setting: {text_embedder}")
+                    print(f"[DEBUG] Available embedding fields: {available_fields}")
+                    print(
+                        f"[DEBUG] has_text_emb: {has_text_emb}, has gph_emb: {'gph_emb' in js}"
+                    )
+
                 if has_text_emb and "gph_emb" in js:
                     # Use existing embeddings from previous stages
                     if text_embedder == "legal-bert":
@@ -1310,7 +1318,8 @@ def cmd_graph(
                         )
 
                         model = get_legal_bert_embedder(use_amp=use_amp)
-                        text_emb = model.encode([js["text"]], convert_to_tensor=True)[0]
+                        text_emb_np = model.encode([js["text"]], convert_to_numpy=True)
+                        text_emb = torch.tensor(text_emb_np[0])
                     else:
                         from src.corp_speech_risk_dataset.encoding.stembedder import (
                             get_sentence_embedder,
@@ -1420,15 +1429,57 @@ def cmd_graph(
 
 
 @cli.command("fuse")
+@click.option(
+    "--train-fusion",
+    is_flag=True,
+    default=True,
+    help="Train CrossModal fusion with InfoNCE loss (default: True)",
+)
+@click.option(
+    "--max-training-samples",
+    type=int,
+    default=5000,
+    help="Maximum samples for fusion training (default: 5000)",
+)
 @click.pass_context
-def cmd_fuse(ctx):
-    """Fuse text+graph embeddings via CrossModalFusion."""
+def cmd_fuse(ctx, train_fusion, max_training_samples):
+    """Fuse text+graph embeddings via CrossModalFusion with advanced InfoNCE training."""
 
-    print(f"\n[STEP] CROSS-MODAL FUSION")
-    print(f"Model: CrossModalFusion (text + graph → combined)")
+    # Get fusion hyperparameters from context
+    fusion_epochs = ctx.obj.get("fusion_epochs", 15)
+    fusion_batch_size = ctx.obj.get("fusion_batch_size", 256)
+    fusion_temperature = ctx.obj.get("fusion_temperature", 0.1)
+    fusion_dropout = ctx.obj.get("fusion_dropout", 0.1)
+    fusion_heads = ctx.obj.get("fusion_heads", 8)
+    fusion_patience = ctx.obj.get("fusion_patience", 3)
+    adaptive_temperature = ctx.obj.get("adaptive_temperature", True)
+    hard_negative_weight = ctx.obj.get("hard_negative_weight", 1.3)
+    use_amp = ctx.obj.get("use_amp", True)
+    text_embedder = ctx.obj.get("text_embedder", "st")
+
+    print(f"\n[STEP] ADVANCED CROSS-MODAL FUSION")
+    print(f"Model: CrossModalFusion with InfoNCE loss")
+    if train_fusion:
+        print(f"Training: ENABLED with your hyperparameters")
+        print(f"  ├─ Epochs: {fusion_epochs}")
+        print(f"  ├─ Batch size: {fusion_batch_size}")
+        print(f"  ├─ Temperature: {fusion_temperature}")
+        print(f"  ├─ Dropout: {fusion_dropout}")
+        print(f"  ├─ Attention heads: {fusion_heads}")
+        print(f"  ├─ Patience: {fusion_patience}")
+        print(f"  ├─ Adaptive temperature: {adaptive_temperature}")
+        print(f"  ├─ Hard negative weight: {hard_negative_weight}")
+        print(f"  ├─ AMP: {use_amp}")
+        print(f"  └─ Text embedder: {text_embedder}")
+    else:
+        print(f"Training: DISABLED (using untrained fusion)")
+    print(f"Text embedder: {text_embedder}")
     print("=" * 60)
 
-    from src.corp_speech_risk_dataset.encoding.graphembedder import CrossModalFusion
+    from src.corp_speech_risk_dataset.encoding.graphembedder import (
+        CrossModalFusion,
+        train_crossmodal_fusion,
+    )
     import torch
 
     total_processed = 0
@@ -1448,8 +1499,7 @@ def cmd_fuse(ctx):
         # gather embeddings
         emb_text = []
         emb_graph = []
-        # Get text embedder setting from context
-        text_embedder = ctx.obj.get("text_embedder", "st")
+        batch_data = []
 
         for l in batch:
             js = json.loads(l)
@@ -1467,20 +1517,99 @@ def cmd_fuse(ctx):
                 )
 
             emb_graph.append(js["gph_emb"])
+            batch_data.append(js)
 
-        # Initialize fusion model on first batch
+        # Initialize and train fusion model on first batch
         if fusion_model is None:
             text_dim = len(emb_text[0])
             graph_dim = len(emb_graph[0])
             print(
-                f"\nFusion config: {text_dim}D (text) + {graph_dim}D (graph) → {text_dim + graph_dim}D"
+                f"\nFusion config: {text_dim}D (text) + {graph_dim}D (graph) → {max(text_dim, graph_dim)}D"
             )
-            fusion_model = CrossModalFusion(text_dim, graph_dim)
 
-        fused = fusion_model(torch.tensor(emb_text), torch.tensor(emb_graph)).tolist()
+            fusion_model = CrossModalFusion(
+                text_dim=text_dim,
+                graph_dim=graph_dim,
+                dropout=fusion_dropout,
+                num_heads=fusion_heads,
+            )
+
+            if train_fusion:
+                print(
+                    f"\n[FUSION TRAINING] Collecting training samples from all files..."
+                )
+
+                # Collect training data from all files
+                training_text_embs = []
+                training_graph_embs = []
+                sample_count = 0
+
+                # First, collect from current batch
+                training_text_embs.extend(emb_text)
+                training_graph_embs.extend(emb_graph)
+                sample_count += len(emb_text)
+
+                # Collect from remaining files if needed
+                if sample_count < max_training_samples:
+                    for file_path in ctx.obj["files"]:
+                        if sample_count >= max_training_samples:
+                            break
+                        try:
+                            with open(file_path, "r", encoding="utf-8") as f:
+                                for line in f:
+                                    if sample_count >= max_training_samples:
+                                        break
+                                    try:
+                                        js = json.loads(line)
+                                        # Check for required embeddings
+                                        has_text = (
+                                            "legal_bert_emb" in js
+                                            if text_embedder == "legal-bert"
+                                            else "st_emb" in js
+                                        )
+                                        if has_text and "gph_emb" in js:
+                                            if text_embedder == "legal-bert":
+                                                training_text_embs.append(
+                                                    js["legal_bert_emb"]
+                                                )
+                                            else:
+                                                training_text_embs.append(js["st_emb"])
+                                            training_graph_embs.append(js["gph_emb"])
+                                            sample_count += 1
+                                    except Exception:
+                                        continue
+                        except Exception:
+                            continue
+
+                print(
+                    f"[FUSION TRAINING] Collected {len(training_text_embs):,} training pairs"
+                )
+
+                # Train the fusion model
+                fusion_model = train_crossmodal_fusion(
+                    fusion_model,
+                    [torch.tensor(emb) for emb in training_text_embs],
+                    [torch.tensor(emb) for emb in training_graph_embs],
+                    epochs=fusion_epochs,
+                    batch_size=fusion_batch_size,
+                    temperature=fusion_temperature,
+                    patience=fusion_patience,
+                    use_amp=use_amp,
+                    adaptive_temperature=adaptive_temperature,
+                    hard_negative_weight=hard_negative_weight,
+                )
+
+                print(f"[FUSION TRAINING] Training completed!")
+
+        # Apply fusion to current batch
+        fusion_model.eval()
+        with torch.no_grad():
+            fused = fusion_model(
+                torch.tensor(emb_text), torch.tensor(emb_graph)
+            ).tolist()
+
         # emit fused rows
-        for l, f in zip(batch, fused):
-            js = json.loads(l)
+        for js, f in zip(batch_data, fused):
             js["fused_emb"] = f
             total_processed += 1
 
@@ -1488,7 +1617,7 @@ def cmd_fuse(ctx):
             if total_processed % 1000 == 0:
                 print(f"\n[CROSS-MODAL FUSION] Processed {total_processed:,} entries")
                 print(
-                    f"  └─ Fused {text_dim}D text + {graph_dim}D graph → {text_dim + graph_dim}D combined"
+                    f"  └─ Fused {text_dim}D text + {graph_dim}D graph → {len(f)}D combined"
                 )
 
             yield json.dumps(js, ensure_ascii=False)

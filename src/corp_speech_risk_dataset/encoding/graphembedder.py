@@ -632,9 +632,9 @@ def train_crossmodal_fusion(
     text_tensor = torch.stack(text_embeddings).to(device)
     graph_tensor = torch.stack(graph_embeddings).to(device)
 
-    # Optimized for cross-modal learning
+    # FIXED: Lower LR for numerical stability with AMP and contrastive learning
     optimizer = torch.optim.AdamW(
-        fusion_model.parameters(), lr=0.001, weight_decay=0.01
+        fusion_model.parameters(), lr=0.0003, weight_decay=0.01  # 3e-4 instead of 1e-3
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
@@ -690,11 +690,15 @@ def train_crossmodal_fusion(
                 # Forward pass
                 fused = fusion_model(batch_text, batch_graph)
 
+                # FIXED: Pre-project inputs using model's registered projections
+                proj_text = fusion_model.text_proj(batch_text)
+                proj_graph = fusion_model.graph_proj(batch_graph)
+
                 # Enhanced InfoNCE contrastive loss - legal text optimized
                 batch_loss, batch_metrics = compute_infonce_loss(
                     fused,
-                    batch_text,
-                    batch_graph,
+                    proj_text,
+                    proj_graph,
                     temperature=temperature,
                     use_nt_xent=use_amp,
                     adaptive_temp=adaptive_temperature,
@@ -836,9 +840,10 @@ def evaluate_crossmodal_alignment(
             # Generate fused embeddings
             batch_fused = fusion_model(batch_text, batch_graph)
 
-            # Normalize fused and text embeddings
+            # FIXED: Project both text and graph for symmetry, then normalize
             batch_fused_norm = F.normalize(batch_fused, dim=1, eps=1e-8)
-            batch_text_norm = F.normalize(batch_text, dim=1, eps=1e-8)
+            batch_text_proj = fusion_model.text_proj(batch_text)
+            batch_text_norm = F.normalize(batch_text_proj, dim=1, eps=1e-8)
 
             # Project graph embeddings to fusion dimension then normalize
             batch_graph_proj = fusion_model.graph_proj(batch_graph)
@@ -932,16 +937,19 @@ def compute_infonce_loss(
     use_nt_xent: bool = False,
     adaptive_temp: bool = True,
     hard_negative_weight: float = 1.0,
-    contrastive_dim: int = 512,  # Dedicated contrastive alignment space
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
     """
     Enhanced InfoNCE contrastive loss for cross-modal alignment.
     Optimized for legal text dependency graph alignment with stability improvements.
 
+    FIXED BUGS:
+    - Hard negative weighting now preserves diagonal (positive) logits
+    - Uses pre-projected inputs instead of creating new layers per batch
+
     Args:
         fused: Fused embeddings [B, fusion_dim]
-        text: Text embeddings [B, text_dim]
-        graph: Graph embeddings [B, graph_dim]
+        text: Pre-projected text embeddings [B, fusion_dim]
+        graph: Pre-projected graph embeddings [B, fusion_dim]
         temperature: Base temperature for InfoNCE
         use_nt_xent: Use NT-Xent normalization for stability
         adaptive_temp: Dynamically adjust temperature based on alignment
@@ -951,46 +959,20 @@ def compute_infonce_loss(
         Tuple of (loss, metrics_dict)
     """
     batch_size = fused.shape[0]
-    fused_dim = fused.shape[1]
     device = fused.device
 
-    # Project all embeddings to dedicated contrastive alignment space (512D)
-    # This separates alignment computation from final fusion storage (768D)
-    text_contrastive_proj = nn.Linear(text.shape[1], contrastive_dim).to(device)
-    graph_contrastive_proj = nn.Linear(graph.shape[1], contrastive_dim).to(device)
-    fused_contrastive_proj = nn.Linear(fused_dim, contrastive_dim).to(device)
-
-    # Xavier initialization for numerical stability
-    for proj in [text_contrastive_proj, graph_contrastive_proj, fused_contrastive_proj]:
-        nn.init.xavier_uniform_(proj.weight)
-        nn.init.zeros_(proj.bias)
-
-    # Project to contrastive space
-    text_contrastive = text_contrastive_proj(text)
-    graph_contrastive = graph_contrastive_proj(graph)
-    fused_contrastive = fused_contrastive_proj(fused)
+    # FIXED: Removed per-batch projection layers - use pre-projected inputs
+    # The caller should project using model's registered projections before calling this
 
     # Guard against zero vectors and NaNs
-    text_contrastive = torch.where(
-        torch.isnan(text_contrastive),
-        torch.zeros_like(text_contrastive),
-        text_contrastive,
-    )
-    graph_contrastive = torch.where(
-        torch.isnan(graph_contrastive),
-        torch.zeros_like(graph_contrastive),
-        graph_contrastive,
-    )
-    fused_contrastive = torch.where(
-        torch.isnan(fused_contrastive),
-        torch.zeros_like(fused_contrastive),
-        fused_contrastive,
-    )
+    text = torch.where(torch.isnan(text), torch.zeros_like(text), text)
+    graph = torch.where(torch.isnan(graph), torch.zeros_like(graph), graph)
+    fused = torch.where(torch.isnan(fused), torch.zeros_like(fused), fused)
 
-    # L2 normalize in contrastive space with eps for stability
-    fused_norm = F.normalize(fused_contrastive, dim=1, eps=1e-8)
-    text_norm = F.normalize(text_contrastive, dim=1, eps=1e-8)
-    graph_norm = F.normalize(graph_contrastive, dim=1, eps=1e-8)
+    # L2 normalize with eps for stability
+    fused_norm = F.normalize(fused, dim=1, eps=1e-8)
+    text_norm = F.normalize(text, dim=1, eps=1e-8)
+    graph_norm = F.normalize(graph, dim=1, eps=1e-8)
 
     # Adaptive temperature based on current alignment (for legal quote complexity)
     if adaptive_temp:
@@ -1023,21 +1005,15 @@ def compute_infonce_loss(
         )
 
     # Hard negative mining for legal quotes (emphasize challenging cases)
+    # FIXED: Only scale off-diagonal (negative) elements, preserve diagonal (positives)
     if hard_negative_weight > 1.0:
-        # Find hardest negatives (highest similarity non-diagonal elements)
-        text_mask = ~torch.eye(batch_size, dtype=torch.bool, device=device)
-        graph_mask = ~torch.eye(batch_size, dtype=torch.bool, device=device)
+        # Off-diagonal mask (negatives only)
+        mask_off = ~torch.eye(batch_size, dtype=torch.bool, device=device)
+        scale = hard_negative_weight - 1.0
 
-        text_hard_negs = text_fused_sim.masked_fill(~text_mask, -float("inf"))
-        graph_hard_negs = graph_fused_sim.masked_fill(~graph_mask, -float("inf"))
-
-        # Weight hard negatives more heavily
-        text_fused_sim = text_fused_sim + (
-            text_hard_negs * (hard_negative_weight - 1.0)
-        ).masked_fill(text_mask, 0)
-        graph_fused_sim = graph_fused_sim + (
-            graph_hard_negs * (hard_negative_weight - 1.0)
-        ).masked_fill(graph_mask, 0)
+        # Scale only off-diagonal negatives, leave diagonal positives untouched
+        text_fused_sim = text_fused_sim + scale * text_fused_sim * mask_off
+        graph_fused_sim = graph_fused_sim + scale * graph_fused_sim * mask_off
 
     # Positive pairs are on the diagonal
     labels = torch.arange(batch_size, device=device)

@@ -686,24 +686,49 @@ def cmd_tokenize(ctx, text_model, st_model):
 
 
 @cli.command("embed")
-@click.option("--st-model", required=True)
+@click.option("--st-model", default=None, help="SentenceTransformer model name")
 @click.pass_context
 def cmd_embed(ctx, st_model):
-    """Embed text via SentenceTransformer or GPT2."""
+    """Embed text via SentenceTransformer, GPT2, or Legal-BERT."""
 
     def processor(lines):
         import time
 
         start_time = time.time()
-        print(f"[TEXT EMBEDDING] Loading model: {st_model}")
-        from src.corp_speech_risk_dataset.encoding.stembedder import (
-            get_sentence_embedder,
-        )
+        text_embedder = ctx.obj["text_embedder"]
+        embed_batch_size = ctx.obj["embed_batch_size"]
+        use_amp = ctx.obj["use_amp"]
 
-        model = get_sentence_embedder(st_model)
-        embedding_dim = model.get_sentence_embedding_dimension()
+        # Initialize the appropriate model
+        model = None
+        embedding_dim = None
+        emb_field = None
+
+        if text_embedder == "legal-bert":
+            print(f"[TEXT EMBEDDING] Loading Legal-BERT model")
+            from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
+                get_legal_bert_embedder,
+            )
+
+            model = get_legal_bert_embedder(use_amp=use_amp)
+            embedding_dim = model.get_sentence_embedding_dimension()
+            emb_field = "legal_bert_emb"
+        elif text_embedder == "st" and st_model:
+            print(f"[TEXT EMBEDDING] Loading SentenceTransformer model: {st_model}")
+            from src.corp_speech_risk_dataset.encoding.stembedder import (
+                get_sentence_embedder,
+            )
+
+            model = get_sentence_embedder(st_model)
+            embedding_dim = model.get_sentence_embedding_dimension()
+            emb_field = "st_emb"
+        else:
+            raise ValueError(
+                f"Embed subcommand requires either --st-model with --text-embedder st, or --text-embedder legal-bert"
+            )
+
         print(f"[TEXT EMBEDDING] Model output dimension: {embedding_dim}D")
-        print(f"[TEXT EMBEDDING] Batch size: 64")
+        print(f"[TEXT EMBEDDING] Batch size: {embed_batch_size}")
 
         batch, metas = [], []
         try:
@@ -712,19 +737,24 @@ def cmd_embed(ctx, st_model):
                 # clear previous text embeddings
                 js.pop("st_emb", None)
                 js.pop("gpt2_emb", None)
+                js.pop("legal_bert_emb", None)
                 batch.append(js["text"])
                 metas.append(js)
-                if len(batch) >= 64:
+                if len(batch) >= embed_batch_size:
                     embs = model.encode(batch, convert_to_numpy=True)
                     for mj, emb in zip(metas, embs):
-                        mj["st_emb"] = emb.tolist()
+                        mj[emb_field] = emb.tolist()
+                        mj["text_embedder"] = (
+                            text_embedder  # Track which embedder was used
+                        )
                         yield json.dumps(mj, ensure_ascii=False)
                     batch, metas = [], []
             # flush leftover
             if batch:
                 embs = model.encode(batch, convert_to_numpy=True)
                 for mj, emb in zip(metas, embs):
-                    mj["st_emb"] = emb.tolist()
+                    mj[emb_field] = emb.tolist()
+                    mj["text_embedder"] = text_embedder  # Track which embedder was used
                     yield json.dumps(mj, ensure_ascii=False)
         finally:
             dt = time.time() - start_time
@@ -1035,13 +1065,29 @@ def cmd_graph(
 
                 print(f"\n[CROSSMODAL FUSION] Starting fusion training...")
 
-                # Get text embeddings for training
-                st_model = get_sentence_embedder("all-MiniLM-L6-v2")
-                text_embs = st_model.encode(
-                    training_texts[:fusion_samples],
-                    convert_to_tensor=True,
-                    batch_size=64,
-                )  # Use configurable fusion_samples
+                # Get text embeddings for training - respect text_embedder setting
+                text_embedder = ctx.obj.get("text_embedder", "st")
+                embed_batch_size = ctx.obj.get("embed_batch_size", 64)
+                use_amp = ctx.obj.get("use_amp", True)
+
+                if text_embedder == "legal-bert":
+                    from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
+                        get_legal_bert_embedder,
+                    )
+
+                    model = get_legal_bert_embedder(use_amp=use_amp)
+                    text_embs = model.encode(
+                        training_texts[:fusion_samples],
+                        convert_to_tensor=True,
+                        batch_size=embed_batch_size,
+                    )
+                else:
+                    st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+                    text_embs = st_model.encode(
+                        training_texts[:fusion_samples],
+                        convert_to_tensor=True,
+                        batch_size=embed_batch_size,
+                    )
 
                 # Get graph embeddings for same texts
                 graph_embs = []
@@ -1055,8 +1101,11 @@ def cmd_graph(
                         )
                         graph_embs.append(graph_emb)
 
-                # Create and train fusion model
-                txt_dim = st_model.get_sentence_embedding_dimension()
+                # Create and train fusion model - get dimension from appropriate model
+                if text_embedder == "legal-bert":
+                    txt_dim = model.get_sentence_embedding_dimension()
+                else:
+                    txt_dim = st_model.get_sentence_embedding_dimension()
                 if txt_dim is None:
                     raise ValueError("Could not determine text embedding dimension")
                 fusion_model = CrossModalFusion(
@@ -1145,13 +1194,25 @@ def cmd_graph(
 
                     # Handle cross-modal fusion setup for inference
     if graph_embed == "cross" and fusion_model is None:
-        # If we didn't train fusion above, create untrained one (fallback)
-        from src.corp_speech_risk_dataset.encoding.stembedder import (
-            get_sentence_embedder,
-        )
+        # If we didn't train fusion above, create untrained one (fallback) - respect text_embedder
+        text_embedder = ctx.obj.get("text_embedder", "st")
+        use_amp = ctx.obj.get("use_amp", True)
 
-        st_model = get_sentence_embedder("all-MiniLM-L6-v2")
-        txt_dim = st_model.get_sentence_embedding_dimension()
+        if text_embedder == "legal-bert":
+            from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
+                get_legal_bert_embedder,
+            )
+
+            model = get_legal_bert_embedder(use_amp=use_amp)
+            txt_dim = model.get_sentence_embedding_dimension()
+        else:
+            from src.corp_speech_risk_dataset.encoding.stembedder import (
+                get_sentence_embedder,
+            )
+
+            st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+            txt_dim = st_model.get_sentence_embedding_dimension()
+
         if txt_dim is None:
             raise ValueError("Could not determine text embedding dimension")
         fusion_model = CrossModalFusion(
@@ -1205,9 +1266,21 @@ def cmd_graph(
 
             elif graph_embed == "cross":
                 # For cross-modal: use existing embeddings from data if available
-                if "st_emb" in js and "gph_emb" in js:
+                text_embedder = ctx.obj.get("text_embedder", "st")
+
+                # Check for appropriate text embedding based on text_embedder setting
+                has_text_emb = (
+                    "legal_bert_emb" in js
+                    if text_embedder == "legal-bert"
+                    else "st_emb" in js
+                )
+
+                if has_text_emb and "gph_emb" in js:
                     # Use existing embeddings from previous stages
-                    text_emb = torch.tensor(js["st_emb"])
+                    if text_embedder == "legal-bert":
+                        text_emb = torch.tensor(js["legal_bert_emb"])
+                    else:
+                        text_emb = torch.tensor(js["st_emb"])
                     graph_emb = torch.tensor(js["gph_emb"])
 
                     # Fuse embeddings using fusion model
@@ -1225,14 +1298,26 @@ def cmd_graph(
                         fused_emb = torch.cat([text_emb, graph_emb])
                         js["fused_emb"] = fused_emb.tolist()
                 else:
-                    # Fallback: compute embeddings if not available
-                    from src.corp_speech_risk_dataset.encoding.stembedder import (
-                        get_sentence_embedder,
-                    )
+                    # Fallback: compute embeddings if not available - respect text_embedder
+                    text_embedder = ctx.obj.get("text_embedder", "st")
+                    use_amp = ctx.obj.get("use_amp", True)
 
-                    # Get text embedding
-                    st_model = get_sentence_embedder("all-MiniLM-L6-v2")
-                    text_emb = st_model.encode([js["text"]], convert_to_tensor=True)[0]
+                    if text_embedder == "legal-bert":
+                        from src.corp_speech_risk_dataset.encoding.legal_bert_embedder import (
+                            get_legal_bert_embedder,
+                        )
+
+                        model = get_legal_bert_embedder(use_amp=use_amp)
+                        text_emb = model.encode([js["text"]], convert_to_tensor=True)[0]
+                    else:
+                        from src.corp_speech_risk_dataset.encoding.stembedder import (
+                            get_sentence_embedder,
+                        )
+
+                        st_model = get_sentence_embedder("all-MiniLM-L6-v2")
+                        text_emb = st_model.encode(
+                            [js["text"]], convert_to_tensor=True
+                        )[0]
 
                     # Get graph embedding via GraphSAGE
                     dep_graph = to_dependency_graph(js["text"])
@@ -1255,7 +1340,11 @@ def cmd_graph(
                             )[0]
                         js["fused_emb"] = fused_emb.tolist()
                         js["gph_emb"] = graph_emb.tolist()
-                        js["st_emb"] = text_emb.tolist()
+                        # Save text embedding to appropriate field
+                        if text_embedder == "legal-bert":
+                            js["legal_bert_emb"] = text_emb.tolist()
+                        else:
+                            js["st_emb"] = text_emb.tolist()
                     else:
                         # Fallback if no trained fusion model
                         js["gph_emb"] = graph_emb.tolist()
@@ -1357,11 +1446,24 @@ def cmd_fuse(ctx):
         # gather embeddings
         emb_text = []
         emb_graph = []
+        # Get text embedder setting from context
+        text_embedder = ctx.obj.get("text_embedder", "st")
+
         for l in batch:
             js = json.loads(l)
             # clear previous fusion embeddings
             js.pop("fused_emb", None)
-            emb_text.append(js["st_emb"])
+
+            # Use appropriate text embedding field based on text_embedder setting
+            if text_embedder == "legal-bert" and "legal_bert_emb" in js:
+                emb_text.append(js["legal_bert_emb"])
+            elif "st_emb" in js:
+                emb_text.append(js["st_emb"])
+            else:
+                raise ValueError(
+                    f"No compatible text embeddings found. Expected {'legal_bert_emb' if text_embedder == 'legal-bert' else 'st_emb'}"
+                )
+
             emb_graph.append(js["gph_emb"])
 
         # Initialize fusion model on first batch

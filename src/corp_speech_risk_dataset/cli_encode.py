@@ -1585,11 +1585,19 @@ def cmd_fuse(ctx, train_fusion, max_training_samples):
                     f"[FUSION TRAINING] Collected {len(training_text_embs):,} training pairs"
                 )
 
+                # Convert embeddings to tensors with requires_grad=True
+                text_tensors = [
+                    torch.tensor(emb, requires_grad=True) for emb in training_text_embs
+                ]
+                graph_tensors = [
+                    torch.tensor(emb, requires_grad=True) for emb in training_graph_embs
+                ]
+
                 # Train the fusion model
                 fusion_model = train_crossmodal_fusion(
                     fusion_model,
-                    [torch.tensor(emb) for emb in training_text_embs],
-                    [torch.tensor(emb) for emb in training_graph_embs],
+                    text_tensors,
+                    graph_tensors,
                     epochs=fusion_epochs,
                     batch_size=fusion_batch_size,
                     temperature=fusion_temperature,

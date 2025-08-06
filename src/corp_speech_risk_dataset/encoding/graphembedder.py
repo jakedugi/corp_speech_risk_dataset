@@ -533,6 +533,10 @@ class CrossModalFusion(nn.Module):
             text_dim, graph_dim
         )  # Use larger dimension as default (768 for Legal-BERT)
 
+        # Ensure fusion dimension is appropriate for Legal-BERT (768D)
+        if text_dim == 768:  # Legal-BERT case
+            fusion_dim = 768  # Store final fused embeddings in 768D
+
         self.fusion_dim = fusion_dim
 
         # Project text and graph embeddings into the same fusion space
@@ -698,6 +702,10 @@ def train_crossmodal_fusion(
                 )
 
             batch_loss.backward()
+
+            # Gradient clipping for numerical stability
+            torch.nn.utils.clip_grad_norm_(fusion_model.parameters(), max_norm=1.0)
+
             optimizer.step()
 
             total_loss += batch_loss.item()
@@ -828,10 +836,13 @@ def evaluate_crossmodal_alignment(
             # Generate fused embeddings
             batch_fused = fusion_model(batch_text, batch_graph)
 
-            # Normalize all embeddings for cosine similarity
+            # Normalize fused and text embeddings
             batch_fused_norm = F.normalize(batch_fused, dim=1, eps=1e-8)
             batch_text_norm = F.normalize(batch_text, dim=1, eps=1e-8)
-            batch_graph_norm = F.normalize(batch_graph, dim=1, eps=1e-8)
+
+            # Project graph embeddings to fusion dimension then normalize
+            batch_graph_proj = fusion_model.graph_proj(batch_graph)
+            batch_graph_norm = F.normalize(batch_graph_proj, dim=1, eps=1e-8)
 
             all_fused.append(batch_fused_norm.cpu())
             all_text_norm.append(batch_text_norm.cpu())
@@ -917,10 +928,11 @@ def compute_infonce_loss(
     fused: torch.Tensor,
     text: torch.Tensor,
     graph: torch.Tensor,
-    temperature: float = 0.07,
+    temperature: float = 0.2,  # Higher temperature for stability (was 0.07)
     use_nt_xent: bool = False,
     adaptive_temp: bool = True,
     hard_negative_weight: float = 1.0,
+    contrastive_dim: int = 512,  # Dedicated contrastive alignment space
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
     """
     Enhanced InfoNCE contrastive loss for cross-modal alignment.
@@ -942,42 +954,73 @@ def compute_infonce_loss(
     fused_dim = fused.shape[1]
     device = fused.device
 
-    # Project text and graph to fused dimension if needed (with proper initialization)
-    if text.shape[1] != fused_dim:
-        text_proj = nn.Linear(text.shape[1], fused_dim).to(device)
-        # Xavier initialization for stability
-        nn.init.xavier_uniform_(text_proj.weight)
-        nn.init.zeros_(text_proj.bias)
-        text = text_proj(text)
-    if graph.shape[1] != fused_dim:
-        graph_proj = nn.Linear(graph.shape[1], fused_dim).to(device)
-        # Xavier initialization for stability
-        nn.init.xavier_uniform_(graph_proj.weight)
-        nn.init.zeros_(graph_proj.bias)
-        graph = graph_proj(graph)
+    # Project all embeddings to dedicated contrastive alignment space (512D)
+    # This separates alignment computation from final fusion storage (768D)
+    text_contrastive_proj = nn.Linear(text.shape[1], contrastive_dim).to(device)
+    graph_contrastive_proj = nn.Linear(graph.shape[1], contrastive_dim).to(device)
+    fused_contrastive_proj = nn.Linear(fused_dim, contrastive_dim).to(device)
 
-    # Normalize embeddings for cosine similarity
-    fused_norm = F.normalize(fused, dim=1, eps=1e-8)
-    text_norm = F.normalize(text, dim=1, eps=1e-8)
-    graph_norm = F.normalize(graph, dim=1, eps=1e-8)
+    # Xavier initialization for numerical stability
+    for proj in [text_contrastive_proj, graph_contrastive_proj, fused_contrastive_proj]:
+        nn.init.xavier_uniform_(proj.weight)
+        nn.init.zeros_(proj.bias)
+
+    # Project to contrastive space
+    text_contrastive = text_contrastive_proj(text)
+    graph_contrastive = graph_contrastive_proj(graph)
+    fused_contrastive = fused_contrastive_proj(fused)
+
+    # Guard against zero vectors and NaNs
+    text_contrastive = torch.where(
+        torch.isnan(text_contrastive),
+        torch.zeros_like(text_contrastive),
+        text_contrastive,
+    )
+    graph_contrastive = torch.where(
+        torch.isnan(graph_contrastive),
+        torch.zeros_like(graph_contrastive),
+        graph_contrastive,
+    )
+    fused_contrastive = torch.where(
+        torch.isnan(fused_contrastive),
+        torch.zeros_like(fused_contrastive),
+        fused_contrastive,
+    )
+
+    # L2 normalize in contrastive space with eps for stability
+    fused_norm = F.normalize(fused_contrastive, dim=1, eps=1e-8)
+    text_norm = F.normalize(text_contrastive, dim=1, eps=1e-8)
+    graph_norm = F.normalize(graph_contrastive, dim=1, eps=1e-8)
 
     # Adaptive temperature based on current alignment (for legal quote complexity)
     if adaptive_temp:
-        # Compute mean positive similarity to adjust temperature
-        pos_text_sim = torch.diagonal(torch.matmul(text_norm, fused_norm.T))
-        pos_graph_sim = torch.diagonal(torch.matmul(graph_norm, fused_norm.T))
-        mean_pos_sim = (pos_text_sim.mean() + pos_graph_sim.mean()) / 2
+        # Compute similarities in FP32 for numerical stability
+        with torch.autocast(device_type=device.type, enabled=False):
+            pos_text_sim = torch.diagonal(
+                torch.matmul(text_norm.float(), fused_norm.float().T)
+            )
+            pos_graph_sim = torch.diagonal(
+                torch.matmul(graph_norm.float(), fused_norm.float().T)
+            )
+            mean_pos_sim = (pos_text_sim.mean() + pos_graph_sim.mean()) / 2
 
-        # Adaptive temperature: lower temp when alignment is good (higher temp for hard negatives)
-        adaptive_temperature = temperature * (2.0 - mean_pos_sim.clamp(0.1, 0.9))
+        # Adaptive temperature: higher temp for stability (0.2-0.5 range)
+        adaptive_temperature = temperature * (1.5 + 0.5 * mean_pos_sim.clamp(0.1, 0.9))
     else:
         adaptive_temperature = temperature
 
-    # Text-to-fused similarity matrix
-    text_fused_sim = torch.matmul(text_norm, fused_norm.T) / adaptive_temperature
+    # Compute similarity matrices in FP32 for numerical stability
+    with torch.autocast(device_type=device.type, enabled=False):
+        # Text-to-fused similarity matrix
+        text_fused_sim = (
+            torch.matmul(text_norm.float(), fused_norm.float().T) / adaptive_temperature
+        )
 
-    # Graph-to-fused similarity matrix
-    graph_fused_sim = torch.matmul(graph_norm, fused_norm.T) / adaptive_temperature
+        # Graph-to-fused similarity matrix
+        graph_fused_sim = (
+            torch.matmul(graph_norm.float(), fused_norm.float().T)
+            / adaptive_temperature
+        )
 
     # Hard negative mining for legal quotes (emphasize challenging cases)
     if hard_negative_weight > 1.0:

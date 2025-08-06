@@ -475,9 +475,9 @@ def _flush(
 @click.option(
     "--fusion-temperature",
     type=float,
-    default=0.07,
+    default=0.2,
     show_default=True,
-    help="Temperature for InfoNCE loss in CrossModal fusion.",
+    help="Temperature for InfoNCE loss in CrossModal fusion (higher for stability).",
 )
 @click.option(
     "--fusion-patience",
@@ -1448,7 +1448,7 @@ def cmd_fuse(ctx, train_fusion, max_training_samples):
     # Get fusion hyperparameters from context
     fusion_epochs = ctx.obj.get("fusion_epochs", 15)
     fusion_batch_size = ctx.obj.get("fusion_batch_size", 256)
-    fusion_temperature = ctx.obj.get("fusion_temperature", 0.1)
+    fusion_temperature = ctx.obj.get("fusion_temperature", 0.2)
     fusion_dropout = ctx.obj.get("fusion_dropout", 0.1)
     fusion_heads = ctx.obj.get("fusion_heads", 8)
     fusion_patience = ctx.obj.get("fusion_patience", 3)

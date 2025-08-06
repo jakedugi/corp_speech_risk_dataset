@@ -43,10 +43,11 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 from corp_speech_risk_dataset.coral_ordinal.config import Config
-from corp_speech_risk_dataset.coral_ordinal.model import CORALMLP
+from corp_speech_risk_dataset.coral_ordinal.model import CORALMLP, HybridOrdinalMLP
 from corp_speech_risk_dataset.coral_ordinal.losses import (
     coral_loss,
     coral_threshold_prevalences,
+    hybrid_loss,
 )
 from corp_speech_risk_dataset.coral_ordinal.metrics import compute_metrics
 from corp_speech_risk_dataset.coral_ordinal.utils import (
@@ -255,13 +256,13 @@ def create_datasets(
     return train_dataset, val_dataset, test_dataset
 
 
-def choose_best_threshold(model, val_loader, device, metric="exact"):
+def choose_best_threshold(model, val_loader, device, config, metric="exact"):
     """Auto-tune threshold on validation set"""
     model.eval()
     best_t, best_score = 0.5, -1
 
     for t in torch.linspace(0.3, 0.7, 21):
-        m, _, _ = evaluate_model(model, val_loader, device, threshold=float(t))
+        m, _, _ = evaluate_model(model, val_loader, device, config, threshold=float(t))
         score = m["exact"].value if metric == "exact" else m["spearman_r"].value
         if score > best_score:
             best_t, best_score = float(t), score
@@ -274,6 +275,7 @@ def evaluate_model(
     model: torch.nn.Module,
     dataloader: DataLoader,
     device: torch.device,
+    config: Config,
     threshold: float = 0.5,
 ) -> Tuple[Dict, np.ndarray, np.ndarray]:
     """Evaluate model and return metrics with predictions."""
@@ -289,7 +291,18 @@ def evaluate_model(
 
             # Forward pass
             logits = model(features)
-            loss = coral_loss(logits, labels, model.num_classes)
+
+            # Use appropriate loss function
+            if hasattr(model, "num_classes") and config.model_type == "hybrid":
+                loss = hybrid_loss(
+                    logits,
+                    labels,
+                    model.num_classes,
+                    lambda_cls=config.lambda_cls,
+                    lambda_reg=config.lambda_reg,
+                )
+            else:
+                loss = coral_loss(logits, labels, model.num_classes)
             total_loss += loss.item()
 
             # Get predictions
@@ -430,13 +443,26 @@ def train_model(
 
             with autocast(enabled=use_amp):
                 logits = model(features)
-                loss = coral_loss(
-                    logits,
-                    labels,
-                    model.num_classes,
-                    lambda_k=lambda_k,
-                    label_smoothing=config.label_smoothing,
-                )
+
+                # Use hybrid loss for hybrid model, coral loss for coral model
+                if config.model_type == "hybrid":
+                    loss = hybrid_loss(
+                        logits,
+                        labels,
+                        model.num_classes,
+                        lambda_cls=config.lambda_cls,
+                        lambda_reg=config.lambda_reg,
+                        lambda_k=lambda_k,
+                        label_smoothing=config.label_smoothing,
+                    )
+                else:
+                    loss = coral_loss(
+                        logits,
+                        labels,
+                        model.num_classes,
+                        lambda_k=lambda_k,
+                        label_smoothing=config.label_smoothing,
+                    )
 
             # Use gradient scaling for mixed precision
             if use_amp:
@@ -462,7 +488,7 @@ def train_model(
 
         # Validation phase
         val_metrics, _, _ = evaluate_model(
-            model, val_loader, device, config.prob_threshold
+            model, val_loader, device, config, config.prob_threshold
         )
 
         # Track progress
@@ -565,6 +591,26 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", default=None, help="Device (cpu/cuda/mps/auto)")
 
+    # Hybrid model arguments
+    parser.add_argument(
+        "--model-type",
+        choices=["coral", "hybrid"],
+        default="coral",
+        help="Model type to use",
+    )
+    parser.add_argument(
+        "--lambda-cls",
+        type=float,
+        default=0.7,
+        help="Classification loss weight for hybrid model",
+    )
+    parser.add_argument(
+        "--lambda-reg",
+        type=float,
+        default=0.3,
+        help="Regression loss weight for hybrid model",
+    )
+
     args = parser.parse_args()
 
     # Setup output directory
@@ -601,6 +647,9 @@ def main():
         use_onecycle_lr=not args.no_onecycle_lr,
         feature_noise=args.feature_noise,
         tune_threshold=not args.no_tune_threshold,
+        model_type=args.model_type,
+        lambda_cls=args.lambda_cls,
+        lambda_reg=args.lambda_reg,
     )
 
     # Save config
@@ -622,13 +671,25 @@ def main():
     input_dim = len(sample_features)
     logger.info(f"Input dimension: {input_dim}")
 
-    # Create model
-    model = CORALMLP(
-        in_dim=input_dim,
-        num_classes=len(args.buckets),
-        hidden_dims=tuple(args.hidden_dims),
-        dropout=args.dropout,
-    )
+    # Create model based on model type
+    if args.model_type == "hybrid":
+        model = HybridOrdinalMLP(
+            in_dim=input_dim,
+            num_classes=len(args.buckets),
+            hidden_dims=tuple(args.hidden_dims),
+            dropout=args.dropout,
+        )
+        logger.info(
+            f"Created hybrid model with λ_cls={args.lambda_cls}, λ_reg={args.lambda_reg}"
+        )
+    else:
+        model = CORALMLP(
+            in_dim=input_dim,
+            num_classes=len(args.buckets),
+            hidden_dims=tuple(args.hidden_dims),
+            dropout=args.dropout,
+        )
+        logger.info("Created CORAL model")
 
     # Initialize training tracker
     tracker = TrainingTracker(output_dir)
@@ -650,12 +711,20 @@ def main():
     device = choose_device(config.device)
 
     # Load best model for testing
-    best_model = CORALMLP(
-        in_dim=input_dim,
-        num_classes=len(args.buckets),
-        hidden_dims=tuple(args.hidden_dims),
-        dropout=args.dropout,
-    )
+    if args.model_type == "hybrid":
+        best_model = HybridOrdinalMLP(
+            in_dim=input_dim,
+            num_classes=len(args.buckets),
+            hidden_dims=tuple(args.hidden_dims),
+            dropout=args.dropout,
+        )
+    else:
+        best_model = CORALMLP(
+            in_dim=input_dim,
+            num_classes=len(args.buckets),
+            hidden_dims=tuple(args.hidden_dims),
+            dropout=args.dropout,
+        )
     checkpoint = torch.load(output_dir / "best_model.pt", map_location=device)
     best_model.load_state_dict(checkpoint["model_state_dict"])
     best_model.to(device)  # Ensure model is on correct device
@@ -663,10 +732,10 @@ def main():
     # Auto-tune threshold on validation set if enabled
     test_threshold = args.threshold
     if config.tune_threshold:
-        test_threshold = choose_best_threshold(best_model, val_loader, device)
+        test_threshold = choose_best_threshold(best_model, val_loader, device, config)
 
     test_metrics, y_true, y_pred = evaluate_model(
-        best_model, test_loader, device, test_threshold
+        best_model, test_loader, device, config, test_threshold
     )
 
     # Log test results

@@ -289,24 +289,31 @@ def evaluate_model(
         for batch_idx, (features, labels) in enumerate(dataloader):
             features, labels = features.to(device), labels.to(device)
 
-            # Forward pass
-            logits = model(features)
-
-            # Use appropriate loss function
-            if hasattr(model, "num_classes") and config.model_type == "hybrid":
+            # Forward pass and loss calculation
+            if config.model_type == "hybrid":
+                class_logits, reg_output = model(features)
                 loss = hybrid_loss(
-                    logits,
+                    class_logits,
+                    reg_output,
                     labels,
-                    model.num_classes,
                     lambda_cls=config.lambda_cls,
                     lambda_reg=config.lambda_reg,
                 )
+                # For hybrid model, use classification logits for predictions
+                logits = class_logits
             else:
+                logits = model(features)
                 loss = coral_loss(logits, labels, model.num_classes)
+
             total_loss += loss.item()
 
             # Get predictions
-            predictions = (torch.sigmoid(logits) > threshold).sum(1)
+            if config.model_type == "hybrid":
+                # For hybrid model, use direct classification predictions
+                predictions = torch.argmax(logits, dim=1)
+            else:
+                # For CORAL model, use threshold-based predictions
+                predictions = (torch.sigmoid(logits) > threshold).sum(1)
 
             all_labels.extend(labels.cpu().numpy())
             all_predictions.extend(predictions.cpu().numpy())
@@ -442,20 +449,19 @@ def train_model(
             optimizer.zero_grad()
 
             with autocast(enabled=use_amp):
-                logits = model(features)
-
-                # Use hybrid loss for hybrid model, coral loss for coral model
+                # Handle different model outputs
                 if config.model_type == "hybrid":
+                    class_logits, reg_output = model(features)
                     loss = hybrid_loss(
-                        logits,
+                        class_logits,
+                        reg_output,
                         labels,
-                        model.num_classes,
                         lambda_cls=config.lambda_cls,
                         lambda_reg=config.lambda_reg,
-                        lambda_k=lambda_k,
                         label_smoothing=config.label_smoothing,
                     )
                 else:
+                    logits = model(features)
                     loss = coral_loss(
                         logits,
                         labels,

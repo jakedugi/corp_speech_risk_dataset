@@ -17,6 +17,8 @@ from sklearn.metrics import silhouette_score
 
 from .parser import to_dependency_graph
 
+from contextlib import nullcontext
+
 
 def get_best_device() -> torch.device:
     """Get best available device with consistent priority: CUDA → CPU → MPS"""
@@ -655,14 +657,14 @@ def train_crossmodal_fusion(
     if use_amp and device.type == "cuda":
         autocast_context = torch.autocast(device_type="cuda", dtype=torch.float16)
         print(f"[CROSSMODAL TRAINING] AMP enabled for CUDA speedup")
-    elif device.type == "mps":
+    elif use_amp and device.type == "mps":
         try:
-            # Use autocast for MPS speedup
             autocast_context = torch.autocast(device_type="mps", dtype=torch.float16)
+            print(f"[CROSSMODAL TRAINING] AMP enabled for MPS speedup")
         except:
-            autocast_context = torch.no_grad()  # Fallback
+            autocast_context = nullcontext()
     else:
-        autocast_context = torch.no_grad()  # No autocast for CPU
+        autocast_context = nullcontext()
 
     for epoch in range(epochs):
         total_loss = 0.0
@@ -679,8 +681,8 @@ def train_crossmodal_fusion(
 
             optimizer.zero_grad()
 
-            # Use autocast for MPS acceleration
-            with autocast_context if device.type == "mps" else torch.no_grad():
+            # Use autocast or nullcontext for forward pass
+            with autocast_context:
                 # Forward pass
                 fused = fusion_model(batch_text, batch_graph)
 

@@ -58,27 +58,82 @@ from corp_speech_risk_dataset.coral_ordinal.utils import (
 
 
 class CORALDataset(Dataset):
-    """Dataset for CORAL ordinal regression with traceability."""
+    """Dataset for CORAL ordinal regression with traceability.
 
-    def __init__(self, data: List[Dict[str, Any]], buckets: List[str]):
+    Supports dynamic feature selection via concatenation of multiple keys and
+    optional scalar features flattened from ``raw_features``.
+    """
+
+    def __init__(
+        self,
+        data: List[Dict[str, Any]],
+        buckets: List[str],
+        feature_keys: List[str] | None = None,
+        include_scalars: bool = False,
+    ):
         self.data = data
         self.buckets = buckets
         self.label2idx = {b: i for i, b in enumerate(buckets)}
 
+        # Selection
+        self.feature_keys: List[str] = feature_keys or ["fused_emb"]
+        self.include_scalars: bool = include_scalars
+
+        # Determine per-key dimensions by scanning once
+        self.key_dims: Dict[str, int] = {}
+        for key in self.feature_keys:
+            dim = 0
+            for rec in data:
+                if key in rec and isinstance(rec[key], (list, tuple)):
+                    dim = len(rec[key])
+                    break
+            self.key_dims[key] = dim
+
+        # Determine scalar feature dimension from raw_features if requested
+        self.scalar_dim: int = 0
+        if self.include_scalars:
+            for rec in data:
+                raw = rec.get("raw_features")
+                if isinstance(raw, dict):
+                    self.scalar_dim = self._compute_scalar_vec(raw).shape[0]
+                    break
+
         # Store metadata for traceability
-        self.metadata = []
-        self.features = []
-        self.labels = []
+        self.metadata: List[Dict[str, Any]] = []
+        self.features: List[torch.Tensor] = []
+        self.labels: List[torch.Tensor] = []
 
         for record in data:
-            # Extract features and labels
-            features = torch.tensor(record["fused_emb"], dtype=torch.float32)
+            # Build concatenated feature vector
+            parts: List[torch.Tensor] = []
+            for key in self.feature_keys:
+                vals = record.get(key)
+                if isinstance(vals, (list, tuple)):
+                    parts.append(torch.tensor(vals, dtype=torch.float32))
+                else:
+                    # zero-pad if key missing using learned dim
+                    pad_dim = self.key_dims.get(key, 0)
+                    if pad_dim > 0:
+                        parts.append(torch.zeros(pad_dim, dtype=torch.float32))
+            if self.include_scalars:
+                scal = self._compute_scalar_vec(record.get("raw_features"))
+                if scal is not None:
+                    parts.append(scal)
+                elif self.scalar_dim > 0:
+                    parts.append(torch.zeros(self.scalar_dim, dtype=torch.float32))
+
+            if not parts:
+                raise ValueError(
+                    "No features assembled. Check feature_keys and input data fields."
+                )
+
+            features = torch.cat(parts, dim=0)
             label = torch.tensor(self.label2idx[record["bucket"]], dtype=torch.long)
 
             self.features.append(features)
             self.labels.append(label)
 
-            # Store metadata for traceability
+            # Store metadata
             metadata = {
                 "doc_id": record.get("doc_id"),
                 "text": record.get("text"),
@@ -98,6 +153,61 @@ class CORALDataset(Dataset):
     def get_metadata(self, idx):
         """Get metadata for traceability."""
         return self.metadata[idx]
+
+    @staticmethod
+    def _pad_or_list(val: Any, expected_len: int) -> List[float]:
+        if val is None:
+            return [0.0] * expected_len
+        if isinstance(val, (list, tuple)):
+            arr = list(val)[:expected_len]
+            if len(arr) < expected_len:
+                arr += [0.0] * (expected_len - len(arr))
+            return [float(x) for x in arr]
+        # scalar
+        return [float(val)] + [0.0] * (expected_len - 1)
+
+    def _compute_scalar_vec(self, raw: Dict[str, Any] | None) -> torch.Tensor | None:
+        """Flatten selected raw feature groups into a fixed-order vector.
+
+        Uses a robust layout aligned with upstream graph/global features:
+        [quote_sentiment(3), context_sentiment(3), quote_deontic(1), context_deontic(1),
+         quote_pos(11), context_pos(11), quote_ner(7), context_ner(7),
+         quote_deps(23), context_deps(23), quote_wl(1), context_wl(1)] => 92 dims.
+        """
+        if not isinstance(raw, dict):
+            return None
+
+        # Infer lengths from present values, fallback to canonical sizes
+        def infer_len(key: str, default_len: int) -> int:
+            v = raw.get(key)
+            if isinstance(v, (list, tuple)):
+                return len(v)
+            return default_len
+
+        q_sent_len = infer_len("quote_sentiment", 3)
+        c_sent_len = infer_len("context_sentiment", 3)
+        q_pos_len = infer_len("quote_pos", 11)
+        c_pos_len = infer_len("context_pos", 11)
+        q_ner_len = infer_len("quote_ner", 7)
+        c_ner_len = infer_len("context_ner", 7)
+        q_dep_len = infer_len("quote_deps", 23)
+        c_dep_len = infer_len("context_deps", 23)
+
+        parts: List[float] = []
+        parts += self._pad_or_list(raw.get("quote_sentiment"), q_sent_len)
+        parts += self._pad_or_list(raw.get("context_sentiment"), c_sent_len)
+        parts += self._pad_or_list(raw.get("quote_deontic_count"), 1)
+        parts += self._pad_or_list(raw.get("context_deontic_count"), 1)
+        parts += self._pad_or_list(raw.get("quote_pos"), q_pos_len)
+        parts += self._pad_or_list(raw.get("context_pos"), c_pos_len)
+        parts += self._pad_or_list(raw.get("quote_ner"), q_ner_len)
+        parts += self._pad_or_list(raw.get("context_ner"), c_ner_len)
+        parts += self._pad_or_list(raw.get("quote_deps"), q_dep_len)
+        parts += self._pad_or_list(raw.get("context_deps"), c_dep_len)
+        parts += self._pad_or_list(raw.get("quote_wl"), 1)
+        parts += self._pad_or_list(raw.get("context_wl"), 1)
+
+        return torch.tensor(parts, dtype=torch.float32)
 
 
 class TrainingTracker:
@@ -220,6 +330,8 @@ def create_datasets(
     val_split: float,
     test_split: float,
     seed: int,
+    feature_keys: List[str] | None = None,
+    include_scalars: bool = False,
 ) -> Tuple[CORALDataset, CORALDataset, CORALDataset]:
     """Create train/validation/test datasets with stratified splits."""
     # Use stratified splits to preserve bucket distribution
@@ -247,7 +359,12 @@ def create_datasets(
 
     # Create datasets
     def to_dataset(idxs):
-        return CORALDataset([data[i] for i in idxs], buckets)
+        return CORALDataset(
+            [data[i] for i in idxs],
+            buckets,
+            feature_keys=feature_keys,
+            include_scalars=include_scalars,
+        )
 
     train_dataset = to_dataset(train_idx)
     val_dataset = to_dataset(val_idx)
@@ -617,7 +734,97 @@ def main():
         help="Regression loss weight for hybrid model",
     )
 
+    # Feature selection arguments
+    parser.add_argument(
+        "--feature-keys",
+        nargs="+",
+        default=None,
+        help=(
+            "List of feature keys to concatenate (defaults to fused_emb). "
+            "Examples: fused_emb legal_bert_emb gph_emb"
+        ),
+    )
+    parser.add_argument(
+        "--add-scalars",
+        action="store_true",
+        help="Append flattened raw_features scalars",
+    )
+    parser.add_argument(
+        "--add-legal-bert", action="store_true", help="Append legal_bert_emb"
+    )
+    parser.add_argument("--add-graph", action="store_true", help="Append gph_emb")
+    parser.add_argument(
+        "--add-lb-aux",
+        action="store_true",
+        help=(
+            "Append LB auxiliary embeddings: quote_top_keywords, context_top_keywords, "
+            "speaker, section_headers"
+        ),
+    )
+    parser.add_argument(
+        "--replace-features",
+        action="store_true",
+        help="Replace default fused_emb instead of appending to it",
+    )
+
     args = parser.parse_args()
+
+    # Build selected feature keys list
+    selected_feature_keys: List[str] = []
+    # Default: fused only
+    selected_feature_keys.append("fused_emb")
+
+    # Use CLI feature-keys if provided
+    if args.feature_keys:
+        selected_feature_keys = [] if args.replace_features else selected_feature_keys
+        for k in args.feature_keys:
+            if k not in selected_feature_keys:
+                selected_feature_keys.append(k)
+
+    # Expand convenience toggles
+    if args.add_legal_bert:
+        if "legal_bert_emb" not in selected_feature_keys:
+            selected_feature_keys.append("legal_bert_emb")
+    if args.add_graph and "gph_emb" not in selected_feature_keys:
+        selected_feature_keys.append("gph_emb")
+    if args.add_lb_aux:
+        for k in [
+            "legal_bert_quote_top_keywords_emb",
+            "legal_bert_context_top_keywords_emb",
+            "legal_bert_speaker_emb",
+            "legal_bert_section_headers_emb",
+        ]:
+            if k not in selected_feature_keys:
+                selected_feature_keys.append(k)
+
+    # Optional additive flags via environment variables (advanced users)
+    # Allow env to augment or replace selections without breaking CLI usage
+    import os
+
+    env_keys = os.getenv("CORAL_FEATURE_KEYS")
+    env_replace = os.getenv("CORAL_REPLACE_FEATURES", "0") == "1"
+    if env_keys:
+        keys = [k.strip() for k in env_keys.split(",") if k.strip()]
+        if keys:
+            if env_replace:
+                selected_feature_keys = []
+            for k in keys:
+                if k not in selected_feature_keys:
+                    selected_feature_keys.append(k)
+
+    add_scalars = bool(args.add_scalars or os.getenv("CORAL_ADD_SCALARS", "0") == "1")
+
+    # If user explicitly wants to replace and didn't add any vector feature via CLI/env,
+    # allow scalars-only by clearing the base fused key.
+    if (
+        args.replace_features
+        and not args.feature_keys
+        and not args.add_legal_bert
+        and not args.add_graph
+        and not args.add_lb_aux
+        and not env_keys
+    ):
+        selected_feature_keys = []
 
     # Setup output directory
     output_dir = Path(args.output)
@@ -633,6 +840,7 @@ def main():
     config = Config(
         data_path=args.data,
         feature_key="fused_emb",
+        feature_keys=selected_feature_keys,
         label_key="bucket",
         buckets=args.buckets,
         hidden_dims=tuple(args.hidden_dims),
@@ -664,7 +872,13 @@ def main():
     # Load and split data
     data = load_data(args.data)
     train_dataset, val_dataset, test_dataset = create_datasets(
-        data, args.buckets, args.val_split, args.test_split, args.seed
+        data,
+        args.buckets,
+        args.val_split,
+        args.test_split,
+        args.seed,
+        feature_keys=selected_feature_keys,
+        include_scalars=add_scalars,
     )
 
     # Create data loaders

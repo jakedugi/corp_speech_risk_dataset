@@ -10,6 +10,8 @@ import json
 class Config:
     data_path: str
     feature_key: str = "fused_emb"  # name of the input vector field
+    # Optional multi-feature support: when provided, concatenate these keys.
+    feature_keys: list | None = None
     label_key: str = (
         "bucket"  # name of categorical ordinal label (e.g. High/Medium/Low)
     )
@@ -41,6 +43,9 @@ class Config:
     model_type: str = "coral"  # "coral" or "hybrid"
     lambda_cls: float = 0.7  # Classification loss weight
     lambda_reg: float = 0.3  # Regression loss weight
+
+    # Whether to include flattened scalar priors from raw_features alongside vectors
+    include_scalars: bool = False
 
     def save(self, path: str | Path):
         path = Path(path)

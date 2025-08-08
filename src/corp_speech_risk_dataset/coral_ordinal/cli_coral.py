@@ -18,6 +18,12 @@ def main():
     p = argparse.ArgumentParser(description="Train/Eval CORAL Ordinal MLP")
     p.add_argument("--data", required=True, help="path to jsonl dataset")
     p.add_argument("--feature-key", default="fused_emb")
+    p.add_argument(
+        "--feature-keys",
+        nargs="+",
+        default=None,
+        help="Optional multiple feature keys to concatenate (default fused only)",
+    )
     p.add_argument("--label-key", default="bucket")
     p.add_argument("--buckets", nargs="+", default=["Low", "Medium", "High"])
     p.add_argument("--hidden-dims", nargs="+", type=int, default=[512, 128])
@@ -34,11 +40,18 @@ def main():
     p.add_argument("--eval-only", action="store_true")
     p.add_argument("--model-path", default=None)
     p.add_argument("--plot-cm", action="store_true")
+    p.add_argument(
+        "--add-scalars",
+        action="store_true",
+        help="Append flattened raw_features scalars to classifier input",
+    )
     args = p.parse_args()
 
     cfg = Config(
         data_path=args.data,
         feature_key=args.feature_key,
+        feature_keys=args.feature_keys,
+        include_scalars=args.add_scalars,
         label_key=args.label_key,
         buckets=args.buckets,
         hidden_dims=tuple(args.hidden_dims),

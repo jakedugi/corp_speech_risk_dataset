@@ -121,7 +121,7 @@ def create_outcome_buckets(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         else:
             bucket = "high"
 
-        # Create new record with bucket
+        # Create new record with bucket (preserve additional features if present)
         new_record = {
             "doc_id": record.get("doc_id"),
             "text": record.get("text"),
@@ -131,6 +131,23 @@ def create_outcome_buckets(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "bucket": bucket,
             "_src": record.get("_src"),
         }
+
+        # Optional embeddings and raw scalar features to pass through for experimentation
+        optional_keys = [
+            # graph/text single-modality embeddings
+            "gph_emb",
+            "legal_bert_emb",
+            # additional Legal-BERT encodings not included upstream in fused
+            "legal_bert_quote_top_keywords_emb",
+            "legal_bert_context_top_keywords_emb",
+            "legal_bert_speaker_emb",
+            "legal_bert_section_headers_emb",
+            # raw scalar priors bundle
+            "raw_features",
+        ]
+        for k in optional_keys:
+            if k in record:
+                new_record[k] = record[k]
 
         bucketed_data.append(new_record)
         bucket_counts[bucket] += 1

@@ -158,6 +158,17 @@ docs/diagrams/
 .cursorignore
 .cursorindexingignore
 
+# --- Environment Variables ---
+.env
+.env.*
+!.env.example
+!.env.sample
+.envrc
+.env.local
+.env.development
+.env.test
+.env.production
+
 # --- Miscellaneous ---
 *.swp
 *.swo

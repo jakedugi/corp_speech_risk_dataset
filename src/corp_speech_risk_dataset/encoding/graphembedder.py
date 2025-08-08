@@ -277,6 +277,7 @@ def train_graphsage_model(
     loss_type: str = "hybrid",  # "mse", "cosine", or "hybrid"
     dgi_weight: float = 0.1,  # DGI auxiliary loss weight
     num_negative: int = 30,  # Increased negative sampling
+    use_amp: bool = False,
 ) -> Tuple[nn.Module, Dict]:
     """
     Train GraphSAGE model with improved loss functions for 10^-4 MSE target.
@@ -357,6 +358,22 @@ def train_graphsage_model(
     train_graphs = [g.to(device) for g in train_graphs if g.num_nodes > 0]
     val_graphs = [g.to(device) for g in val_graphs if g.num_nodes > 0]
 
+    # Compute per-feature mean/std for loss-only standardization
+    if train_graphs:
+        with torch.no_grad():
+            all_x = torch.cat([g.x for g in train_graphs], dim=0)
+            feat_mean = all_x.mean(dim=0)
+            feat_std = all_x.std(dim=0, unbiased=False).clamp_min(1e-6)
+    else:
+        feat_mean = torch.zeros(GRAPH_INPUT_DIM, device=device)
+        feat_std = torch.ones(GRAPH_INPUT_DIM, device=device)
+
+    # Group weights: base(16)=1.0, global(92)=0.25, type(3)=0.1
+    loss_weights = torch.ones(GRAPH_INPUT_DIM, device=device)
+    loss_weights[:BASE_NODE_DIM] = 1.0
+    loss_weights[BASE_NODE_DIM : BASE_NODE_DIM + GLOBAL_FEATURE_DIM] = 0.25
+    loss_weights[BASE_NODE_DIM + GLOBAL_FEATURE_DIM :] = 0.1
+
     best_val_loss = float("inf")
     best_f1 = 0.0
     train_losses = []
@@ -383,10 +400,10 @@ def train_graphsage_model(
             x = batch.x
             edge_index = batch.edge_index
 
-            # Enable AMP if running on CUDA
+            # Enable AMP only if requested and running on CUDA
             use_amp_ctx = (
                 torch.autocast(device_type="cuda", dtype=torch.float16)
-                if device.type == "cuda"
+                if (use_amp and device.type == "cuda")
                 else nullcontext()
             )
 
@@ -394,13 +411,19 @@ def train_graphsage_model(
                 embeddings = model(x, edge_index)
                 reconstructed = decoder(embeddings)
 
-                # Reconstruction loss per node, averaged
+                # Standardized, weighted reconstruction loss
+                x_std = (x - feat_mean) / feat_std
+                rec_std = (reconstructed - feat_mean) / feat_std
                 if loss_type == "hybrid":
-                    recon_loss = compute_hybrid_loss(reconstructed, x)
+                    mse = ((rec_std - x_std) ** 2) * loss_weights
+                    mse_loss = mse.mean()
+                    cosine_loss = compute_scaled_cosine_loss(rec_std, x_std)
+                    recon_loss = 0.7 * mse_loss + 0.3 * cosine_loss
                 elif loss_type == "cosine":
-                    recon_loss = compute_scaled_cosine_loss(reconstructed, x)
+                    recon_loss = compute_scaled_cosine_loss(rec_std, x_std)
                 else:
-                    recon_loss = F.mse_loss(reconstructed, x)
+                    mse = ((rec_std - x_std) ** 2) * loss_weights
+                    recon_loss = mse.mean()
 
                 # DGI contrastive loss over node embeddings in the batch
                 if dgi_weight > 0:
@@ -410,6 +433,10 @@ def train_graphsage_model(
                     loss = recon_loss
 
             loss.backward()
+            # Gradient clipping for stability
+            torch.nn.utils.clip_grad_norm_(
+                list(model.parameters()) + list(decoder.parameters()), max_norm=1.0
+            )
             optimizer.step()
             decoder_opt.step()
 
@@ -434,9 +461,21 @@ def train_graphsage_model(
                     embeddings = model(pyg_data.x, pyg_data.edge_index)
                     reconstructed = decoder(embeddings)
 
-                    # Use MSE for validation regardless of training loss
-                    recon_loss = F.mse_loss(reconstructed, pyg_data.x)
-                    val_loss += recon_loss.item()
+                    # Validation mirrors standardized, weighted loss
+                    x = pyg_data.x
+                    x_std = (x - feat_mean) / feat_std
+                    rec_std = (reconstructed - feat_mean) / feat_std
+                    if loss_type == "hybrid":
+                        mse = ((rec_std - x_std) ** 2) * loss_weights
+                        mse_loss = mse.mean()
+                        cosine_loss = compute_scaled_cosine_loss(rec_std, x_std)
+                        vloss = 0.7 * mse_loss + 0.3 * cosine_loss
+                    elif loss_type == "cosine":
+                        vloss = compute_scaled_cosine_loss(rec_std, x_std)
+                    else:
+                        mse = ((rec_std - x_std) ** 2) * loss_weights
+                        vloss = mse.mean()
+                    val_loss += float(vloss.item())
                     val_samples += 1
 
             avg_val_loss = val_loss / max(val_samples, 1)
@@ -750,6 +789,62 @@ class CrossModalFusion(nn.Module):
         return self.fusion_dim
 
 
+class MomentumEncoder(nn.Module):
+    """Momentum encoder with a FIFO queue of fused negatives (optional).
+
+    - Maintains a queue of size `queue_size` in fused space for stronger negatives
+    - Mirrors the query encoder weights via EMA updates
+    """
+
+    def __init__(
+        self, model: CrossModalFusion, momentum: float = 0.999, queue_size: int = 4096
+    ):
+        super().__init__()
+        self.momentum = momentum
+        self.queue_size = queue_size
+
+        # Mirror the fusion model (for future use if we encode keys separately)
+        self.key_encoder = CrossModalFusion(
+            text_dim=model.text_proj.in_features,
+            graph_dim=model.graph_proj.in_features,
+            fusion_dim=model.proj.out_features,
+            dropout=model.final_dropout.p,
+            num_heads=model.attn.num_heads,
+        )
+        self.key_encoder.load_state_dict(model.state_dict())
+        self.key_encoder.eval()
+
+        # Queue buffers (fused_dim x queue_size)
+        fusion_dim = model.proj.out_features
+        queue = torch.randn(fusion_dim, queue_size)
+        queue_ptr = torch.zeros(1, dtype=torch.long)
+        self.register_buffer("queue", F.normalize(queue, dim=0))
+        self.register_buffer("queue_ptr", queue_ptr)
+
+    @torch.no_grad()
+    def update_key_encoder(self, query_encoder: CrossModalFusion) -> None:
+        for param_q, param_k in zip(
+            query_encoder.parameters(), self.key_encoder.parameters()
+        ):
+            param_k.data = param_k.data * self.momentum + param_q.data * (
+                1 - self.momentum
+            )
+
+    @torch.no_grad()
+    def enqueue(self, keys: torch.Tensor) -> None:
+        # keys: [B, fused_dim] (assumed normalized)
+        batch_size = keys.shape[0]
+        ptr = int(self.queue_ptr.item())
+        if ptr + batch_size <= self.queue_size:
+            self.queue[:, ptr : ptr + batch_size] = keys.T
+        else:
+            remaining = self.queue_size - ptr
+            self.queue[:, ptr:] = keys[:remaining].T
+            self.queue[:, : batch_size - remaining] = keys[remaining:].T
+        ptr = (ptr + batch_size) % self.queue_size
+        self.queue_ptr[0] = ptr
+
+
 def train_crossmodal_fusion(
     fusion_model: CrossModalFusion,
     text_embeddings: List[torch.Tensor],
@@ -761,6 +856,9 @@ def train_crossmodal_fusion(
     use_amp: bool = False,
     adaptive_temperature: bool = True,
     hard_negative_weight: float = 1.3,
+    use_momentum_encoder: bool = False,
+    queue_size: int = 4096,
+    momentum: float = 0.999,
 ) -> CrossModalFusion:
     """
     Train CrossModalFusion with InfoNCE contrastive learning - optimized for legal text.
@@ -827,6 +925,13 @@ def train_crossmodal_fusion(
     else:
         autocast_context = nullcontext()
 
+    # Optional momentum encoder and negatives queue
+    momentum_enc: MomentumEncoder | None = None
+    if use_momentum_encoder:
+        momentum_enc = MomentumEncoder(
+            fusion_model, momentum=momentum, queue_size=queue_size
+        ).to(device)
+
     for epoch in range(epochs):
         total_loss = 0.0
         num_batches = 0
@@ -852,6 +957,9 @@ def train_crossmodal_fusion(
                 proj_graph = fusion_model.graph_proj(batch_graph)
 
                 # Enhanced InfoNCE contrastive loss - legal text optimized
+                momentum_queue = (
+                    getattr(momentum_enc, "queue", None) if momentum_enc else None
+                )
                 batch_loss, batch_metrics = compute_infonce_loss(
                     fused,
                     proj_text,
@@ -860,6 +968,7 @@ def train_crossmodal_fusion(
                     use_nt_xent=use_amp,
                     adaptive_temp=adaptive_temperature,
                     hard_negative_weight=hard_negative_weight,
+                    momentum_queue=momentum_queue,
                 )
 
             batch_loss.backward()
@@ -868,6 +977,13 @@ def train_crossmodal_fusion(
             torch.nn.utils.clip_grad_norm_(fusion_model.parameters(), max_norm=1.0)
 
             optimizer.step()
+
+            # Update momentum encoder and enqueue fresh keys (normalized fused)
+            if momentum_enc is not None:
+                with torch.no_grad():
+                    momentum_enc.update_key_encoder(fusion_model)
+                    keys = F.normalize(fused, dim=1)
+                    momentum_enc.enqueue(keys)
 
             total_loss += batch_loss.item()
             num_batches += 1
@@ -1094,6 +1210,7 @@ def compute_infonce_loss(
     use_nt_xent: bool = False,
     adaptive_temp: bool = True,
     hard_negative_weight: float = 1.0,
+    momentum_queue: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
     """
     Enhanced InfoNCE contrastive loss for cross-modal alignment.
@@ -1161,6 +1278,26 @@ def compute_infonce_loss(
             / adaptive_temperature
         )
 
+        # Optionally extend negatives pool with momentum queue (in fused space)
+        # The queue is stored as [fused_dim, queue_size]. Normalize and append as columns.
+        if momentum_queue is not None and momentum_queue.numel() > 0:
+            mq = F.normalize(momentum_queue.T.float(), dim=1)
+            # Concatenate as additional negatives columns for both directions
+            text_fused_sim = torch.cat(
+                [
+                    text_fused_sim,
+                    torch.matmul(text_norm.float(), mq.T) / adaptive_temperature,
+                ],
+                dim=1,
+            )
+            graph_fused_sim = torch.cat(
+                [
+                    graph_fused_sim,
+                    torch.matmul(graph_norm.float(), mq.T) / adaptive_temperature,
+                ],
+                dim=1,
+            )
+
     # Hard negative mining for legal quotes (emphasize challenging cases)
     # FIXED: Only scale off-diagonal (negative) elements, preserve diagonal (positives)
     if hard_negative_weight > 1.0:
@@ -1172,7 +1309,7 @@ def compute_infonce_loss(
         text_fused_sim = text_fused_sim + scale * text_fused_sim * mask_off
         graph_fused_sim = graph_fused_sim + scale * graph_fused_sim * mask_off
 
-    # Positive pairs are on the diagonal
+    # Positive pairs are on the first `batch_size` columns (original in-batch items)
     labels = torch.arange(batch_size, device=device)
 
     # NT-Xent normalization for stability (critical for legal text variance)
@@ -1315,7 +1452,12 @@ def compute_graph_embedding(
 
         # Handle empty graphs
         if pyg.num_nodes == 0 or pyg.x is None:
-            return torch.zeros(128)  # Return zero vector with correct hidden dimension
+            # Match current model hidden size
+            try:
+                hdim = graphsage_model.convs[-1].out_channels  # type: ignore[attr-defined]
+            except Exception:
+                hdim = 128
+            return torch.zeros(hdim)
 
         # Run GNN and mean-pool node embeddings (model should be trained by now)
         with torch.no_grad():

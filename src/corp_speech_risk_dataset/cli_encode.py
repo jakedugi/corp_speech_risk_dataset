@@ -1103,6 +1103,18 @@ def cmd_embed(ctx, st_model, lb_fields):
     default=1.2,
     help="Weight for hard negative mining in contrastive loss (default: 1.2)",
 )
+@click.option(
+    "--patience",
+    type=int,
+    default=20,
+    help="Early stopping patience for GraphSAGE training (default: 20)",
+)
+@click.option(
+    "--lr",
+    type=float,
+    default=3e-4,
+    help="Learning rate for GraphSAGE optimizer (default: 3e-4)",
+)
 @click.pass_context
 def cmd_graph(
     ctx,
@@ -1116,6 +1128,8 @@ def cmd_graph(
     loss_type,
     dgi_weight,
     num_negative,
+    patience,
+    lr,
     fusion_epochs,
     fusion_samples,
     fusion_batch_size,
@@ -1146,7 +1160,8 @@ def cmd_graph(
         print(f"  ├─ Negative samples: {num_negative}")
         print(f"  ├─ Dropout: 0.3 (legal domain regularization)")
         print(f"  ├─ Validation split: 20%")
-        print(f"  ├─ Early stopping: 8 epochs patience")
+        print(f"  ├─ Early stopping: {patience} epochs patience")
+        print(f"  ├─ Learning rate: {lr:.2e}")
         print(f"  └─ Evaluation mode: {'ON' if eval_graph else 'OFF'}")
         if graph_embed == "cross":
             print(f"CrossModal Fusion (InfoNCE Optimized):")
@@ -1274,6 +1289,9 @@ def cmd_graph(
                 loss_type=loss_type,
                 dgi_weight=dgi_weight,
                 num_negative=num_negative,
+                use_amp=False,
+                patience=patience,
+                lr=lr,
             )
 
             print(f"[GRAPHSAGE TRAINING] Training completed!")

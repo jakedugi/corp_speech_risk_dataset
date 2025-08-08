@@ -278,6 +278,8 @@ def train_graphsage_model(
     dgi_weight: float = 0.1,  # DGI auxiliary loss weight
     num_negative: int = 30,  # Increased negative sampling
     use_amp: bool = False,
+    patience: int = 8,
+    lr: float = 5e-4,
 ) -> Tuple[nn.Module, Dict]:
     """
     Train GraphSAGE model with improved loss functions for 10^-4 MSE target.
@@ -339,8 +341,8 @@ def train_graphsage_model(
     print(f"[GRAPHSAGE TRAINING] Device: {device}")
     print(f"[GRAPHSAGE TRAINING] Targeting 10^-4 MSE with enhanced objectives")
 
-    # Optimized for extended training - lower LR, higher weight decay
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005, weight_decay=1e-4)
+    # Optimized for extended training - configurable LR, higher weight decay
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     # Determine hidden dimension dynamically from the model
@@ -352,7 +354,7 @@ def train_graphsage_model(
     # Persistent decoder for reconstruction loss - ensure on same device
     # Match output to current graph input dimensionality
     decoder = nn.Linear(hidden_dim, GRAPH_INPUT_DIM).to(device)
-    decoder_opt = torch.optim.AdamW(decoder.parameters(), lr=0.0005)
+    decoder_opt = torch.optim.AdamW(decoder.parameters(), lr=lr)
 
     # Move graphs to device - fix device assignment
     train_graphs = [g.to(device) for g in train_graphs if g.num_nodes > 0]
@@ -363,23 +365,36 @@ def train_graphsage_model(
         with torch.no_grad():
             all_x = torch.cat([g.x for g in train_graphs], dim=0)
             feat_mean = all_x.mean(dim=0)
-            feat_std = all_x.std(dim=0, unbiased=False).clamp_min(1e-6)
+            feat_std = all_x.std(dim=0, unbiased=False)
+            # Clamp std to avoid exploding standardized magnitudes
+            feat_std = feat_std.clamp_min(5e-2)
     else:
         feat_mean = torch.zeros(GRAPH_INPUT_DIM, device=device)
         feat_std = torch.ones(GRAPH_INPUT_DIM, device=device)
 
-    # Group weights: base(16)=1.0, global(92)=0.25, type(3)=0.1
+    # Exclude node-type (last 3) and bias (BASE 16th) from standardization by
+    # forcing mean=0, std=1 for those indices
+    # bias index within base block
+    bias_idx = BASE_NODE_DIM - 1
+    feat_mean[bias_idx] = 0.0
+    feat_std[bias_idx] = 1.0
+    # node-type indices
+    type_start = BASE_NODE_DIM + GLOBAL_FEATURE_DIM
+    feat_mean[type_start:] = 0.0
+    feat_std[type_start:] = 1.0
+
+    # Group weights: base(16)=1.0, global(92)=0.15, type(3)=0.05
     loss_weights = torch.ones(GRAPH_INPUT_DIM, device=device)
     loss_weights[:BASE_NODE_DIM] = 1.0
-    loss_weights[BASE_NODE_DIM : BASE_NODE_DIM + GLOBAL_FEATURE_DIM] = 0.25
-    loss_weights[BASE_NODE_DIM + GLOBAL_FEATURE_DIM :] = 0.1
+    loss_weights[BASE_NODE_DIM : BASE_NODE_DIM + GLOBAL_FEATURE_DIM] = 0.15
+    loss_weights[BASE_NODE_DIM + GLOBAL_FEATURE_DIM :] = 0.05
 
     best_val_loss = float("inf")
     best_f1 = 0.0
     train_losses = []
     val_losses = []
     patience_counter = 0
-    patience = 8  # Increased patience for longer training
+    patience = patience  # from arguments
 
     for epoch in range(epochs):
         # Training phase
@@ -488,7 +503,7 @@ def train_graphsage_model(
             lr = scheduler.get_last_lr()[0]
             print(
                 f"[GRAPHSAGE TRAINING] Epoch {epoch:2d}: "
-                f"train_loss = {avg_train_loss:.4f}, "
+                f"train_loss = {avg_train_loss:.2e}, "
                 f"val_MSE = {avg_val_loss:.2e}, "  # Scientific notation for MSE tracking
                 f"lr = {lr:.6f}"
             )

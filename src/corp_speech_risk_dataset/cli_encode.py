@@ -701,7 +701,7 @@ def cmd_tokenize(ctx, text_model, st_model):
     multiple=True,
     help=(
         "Additional raw fields to encode with Legal-BERT. "
-        "Allowed: quote_top_keywords, context_top_keywords, speaker_raw, section_headers. "
+        "Allowed: quote_top_keywords, context_top_keywords, speaker_raw (or speaker), section_headers. "
         "If provided, the primary text field will NOT be re-encoded."
     ),
 )
@@ -754,10 +754,12 @@ def cmd_embed(ctx, st_model, lb_fields):
     # If specific Legal-BERT fields are requested, encode ONLY those per-entry
     # and keep the main quote embedding untouched (idempotent behavior).
     if text_embedder == "legal-bert" and lb_fields:
+        # Support both `speaker_raw` and legacy `speaker` as inputs
         allowed_fields = {
             "quote_top_keywords",
             "context_top_keywords",
             "speaker_raw",
+            "speaker",
             "section_headers",
         }
         unknown = [f for f in lb_fields if f not in allowed_fields]
@@ -806,7 +808,8 @@ def cmd_embed(ctx, st_model, lb_fields):
                 # Prepare per-field payloads
                 need_qtk = "quote_top_keywords" in lb_fields
                 need_ctx = "context_top_keywords" in lb_fields
-                need_speaker = "speaker_raw" in lb_fields
+                # Accept either `speaker_raw` or `speaker` flag
+                need_speaker = ("speaker_raw" in lb_fields) or ("speaker" in lb_fields)
                 need_headers = "section_headers" in lb_fields
 
                 # 1) Keyword phrases per-row (encoded directly, no caching needed)
@@ -826,17 +829,23 @@ def cmd_embed(ctx, st_model, lb_fields):
                 headers_to_encode: List[str] = []
                 if need_speaker:
                     for js in batch_items:
-                        sp = js.get("speaker_raw")
+                        # Prefer `speaker_raw` if present; fall back to `speaker`
+                        sp_val = js.get("speaker_raw")
+                        if not sp_val:
+                            sp_val = js.get("speaker")
                         key = (
-                            sp
-                            if isinstance(sp, str)
-                            else ("" if sp is None else str(sp))
+                            sp_val
+                            if isinstance(sp_val, str)
+                            else ("" if sp_val is None else str(sp_val))
                         )
                         if key and key not in speaker_cache:
                             speakers_to_encode.append(key)
                 if need_headers:
                     for js in batch_items:
                         hdrs = js.get("section_headers")
+                        # Accept both list[str] and str. Treat str as single-element.
+                        if isinstance(hdrs, str):
+                            hdrs = [hdrs]
                         if isinstance(hdrs, list):
                             for h in hdrs:
                                 hk = h if isinstance(h, str) else str(h)
@@ -861,11 +870,33 @@ def cmd_embed(ctx, st_model, lb_fields):
                     sp_arr = model.encode(speakers_to_encode, convert_to_numpy=True)
                     for k, vec in zip(speakers_to_encode, sp_arr):
                         speaker_cache[k] = vec.tolist()
+                        # Diagnostic: log if the model returned an all-zero vector
+                        try:
+                            import numpy as _np  # local import for safety
+
+                            if _np.all(vec == 0):
+                                logger.warning(
+                                    f"Legal-BERT returned zero vector for speaker: '{k}'"
+                                )
+                        except Exception:
+                            # best-effort diagnostic; never break the pipeline
+                            pass
 
                 if headers_to_encode:
                     hd_arr = model.encode(headers_to_encode, convert_to_numpy=True)
                     for k, vec in zip(headers_to_encode, hd_arr):
                         header_cache[k] = vec.tolist()
+                        # Diagnostic: log if the model returned an all-zero vector
+                        try:
+                            import numpy as _np  # local import for safety
+
+                            if _np.all(vec == 0):
+                                logger.warning(
+                                    f"Legal-BERT returned zero vector for header: '{k}'"
+                                )
+                        except Exception:
+                            # best-effort diagnostic; never break the pipeline
+                            pass
 
                 # Assign back to rows
                 emitted = []
@@ -889,15 +920,21 @@ def cmd_embed(ctx, st_model, lb_fields):
                             else zero_vec
                         )
                     if need_speaker:
-                        sp = js.get("speaker_raw")
+                        # Prefer `speaker_raw` if present; fall back to `speaker`
+                        sp_val = js.get("speaker_raw")
+                        if not sp_val:
+                            sp_val = js.get("speaker")
                         key = (
-                            sp
-                            if isinstance(sp, str)
-                            else ("" if sp is None else str(sp))
+                            sp_val
+                            if isinstance(sp_val, str)
+                            else ("" if sp_val is None else str(sp_val))
                         )
                         js["legal_bert_speaker_emb"] = speaker_cache.get(key, zero_vec)
                     if need_headers:
                         hdrs = js.get("section_headers")
+                        # Accept both list[str] and str. Treat str as single-element.
+                        if isinstance(hdrs, str):
+                            hdrs = [hdrs]
                         if isinstance(hdrs, list) and hdrs:
                             vecs = [
                                 header_cache.get(

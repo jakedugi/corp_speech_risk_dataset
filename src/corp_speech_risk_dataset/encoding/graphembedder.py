@@ -9,9 +9,10 @@ import networkx as nx
 import numpy as np
 from torch_geometric.data import Data, Batch
 from torch_geometric.nn import Node2Vec, SAGEConv, global_mean_pool
+from torch_geometric.utils import negative_sampling
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score, roc_auc_score, classification_report
+from sklearn.metrics import f1_score, roc_auc_score, average_precision_score
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
@@ -339,7 +340,9 @@ def train_graphsage_model(
         f"[GRAPHSAGE TRAINING] DGI weight: {dgi_weight}, Negative samples: {num_negative}"
     )
     print(f"[GRAPHSAGE TRAINING] Device: {device}")
-    print(f"[GRAPHSAGE TRAINING] Targeting 10^-4 MSE with enhanced objectives")
+    print(
+        f"[GRAPHSAGE TRAINING] Optimizing link prediction (AP/AUROC) + DGI; recon as regularizer"
+    )
 
     # Optimized for extended training - configurable LR, higher weight decay
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
@@ -390,6 +393,10 @@ def train_graphsage_model(
     loss_weights[BASE_NODE_DIM + GLOBAL_FEATURE_DIM :] = 0.05
 
     best_val_loss = float("inf")
+    best_val_ap = -1.0
+    best_val_dgi = float("inf")
+    best_model_state = None
+    best_decoder_state = None
     best_f1 = 0.0
     train_losses = []
     val_losses = []
@@ -441,11 +448,18 @@ def train_graphsage_model(
                     recon_loss = mse.mean()
 
                 # DGI contrastive loss over node embeddings in the batch
-                if dgi_weight > 0:
-                    dgi_loss = compute_dgi_loss(embeddings, edge_index, num_negative)
-                    loss = recon_loss + dgi_weight * dgi_loss
-                else:
-                    loss = recon_loss
+                # Link prediction loss (binary cross-entropy on pos/neg edges)
+                link_bce = compute_linkpred_bce(embeddings, edge_index)
+
+                # DGI contrastive loss for structural consistency
+                dgi_loss = (
+                    compute_dgi_loss(embeddings, edge_index, num_negative)
+                    if dgi_weight > 0
+                    else torch.tensor(0.0, device=device)
+                )
+
+                # Total objective: 0.2*recon + 1.0*link + 0.1*DGI
+                loss = 0.2 * recon_loss + 1.0 * link_bce + 0.1 * dgi_loss
 
             loss.backward()
             # Gradient clipping for stability
@@ -467,6 +481,10 @@ def train_graphsage_model(
             model.eval()
             val_loss = 0.0
             val_samples = 0
+            # Link prediction metrics accumulation
+            all_scores = []
+            all_labels = []
+            dgi_vals = []
 
             with torch.no_grad():
                 for pyg_data in val_graphs:
@@ -493,24 +511,75 @@ def train_graphsage_model(
                     val_loss += float(vloss.item())
                     val_samples += 1
 
+                    # Link scores for AP/AUROC
+                    scores, labels = compute_linkpred_scores(
+                        embeddings, pyg_data.edge_index
+                    )
+                    if scores.numel() > 0:
+                        all_scores.append(scores.cpu())
+                        all_labels.append(labels.cpu())
+
+                    # DGI on val graph
+                    dgi_vals.append(
+                        compute_dgi_loss(
+                            embeddings, pyg_data.edge_index, num_negative
+                        ).item()
+                    )
+
             avg_val_loss = val_loss / max(val_samples, 1)
             val_losses.append(avg_val_loss)
+
+            # Aggregate link metrics
+            if all_scores:
+                scores_cat = torch.cat(all_scores).numpy()
+                labels_cat = torch.cat(all_labels).numpy()
+                try:
+                    val_ap = average_precision_score(labels_cat, scores_cat)
+                except Exception:
+                    val_ap = 0.0
+                try:
+                    val_auc = roc_auc_score(labels_cat, scores_cat)
+                except Exception:
+                    val_auc = 0.0
+            else:
+                val_ap = 0.0
+                val_auc = 0.0
+
+            avg_val_dgi = (
+                float(sum(dgi_vals) / max(len(dgi_vals), 1)) if dgi_vals else 0.0
+            )
         else:
             avg_val_loss = avg_train_loss  # Fallback if no validation set
+            val_ap = 0.0
+            val_auc = 0.0
+            avg_val_dgi = 0.0
 
-        # Progress logging - show MSE progress toward 10^-4
+        # Progress logging
         if epoch % 5 == 0 or epoch == epochs - 1:
             lr = scheduler.get_last_lr()[0]
             print(
                 f"[GRAPHSAGE TRAINING] Epoch {epoch:2d}: "
                 f"train_loss = {avg_train_loss:.2e}, "
-                f"val_MSE = {avg_val_loss:.2e}, "  # Scientific notation for MSE tracking
+                f"val_MSE = {avg_val_loss:.2e}, "
+                f"val_AP = {val_ap:.3f}, val_AUC = {val_auc:.3f}, "
+                f"val_DGI = {avg_val_dgi:.3f}, "
                 f"lr = {lr:.6f}"
             )
 
-        # Early stopping
-        if avg_val_loss < best_val_loss:
+        # Early stopping on val AP (higher is better). Tie-breaker: lower val DGI.
+        improved = val_ap > best_val_ap + 1e-4 or (
+            abs(val_ap - best_val_ap) <= 1e-4 and avg_val_dgi < best_val_dgi
+        )
+        if improved:
+            best_val_ap = val_ap
+            best_val_dgi = avg_val_dgi
             best_val_loss = avg_val_loss
+            best_model_state = {
+                k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+            }
+            best_decoder_state = {
+                k: v.detach().cpu().clone() for k, v in decoder.state_dict().items()
+            }
             patience_counter = 0
         else:
             patience_counter += 1
@@ -520,6 +589,12 @@ def train_graphsage_model(
             break
 
     model.eval()
+
+    # Restore best model/decoder if available
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+    if best_decoder_state is not None:
+        decoder.load_state_dict(best_decoder_state)
 
     # Evaluation metrics - keep on same device
     eval_metrics = {}
@@ -545,7 +620,9 @@ def train_graphsage_model(
             "train_loss_history": train_losses,
             "val_loss_history": val_losses,
             "loss_type": loss_type,
-            "target_mse": "10^-4",
+            "target_metric": "val_AP",
+            "best_val_ap": best_val_ap,
+            "best_val_dgi": best_val_dgi,
         }
     )
 
@@ -1424,6 +1501,60 @@ def compute_dgi_loss(
     neg_loss = F.logsigmoid(-neg_scores).mean()
 
     return -(pos_loss + neg_loss)
+
+
+def compute_linkpred_scores(
+    embeddings: torch.Tensor, edge_index: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute scores and labels for link prediction on a single graph:
+      - positives: existing edges
+      - negatives: sampled with equal count via negative_sampling
+    Score = dot product of node embeddings for (u,v)
+    Returns (scores, labels) on the same device as embeddings
+    """
+    device = embeddings.device
+    num_nodes = embeddings.shape[0]
+    if edge_index.numel() == 0 or num_nodes < 2:
+        return torch.empty(0, device=device), torch.empty(0, device=device)
+
+    pos = edge_index
+    # Sample negatives matching count of positives
+    try:
+        neg = negative_sampling(
+            edge_index=pos,
+            num_nodes=num_nodes,
+            num_neg_samples=pos.shape[1],
+            method="sparse",
+        )
+    except Exception:
+        return torch.empty(0, device=device), torch.empty(0, device=device)
+
+    def edge_scores(ei: torch.Tensor) -> torch.Tensor:
+        src, dst = ei[0], ei[1]
+        return (embeddings[src] * embeddings[dst]).sum(dim=1)
+
+    pos_scores = edge_scores(pos)
+    neg_scores = edge_scores(neg)
+
+    scores = torch.cat([pos_scores, neg_scores], dim=0)
+    labels = torch.cat(
+        [
+            torch.ones(pos_scores.size(0), device=device),
+            torch.zeros(neg_scores.size(0), device=device),
+        ]
+    )
+    return scores, labels
+
+
+def compute_linkpred_bce(
+    embeddings: torch.Tensor, edge_index: torch.Tensor
+) -> torch.Tensor:
+    """Binary cross-entropy loss for link prediction with negative sampling."""
+    scores, labels = compute_linkpred_scores(embeddings, edge_index)
+    if scores.numel() == 0:
+        return torch.tensor(0.0, device=embeddings.device)
+    return F.binary_cross_entropy_with_logits(scores, labels)
 
 
 def compute_graph_embedding(

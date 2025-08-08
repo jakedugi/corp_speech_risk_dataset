@@ -452,10 +452,14 @@ python -m coral_ordinal.cli --data path/to/data.jsonl --buckets Low Medium High 
 
 
 
+## Case Outcome Analysis Pipeline
+
+### Step 1: Evaluate against hand-annotated gold standard
 (corp_speech_risk_dataset)  corp_speech_risk_dataset % uv run python src/corp_speech_risk_dataset/case_outcome/final_evaluate.py \
     --annotations data/gold_standard/case_outcome_amounts_hand_annotated.csv \
     --extracted-root data/extracted/courtlistener
 
+### Step 2: Impute case outcomes using machine learning models
 uv run python src/corp_speech_risk_dataset/case_outcome/case_outcome_imputer.py \
   --root data/tokenized/courtlistener_v5_final \
   --stage1-root data/extracted/courtlistener \
@@ -468,7 +472,11 @@ uv run python src/corp_speech_risk_dataset/case_outcome/case_outcome_imputer.py 
   --docket-position-threshold 0.7947200838693315 \
   --dismissal-ratio-threshold 200.0 \
   --bankruptcy-ratio-threshold 6e22 \
-  --patent-ratio-threshold 6e22 \
+  --patent-ratio-threshold 6e22
+
+## Analysis & Visualization
+
+### Step 3: Generate summary statistics and export detailed CSV \
 
 
 # Run complete analysis
@@ -477,19 +485,22 @@ uv run python scripts/outcome_summary_statistics.py \
     --max-threshold 5000000000.00 \
     --export-csv data/outcomes/detailed_export.csv
 
+### Step 4: Create outcome distribution visualizations
 # Generate visualizations
 uv run python scripts/outcome_distribution_plots.py \
     --outcomes-dir data/outcomes/courtlistener_v1 \
     --output-dir plots/outcomes \
     --max-threshold 5000000000.00
 
-
+### Step 5: Visualize text similarity patterns by case outcomes (including missing data)
 uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes/courtlistener_v1/*/doc_*_text_stage9.jsonl" --output similarity_by_outcomes.html --max-threshold 15500000000 --exclude-speakers "Unknown,Court,FTC,Fed,Plaintiff,State,Commission,Congress,Circuit,FDA"
 
-
+### Step 6: Visualize text similarity patterns by case outcomes (excluding missing data)
 uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes/courtlistener_v1/*/doc_*_text_stage9.jsonl" --output similarity_by_outcomes_no_missing.html --max-threshold 15500000000 --exclude-speakers "Unknown,Court,FTC,Fed,Plaintiff,State,Commission,Congress,Circuit,FDA" --exclude-missing
 
+## Advanced Legal-BERT + GraphSAGE + Cross-Modal Fusion Pipeline
 
+### Step 7: Generate Legal-BERT embeddings for legal domain-specific text representation
 !python -m src.corp_speech_risk_dataset.cli_encode \
   --out-root /content/corp_speech_risk_dataset/data/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/outcomes/courtlistener_v2_legal_bert \
   --recursive \
@@ -500,8 +511,7 @@ uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes
   /content/corp_speech_risk_dataset/data/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/outcomes/courtlistener_v1 \
   embed
 
-
-
+### Step 8: Train GraphSAGE model on dependency graphs for syntactic structure embeddings
 !python -m src.corp_speech_risk_dataset.cli_encode \
   --out-root /content/corp_speech_risk_dataset/data/outcomes/courtlistener_v3_legal_bert_graphsage \
   --recursive \
@@ -515,4 +525,22 @@ uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes
     --loss-type hybrid \
     --eval-graph \
     --use-amp
+
+### Step 9: Train advanced cross-modal fusion with InfoNCE loss for optimal text+graph integration
+!python -m src.corp_speech_risk_dataset.cli_encode \
+  --out-root /content/corp_speech_risk_dataset/data/outcomes/courtlistener_v4_fused \
+  --recursive \
+  --stage 11 \
+  --text-embedder legal-bert \
+  --fusion-epochs 15 \
+  --fusion-batch-size 256 \
+  --fusion-temperature 0.2 \
+  --fusion-dropout 0.1 \
+  --fusion-heads 8 \
+  --fusion-patience 3 \
+  --adaptive-temperature \
+  --hard-negative-weight 1.3 \
+  --use-amp \
+  /content/corp_speech_risk_dataset/data/outcomes/courtlistener_v3_legal_bert_graphsage \
+  fuse
 """

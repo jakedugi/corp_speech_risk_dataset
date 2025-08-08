@@ -626,6 +626,7 @@ dependencies = [
     { name = "ujson", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "umap-learn", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "urllib3", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "vadersentiment", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "wasabi", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "weasel", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
 ]
@@ -765,6 +766,7 @@ requires-dist = [
     { name = "ujson", specifier = ">=5.10.0" },
     { name = "umap-learn", specifier = ">=0.5.9.post2" },
     { name = "urllib3", specifier = "==2.5.0" },
+    { name = "vadersentiment", specifier = ">=3.3.2" },
     { name = "wasabi", specifier = ">=1.1.1" },
     { name = "weasel", specifier = "==0.3.3" },
 ]
@@ -4287,6 +4289,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/15/22/9ee70a2574a4f4599c47dd506532914ce044817c7752a79b6a51286319bc/urllib3-2.5.0.tar.gz", hash = "sha256:3fc47733c7e419d4bc3f6b3dc2b4f890bb743906a30d56ba4a5bfa4bbff92760", size = 393185, upload-time = "2025-06-18T14:07:41.644Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/c2/fe1e52489ae3122415c51f387e221dd0773709bad6c6cdaa599e8a2c5185/urllib3-2.5.0-py3-none-any.whl", hash = "sha256:e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc", size = 129795, upload-time = "2025-06-18T14:07:40.39Z" },
+]
+
+[[package]]
+name = "vadersentiment"
+version = "3.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/77/8c/4a48c10a50f750ae565e341e697d74a38075a3e43ff0df6f1ab72e186902/vaderSentiment-3.3.2.tar.gz", hash = "sha256:5d7c06e027fc8b99238edb0d53d970cf97066ef97654009890b83703849632f9", size = 2466783, upload-time = "2020-05-22T15:06:32.81Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/fc/310e16254683c1ed35eeb97386986d6c00bc29df17ce280aed64d55537e9/vaderSentiment-3.3.2-py2.py3-none-any.whl", hash = "sha256:3bf1d243b98b1afad575b9f22bc2cb1e212b94ff89ca74f8a23a588d024ea311", size = 125950, upload-time = "2020-05-22T15:07:00.052Z" },
 ]
 
 [[package]]

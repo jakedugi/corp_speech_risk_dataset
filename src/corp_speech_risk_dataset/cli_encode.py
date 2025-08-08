@@ -131,10 +131,12 @@ def encode_file(
     graph_hidden = 128
     num_layers = 2
 
-    # Create GraphSAGE model with fixed input dimensions (16D node features)
+    # Create GraphSAGE model with fused input dimensions
     sage_model = (
         get_graphsage_embedder(
-            in_channels=16, hidden_channels=graph_hidden, num_layers=num_layers
+            in_channels=GRAPH_INPUT_DIM,
+            hidden_channels=graph_hidden,
+            num_layers=num_layers,
         )
         if graph_embed in ["graphsage", "cross"]
         else None
@@ -324,12 +326,18 @@ def _flush(
     # Safely cast to literal types
     if base_method in ["wl", "node2vec", "graphsage"]:
         method_literal = cast(Literal["wl", "node2vec", "graphsage"], base_method)
-        gph_list = [
-            compute_graph_embedding(
-                t, method_literal, n2v_model, sage_model, fuse_model
+        gph_list = []
+        for row, t in zip(rows, texts):
+            gph_list.append(
+                compute_graph_embedding(
+                    t,
+                    method_literal,
+                    n2v_model,
+                    sage_model,
+                    fuse_model,
+                    raw_features=row.get("raw_features"),
+                )
             )
-            for t in texts
-        ]
         gph_embs = torch.stack(gph_list) if gph_list else None
     else:
         gph_embs = None
@@ -948,13 +956,16 @@ def cmd_graph(
         get_graphsage_embedder,
         train_graphsage_model,
         _nx_to_pyg,
+        GRAPH_INPUT_DIM,
     )
     from src.corp_speech_risk_dataset.encoding.parser import to_dependency_graph
 
     node2vec_model = get_node2vec_embedder() if graph_embed == "node2vec" else None
     # Create GraphSAGE model with configurable dimensions
     sage_model = (
-        get_graphsage_embedder(in_channels=16, hidden_channels=hidden_dim, num_layers=2)
+        get_graphsage_embedder(
+            in_channels=GRAPH_INPUT_DIM, hidden_channels=hidden_dim, num_layers=2
+        )
         if graph_embed in ["graphsage", "cross"]
         else None
     )
@@ -969,6 +980,7 @@ def cmd_graph(
         training_graphs = []
         training_labels = []  # For evaluation if available
         training_texts = []  # For CrossModalFusion training
+        training_raw_features = []  # Keep raw feature dicts aligned with texts
         sample_count = 0
         min_nodes = 3  # Lower threshold - even simple structures are useful
         files_to_sample = min(max_files, len(ctx.obj["files"]))
@@ -990,11 +1002,14 @@ def cmd_graph(
                             dep_graph = to_dependency_graph(js["text"])
                             node_count = len(list(dep_graph.nodes()))
                             if node_count >= min_nodes:
-                                pyg_data = _nx_to_pyg(dep_graph)
+                                pyg_data = _nx_to_pyg(
+                                    dep_graph, raw_features=js.get("raw_features")
+                                )
                                 training_graphs.append(pyg_data)
                                 training_texts.append(
                                     js["text"]
                                 )  # Store text for fusion training
+                                training_raw_features.append(js.get("raw_features"))
 
                                 # Extract labels for evaluation if available
                                 label = 0  # Default label
@@ -1096,11 +1111,17 @@ def cmd_graph(
                 graph_embs = []
                 sage_model.eval()
                 with torch.no_grad():
-                    for i, text in enumerate(
-                        training_texts[:fusion_samples]
-                    ):  # Match text embeddings count
+                    for i, text in enumerate(training_texts[:fusion_samples]):
                         graph_emb = compute_graph_embedding(
-                            text, "graphsage", None, sage_model
+                            text,
+                            "graphsage",
+                            None,
+                            sage_model,
+                            raw_features=(
+                                training_raw_features[i]
+                                if i < len(training_raw_features)
+                                else None
+                            ),
                         )
                         graph_embs.append(graph_emb)
 
@@ -1339,6 +1360,7 @@ def cmd_graph(
                         node2vec_model,
                         sage_model,
                         fusion_model,
+                        raw_features=js.get("raw_features"),
                     )
 
                     # Fuse embeddings using trained fusion model
@@ -1370,7 +1392,12 @@ def cmd_graph(
 
                 # Use the utility function with the pre-created model
                 gph_tensor = compute_graph_embedding(
-                    js["text"], graph_embed, node2vec_model, sage_model, fusion_model
+                    js["text"],
+                    graph_embed,
+                    node2vec_model,
+                    sage_model,
+                    fusion_model,
+                    raw_features=js.get("raw_features"),
                 )
                 js["gph_emb"] = gph_tensor.tolist()
 

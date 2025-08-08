@@ -19,6 +19,111 @@ from .parser import to_dependency_graph
 
 from contextlib import nullcontext
 
+# --------------------------------------------------------------------------- #
+# Feature dimensionality configuration for GraphSAGE fusion
+# --------------------------------------------------------------------------- #
+# Base token-level feature vector used historically by GraphSAGE
+# [degree (1), pos_one_hot (12), position (1), bias (1)] = 16
+BASE_NODE_DIM: int = 16
+
+# Global quote/context feature groups (kept in raw form; no compression):
+#  - quote_sentiment (3) + context_sentiment (3)
+#  - quote_deontic_count (1) + context_deontic_count (1)
+#  - quote_pos (11) + context_pos (11)
+#  - quote_ner (7) + context_ner (7)
+#  - quote_deps (23) + context_deps (23)
+#  - quote_wl (1) + context_wl (1)
+# Total extra = 92
+GLOBAL_FEATURE_DIM: int = 3 + 3 + 1 + 1 + 11 + 11 + 7 + 7 + 23 + 23 + 1 + 1
+
+# Optional node-type indicator to allow GraphSAGE to distinguish node roles:
+# [is_token, is_quote_node, is_context_node]
+NODE_TYPE_DIM: int = 3
+
+# Final per-node input dimensionality seen by GraphSAGE
+GRAPH_INPUT_DIM: int = BASE_NODE_DIM + GLOBAL_FEATURE_DIM + NODE_TYPE_DIM
+
+
+def _extract_raw_features(raw: Optional[Dict]) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Build fixed-layout global feature vectors for quote and context.
+
+    The layout is strictly ordered to ensure consistent dimensionality and
+    compatibility across training/inference runs.
+
+    Returns a tuple of tensors: (quote_vec_46, context_vec_46).
+    Missing keys default to zeros. No normalization/scaling is applied
+    (values are passed in current raw form by design).
+    """
+    # Initialize zero vectors for the two halves (46 dims each)
+    quote_vec = torch.zeros(46, dtype=torch.float32)
+    context_vec = torch.zeros(46, dtype=torch.float32)
+
+    if raw is None:
+        return quote_vec, context_vec
+
+    # Helper to safely get list/number
+    def _to_list(val, expected_len: int) -> List[float]:
+        if val is None:
+            return [0.0] * expected_len
+        if isinstance(val, (list, tuple)):
+            # Pad/trim to expected length for strict shape
+            arr = list(val)[:expected_len]
+            if len(arr) < expected_len:
+                arr += [0.0] * (expected_len - len(arr))
+            return [float(x) for x in arr]
+        # Scalar case
+        return [float(val)] + [0.0] * (expected_len - 1)
+
+    # Offsets for quote half
+    q_off = 0
+    # quote_sentiment (3)
+    q_vals = _to_list(raw.get("quote_sentiment"), 3)
+    quote_vec[q_off : q_off + 3] = torch.tensor(q_vals)
+    q_off += 3
+    # quote_deontic_count (1)
+    quote_vec[q_off] = float(raw.get("quote_deontic_count", 0.0))
+    q_off += 1
+    # quote_pos (11)
+    q_vals = _to_list(raw.get("quote_pos"), 11)
+    quote_vec[q_off : q_off + 11] = torch.tensor(q_vals)
+    q_off += 11
+    # quote_ner (7)
+    q_vals = _to_list(raw.get("quote_ner"), 7)
+    quote_vec[q_off : q_off + 7] = torch.tensor(q_vals)
+    q_off += 7
+    # quote_deps (23) – counts + depth
+    q_vals = _to_list(raw.get("quote_deps"), 23)
+    quote_vec[q_off : q_off + 23] = torch.tensor(q_vals)
+    q_off += 23
+    # quote_wl (1)
+    quote_vec[q_off] = float(raw.get("quote_wl", 0.0))
+
+    # Offsets for context half
+    c_off = 0
+    # context_sentiment (3)
+    c_vals = _to_list(raw.get("context_sentiment"), 3)
+    context_vec[c_off : c_off + 3] = torch.tensor(c_vals)
+    c_off += 3
+    # context_deontic_count (1)
+    context_vec[c_off] = float(raw.get("context_deontic_count", 0.0))
+    c_off += 1
+    # context_pos (11)
+    c_vals = _to_list(raw.get("context_pos"), 11)
+    context_vec[c_off : c_off + 11] = torch.tensor(c_vals)
+    c_off += 11
+    # context_ner (7)
+    c_vals = _to_list(raw.get("context_ner"), 7)
+    context_vec[c_off : c_off + 7] = torch.tensor(c_vals)
+    c_off += 7
+    # context_deps (23)
+    c_vals = _to_list(raw.get("context_deps"), 23)
+    context_vec[c_off : c_off + 23] = torch.tensor(c_vals)
+    c_off += 23
+    # context_wl (1)
+    context_vec[c_off] = float(raw.get("context_wl", 0.0))
+
+    return quote_vec, context_vec
+
 
 def get_best_device() -> torch.device:
     """Get best available device with consistent priority: CUDA → CPU → MPS"""
@@ -28,12 +133,26 @@ def get_best_device() -> torch.device:
         return torch.device("cpu")  # Prefer CPU over MPS for stability
 
 
-def _nx_to_pyg(g: nx.DiGraph) -> Data:
-    # Convert NetworkX DiGraph to a PyG Data object
-    # Nodes are indexed 0..N-1
+def _nx_to_pyg(g: nx.DiGraph, raw_features: Optional[Dict] = None) -> Data:
+    """Convert a dependency NetworkX DiGraph to a PyG Data with fused features.
+
+    Node features layout per node (no compression):
+      - BASE_NODE_DIM (16): degree + POS one-hot (12) + relative position + bias
+      - GLOBAL_FEATURE_DIM (92): concatenated [quote_vec_46 | context_vec_46]
+      - NODE_TYPE_DIM (3): one-hot for [token, quote_node, context_node]
+
+    Additionally, two special nodes are appended at the end of the graph:
+      - QUOTE node carrying (quote_vec, zeros) and type=[0,1,0]
+      - CONTEXT node carrying (zeros, context_vec) and type=[0,0,1]
+
+    Both special nodes are connected with directed edges to all token nodes
+    to broadcast global signals (star connections).
+    """
+    # Map original nodes to contiguous indices
     mapping = {n: i for i, n in enumerate(g.nodes())}
+
+    # Build edge list for existing dependency edges
     if len(g.edges()) == 0:
-        # Handle empty graphs
         edge_index = torch.zeros((2, 0), dtype=torch.long)
     else:
         edge_index = torch.tensor(
@@ -41,53 +160,84 @@ def _nx_to_pyg(g: nx.DiGraph) -> Data:
             dtype=torch.long,
         )
 
-    # Create fixed-size node features (degree + POS tag embeddings)
-    node_features = []
-    num_nodes = (
-        g.number_of_nodes()
-    )  # Fix: use number_of_nodes() instead of len(g.nodes())
-    for node_id in range(num_nodes):
-        # Get node attributes
+    # Prepare global feature vectors (46 each) and concatenation (92)
+    quote_vec46, context_vec46 = _extract_raw_features(raw_features)
+    global_vec92 = torch.cat([quote_vec46, context_vec46], dim=0)  # [92]
+
+    # Create token node features
+    token_features: List[torch.Tensor] = []
+    num_tokens = g.number_of_nodes()
+    pos_map = {
+        "NOUN": 0,
+        "VERB": 1,
+        "ADJ": 2,
+        "ADV": 3,
+        "PRON": 4,
+        "DET": 5,
+        "ADP": 6,
+        "CONJ": 7,
+        "NUM": 8,
+        "PART": 9,
+        "PUNCT": 10,
+        "X": 11,
+    }
+    for node_id in range(num_tokens):
         node_data = g.nodes[node_id] if node_id in g.nodes else {"pos": "X", "text": ""}
+        degree_val = int(g.degree(node_id)) if node_id in g.nodes else 0
 
-        # Simple degree feature - fix degree calculation
-        degree = g.degree(node_id) if node_id in g.nodes else 0
-        degree_val = degree if isinstance(degree, int) else 0  # Handle DiDegreeView
-
-        # Simple POS tag embedding (map common POS tags to indices)
-        pos_map = {
-            "NOUN": 0,
-            "VERB": 1,
-            "ADJ": 2,
-            "ADV": 3,
-            "PRON": 4,
-            "DET": 5,
-            "ADP": 6,
-            "CONJ": 7,
-            "NUM": 8,
-            "PART": 9,
-            "PUNCT": 10,
-            "X": 11,
-        }
+        # Base features (16)
+        base = torch.zeros(BASE_NODE_DIM)
+        base[0] = min(degree_val / 10.0, 1.0)
         pos_idx = pos_map.get(node_data.get("pos", "X"), 11)
+        base[1 + pos_idx] = 1.0
+        base[14] = min(node_id / max(num_tokens, 1), 1.0)
+        base[15] = 1.0
 
-        # Create fixed 16-dimensional feature vector
-        # [degree, pos_one_hot(12), position_in_sentence(3)]
-        feature = torch.zeros(16)
-        feature[0] = min(degree_val / 10.0, 1.0)  # normalized degree
-        feature[1 + pos_idx] = 1.0  # POS one-hot
-        feature[14] = (
-            min(node_id / num_nodes, 1.0) if num_nodes > 0 else 0
-        )  # relative position
-        feature[15] = 1.0  # bias term
+        # Node-type indicator for token
+        node_type = torch.tensor([1.0, 0.0, 0.0])
 
-        node_features.append(feature)
+        feat = torch.cat([base, global_vec92, node_type], dim=0)  # [GRAPH_INPUT_DIM]
+        token_features.append(feat)
 
-    if not node_features:
-        # Empty graph fallback
-        node_features = [torch.zeros(16)]
+    # If graph is empty, create one dummy token node (all zeros except bias)
+    if not token_features:
+        base = torch.zeros(BASE_NODE_DIM)
+        base[15] = 1.0
+        node_type = torch.tensor([1.0, 0.0, 0.0])
+        token_features = [torch.cat([base, global_vec92, node_type], dim=0)]
+        num_tokens = 1
 
-    x = torch.stack(node_features)
+    # Create QUOTE and CONTEXT special nodes
+    base_zero = torch.zeros(BASE_NODE_DIM)
+    quote_type = torch.tensor([0.0, 1.0, 0.0])
+    context_type = torch.tensor([0.0, 0.0, 1.0])
+    quote_node_feat = torch.cat(
+        [base_zero, torch.cat([quote_vec46, torch.zeros(46)], dim=0), quote_type]
+    )
+    context_node_feat = torch.cat(
+        [base_zero, torch.cat([torch.zeros(46), context_vec46], dim=0), context_type]
+    )
+
+    # Stack features
+    x = torch.stack(token_features + [quote_node_feat, context_node_feat])
+
+    # Append star edges from special nodes to all token nodes
+    if num_tokens > 0:
+        quote_idx = num_tokens
+        context_idx = num_tokens + 1
+        extra_src = []
+        extra_dst = []
+        for t in range(num_tokens):
+            extra_src += [quote_idx, context_idx]
+            extra_dst += [t, t]
+        if extra_src:
+            extra_edges = torch.tensor([extra_src, extra_dst], dtype=torch.long)
+            if edge_index.numel() == 0:
+                edge_index = extra_edges
+            else:
+                edge_index = torch.cat([edge_index, extra_edges], dim=1)
+
+    num_nodes = x.shape[0]
     return Data(x=x, edge_index=edge_index, num_nodes=num_nodes)
 
 
@@ -192,8 +342,15 @@ def train_graphsage_model(
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
+    # Determine hidden dimension dynamically from the model
+    try:
+        hidden_dim = model.convs[-1].out_channels  # type: ignore[attr-defined]
+    except Exception:
+        hidden_dim = 256
+
     # Persistent decoder for reconstruction loss - ensure on same device
-    decoder = nn.Linear(256, 16).to(device)  # Updated for 256D hidden
+    # Match output to current graph input dimensionality
+    decoder = nn.Linear(hidden_dim, GRAPH_INPUT_DIM).to(device)
     decoder_opt = torch.optim.AdamW(decoder.parameters(), lr=0.0005)
 
     # Move graphs to device - fix device assignment
@@ -467,7 +624,7 @@ def evaluate_graphsage_model(
 
 @lru_cache(maxsize=None)
 def get_graphsage_embedder(
-    in_channels: int = 16,
+    in_channels: int = GRAPH_INPUT_DIM,
     hidden_channels: int = 256,
     num_layers: int = 3,  # Increased to 256D and 3 layers
 ) -> nn.Module:
@@ -1123,6 +1280,7 @@ def compute_graph_embedding(
     node2vec_model: Node2Vec | None = None,
     graphsage_model: nn.Module | None = None,
     fuse_model: nn.Module | None = None,
+    raw_features: Optional[Dict] = None,
 ) -> torch.Tensor:
     """
     Compute a graph embedding vector for a single sentence:
@@ -1139,7 +1297,8 @@ def compute_graph_embedding(
         sp = wl_vector(text).toarray().ravel()
         return torch.from_numpy(sp).float()
 
-    pyg = _nx_to_pyg(g_nx)
+    # Build PyG graph with optional raw features for fusion
+    pyg = _nx_to_pyg(g_nx, raw_features=raw_features)
 
     if method == "node2vec":
         if node2vec_model is None:
@@ -1151,7 +1310,7 @@ def compute_graph_embedding(
         # Get or create GraphSAGE model with fixed input dimensions
         if graphsage_model is None:
             graphsage_model = get_graphsage_embedder(
-                in_channels=16, hidden_channels=128, num_layers=2
+                in_channels=GRAPH_INPUT_DIM, hidden_channels=128, num_layers=2
             )
 
         # Handle empty graphs

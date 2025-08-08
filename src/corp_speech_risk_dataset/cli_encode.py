@@ -695,9 +695,25 @@ def cmd_tokenize(ctx, text_model, st_model):
 
 @cli.command("embed")
 @click.option("--st-model", default=None, help="SentenceTransformer model name")
+@click.option(
+    "--lb-field",
+    "lb_fields",
+    multiple=True,
+    help=(
+        "Additional raw fields to encode with Legal-BERT. "
+        "Allowed: quote_top_keywords, context_top_keywords, speaker_raw, section_headers. "
+        "If provided, the primary text field will NOT be re-encoded."
+    ),
+)
 @click.pass_context
-def cmd_embed(ctx, st_model):
-    """Embed text via SentenceTransformer, GPT2, or Legal-BERT."""
+def cmd_embed(ctx, st_model, lb_fields):
+    """Embed text via SentenceTransformer, GPT2, or Legal-BERT.
+
+    When --lb-field is provided (one or more times), only those raw fields are
+    encoded with Legal-BERT and stored as separate keys. The main quote text
+    ("legal_bert_emb") is not re-encoded in that case, keeping the step
+    idempotent and efficient.
+    """
 
     # LOAD MODEL ONCE OUTSIDE THE PROCESSOR (FIXED!)
     text_embedder = ctx.obj["text_embedder"]
@@ -735,22 +751,221 @@ def cmd_embed(ctx, st_model):
     print(f"[TEXT EMBEDDING] Model output dimension: {embedding_dim}D")
     print(f"[TEXT EMBEDDING] Batch size: {embed_batch_size}")
 
-    def processor(lines):
-        import time
+    # If specific Legal-BERT fields are requested, encode ONLY those per-entry
+    # and keep the main quote embedding untouched (idempotent behavior).
+    if text_embedder == "legal-bert" and lb_fields:
+        allowed_fields = {
+            "quote_top_keywords",
+            "context_top_keywords",
+            "speaker_raw",
+            "section_headers",
+        }
+        unknown = [f for f in lb_fields if f not in allowed_fields]
+        if unknown:
+            raise ValueError(
+                f"Unsupported --lb-field values: {unknown}. Allowed: {sorted(allowed_fields)}"
+            )
 
-        start_time = time.time()
+        print(
+            f"[TEXT EMBEDDING] Will encode additional fields with Legal-BERT: {', '.join(lb_fields)}"
+        )
 
-        batch, metas = [], []
-        try:
-            for line in lines:
-                js = json.loads(line)
-                # clear previous text embeddings
-                js.pop("st_emb", None)
-                js.pop("gpt2_emb", None)
-                js.pop("legal_bert_emb", None)
-                batch.append(js["text"])
-                metas.append(js)
-                if len(batch) >= embed_batch_size:
+        # Persistent caches across all files in this run
+        import numpy as _np
+
+        speaker_cache: Dict[str, List[float]] = {}
+        header_cache: Dict[str, List[float]] = {}
+        zero_vec = _np.zeros(embedding_dim, dtype=_np.float32).tolist()  # type: ignore[arg-type]
+
+        def _as_phrase(value):
+            """Best-effort convert list/str to a single short phrase for BERT."""
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value
+            if isinstance(value, list):
+                # keep top-5 only if longer
+                items = value[:5]
+                # coerce to strings and join with space
+                return " ".join(str(x) for x in items)
+            return str(value)
+
+        def processor_multi(lines):
+            """Encode selected raw fields with Legal-BERT, using on-the-fly caching
+            for categorical features (speaker_raw and section_headers)."""
+            import time
+
+            start_time = time.time()
+
+            batch: List[Dict[str, Any]] = []
+
+            def flush_batch(batch_items: List[Dict[str, Any]]):
+                if not batch_items:
+                    return []
+
+                # Prepare per-field payloads
+                need_qtk = "quote_top_keywords" in lb_fields
+                need_ctx = "context_top_keywords" in lb_fields
+                need_speaker = "speaker_raw" in lb_fields
+                need_headers = "section_headers" in lb_fields
+
+                # 1) Keyword phrases per-row (encoded directly, no caching needed)
+                qtk_texts: List[str] = []
+                ctx_texts: List[str] = []
+                if need_qtk:
+                    qtk_texts = [
+                        _as_phrase(js.get("quote_top_keywords")) for js in batch_items
+                    ]
+                if need_ctx:
+                    ctx_texts = [
+                        _as_phrase(js.get("context_top_keywords")) for js in batch_items
+                    ]
+
+                # 2) Categorical caches: speakers and headers (unique-only encodes)
+                speakers_to_encode: List[str] = []
+                headers_to_encode: List[str] = []
+                if need_speaker:
+                    for js in batch_items:
+                        sp = js.get("speaker_raw")
+                        key = (
+                            sp
+                            if isinstance(sp, str)
+                            else ("" if sp is None else str(sp))
+                        )
+                        if key and key not in speaker_cache:
+                            speakers_to_encode.append(key)
+                if need_headers:
+                    for js in batch_items:
+                        hdrs = js.get("section_headers")
+                        if isinstance(hdrs, list):
+                            for h in hdrs:
+                                hk = h if isinstance(h, str) else str(h)
+                                if hk and hk not in header_cache:
+                                    headers_to_encode.append(hk)
+
+                # Deduplicate
+                speakers_to_encode = list(dict.fromkeys(speakers_to_encode))
+                headers_to_encode = list(dict.fromkeys(headers_to_encode))
+
+                # Run model encodes
+                qtk_embs: List[List[float]] = []
+                ctx_embs: List[List[float]] = []
+                if need_qtk:
+                    qtk_arr = model.encode(qtk_texts, convert_to_numpy=True)
+                    qtk_embs = [v.tolist() for v in qtk_arr]
+                if need_ctx:
+                    ctx_arr = model.encode(ctx_texts, convert_to_numpy=True)
+                    ctx_embs = [v.tolist() for v in ctx_arr]
+
+                if speakers_to_encode:
+                    sp_arr = model.encode(speakers_to_encode, convert_to_numpy=True)
+                    for k, vec in zip(speakers_to_encode, sp_arr):
+                        speaker_cache[k] = vec.tolist()
+
+                if headers_to_encode:
+                    hd_arr = model.encode(headers_to_encode, convert_to_numpy=True)
+                    for k, vec in zip(headers_to_encode, hd_arr):
+                        header_cache[k] = vec.tolist()
+
+                # Assign back to rows
+                emitted = []
+                for idx, js in enumerate(batch_items):
+                    # Clear previous fields to be idempotent
+                    js.pop("legal_bert_quote_top_keywords_emb", None)
+                    js.pop("legal_bert_context_top_keywords_emb", None)
+                    js.pop("legal_bert_speaker_emb", None)
+                    js.pop("legal_bert_section_headers_emb", None)
+
+                    if need_qtk:
+                        js["legal_bert_quote_top_keywords_emb"] = (
+                            qtk_embs[idx]
+                            if qtk_embs and qtk_embs[idx] is not None
+                            else zero_vec
+                        )
+                    if need_ctx:
+                        js["legal_bert_context_top_keywords_emb"] = (
+                            ctx_embs[idx]
+                            if ctx_embs and ctx_embs[idx] is not None
+                            else zero_vec
+                        )
+                    if need_speaker:
+                        sp = js.get("speaker_raw")
+                        key = (
+                            sp
+                            if isinstance(sp, str)
+                            else ("" if sp is None else str(sp))
+                        )
+                        js["legal_bert_speaker_emb"] = speaker_cache.get(key, zero_vec)
+                    if need_headers:
+                        hdrs = js.get("section_headers")
+                        if isinstance(hdrs, list) and hdrs:
+                            vecs = [
+                                header_cache.get(
+                                    h if isinstance(h, str) else str(h), zero_vec
+                                )
+                                for h in hdrs
+                            ]
+                            # mean-pool per-entry header vectors
+                            if vecs:
+                                # convert to numpy for precise mean
+                                arr = _np.asarray(vecs, dtype=_np.float32)
+                                js["legal_bert_section_headers_emb"] = arr.mean(
+                                    axis=0
+                                ).tolist()
+                            else:
+                                js["legal_bert_section_headers_emb"] = zero_vec
+                        else:
+                            js["legal_bert_section_headers_emb"] = zero_vec
+
+                    js["text_embedder"] = text_embedder
+                    emitted.append(js)
+
+                return emitted
+
+            try:
+                for line in lines:
+                    js = json.loads(line)
+                    batch.append(js)
+                    if len(batch) >= embed_batch_size:
+                        for mj in flush_batch(batch):
+                            yield json.dumps(mj, ensure_ascii=False)
+                        batch = []
+                if batch:
+                    for mj in flush_batch(batch):
+                        yield json.dumps(mj, ensure_ascii=False)
+            finally:
+                dt = time.time() - start_time
+                print(f"[TEXT EMBEDDING] Completed in {dt:.2f}s")
+
+        ctx.obj["processors"].append(processor_multi)
+    else:
+        # Default behavior: encode the main text field only
+        def processor(lines):
+            import time
+
+            start_time = time.time()
+
+            batch, metas = [], []
+            try:
+                for line in lines:
+                    js = json.loads(line)
+                    # clear previous text embeddings
+                    js.pop("st_emb", None)
+                    js.pop("gpt2_emb", None)
+                    js.pop("legal_bert_emb", None)
+                    batch.append(js["text"])
+                    metas.append(js)
+                    if len(batch) >= embed_batch_size:
+                        embs = model.encode(batch, convert_to_numpy=True)
+                        for mj, emb in zip(metas, embs):
+                            mj[emb_field] = emb.tolist()
+                            mj["text_embedder"] = (
+                                text_embedder  # Track which embedder was used
+                            )
+                            yield json.dumps(mj, ensure_ascii=False)
+                        batch, metas = [], []
+                # flush leftover
+                if batch:
                     embs = model.encode(batch, convert_to_numpy=True)
                     for mj, emb in zip(metas, embs):
                         mj[emb_field] = emb.tolist()
@@ -758,19 +973,11 @@ def cmd_embed(ctx, st_model):
                             text_embedder  # Track which embedder was used
                         )
                         yield json.dumps(mj, ensure_ascii=False)
-                    batch, metas = [], []
-            # flush leftover
-            if batch:
-                embs = model.encode(batch, convert_to_numpy=True)
-                for mj, emb in zip(metas, embs):
-                    mj[emb_field] = emb.tolist()
-                    mj["text_embedder"] = text_embedder  # Track which embedder was used
-                    yield json.dumps(mj, ensure_ascii=False)
-        finally:
-            dt = time.time() - start_time
-            print(f"[TEXT EMBEDDING] Completed in {dt:.2f}s")
+            finally:
+                dt = time.time() - start_time
+                print(f"[TEXT EMBEDDING] Completed in {dt:.2f}s")
 
-    ctx.obj["processors"].append(processor)
+        ctx.obj["processors"].append(processor)
 
 
 @cli.command("graph")
@@ -787,7 +994,7 @@ def cmd_embed(ctx, st_model):
 @click.option(
     "--epochs",
     type=int,
-    default=40,  # Increased from 15 to 40 for 10^-4 target
+    default=40,  # keep
     help="Number of training epochs for GraphSAGE (default: 40)",
 )
 @click.option(
@@ -805,14 +1012,14 @@ def cmd_embed(ctx, st_model):
 @click.option(
     "--batch-size",
     type=int,
-    default=512,
-    help="Batch size for GraphSAGE training (default: 512)",
+    default=1024,
+    help="Batch size for GraphSAGE training (default: 1024)",
 )
 @click.option(
     "--hidden-dim",
     type=int,
-    default=256,  # Increased default to 256 for legal text
-    help="Hidden dimensions for GraphSAGE (default: 256, optimized for legal text)",
+    default=768,
+    help="Hidden dimensions for GraphSAGE (default: 768)",
 )
 @click.option(
     "--loss-type",
@@ -1661,8 +1868,13 @@ def cmd_fuse(ctx, train_fusion, max_training_samples):
         step_time = time.time() - step_start_time
         print(f"\n[STEP COMPLETE] CROSS-MODAL FUSION")
         print(f"Processed: {total_processed:,} entries")
-        if text_dim and graph_dim:
-            print(f"Output dimensions: {text_dim + graph_dim}D")
+        if fusion_model is not None:
+            try:
+                out_dim = fusion_model.get_fusion_dim()
+            except Exception:
+                out_dim = None
+            if out_dim is not None:
+                print(f"Output dimensions: {out_dim}D (fused)")
         print(f"Time: {step_time:.2f}s")
         print("=" * 60)
 

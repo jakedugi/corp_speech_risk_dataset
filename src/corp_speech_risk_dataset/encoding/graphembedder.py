@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import networkx as nx
 import numpy as np
-from torch_geometric.data import Data
-from torch_geometric.nn import Node2Vec, SAGEConv
+from torch_geometric.data import Data, Batch
+from torch_geometric.nn import Node2Vec, SAGEConv, global_mean_pool
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, roc_auc_score, classification_report
@@ -370,52 +370,51 @@ def train_graphsage_model(
         total_loss = 0.0
         total_samples = 0
 
-        # Process in batches
+        # Process in batches using PyG Batch for better GPU utilization
         for i in range(0, len(train_graphs), batch_size):
             batch_graphs = train_graphs[i : i + batch_size]
-            batch_loss = None  # Initialize as None
+            if not batch_graphs:
+                continue
 
             optimizer.zero_grad()
             decoder_opt.zero_grad()
 
-            for pyg_data in batch_graphs:
-                if pyg_data.num_nodes == 0 or pyg_data.x is None:
-                    continue
+            batch = Batch.from_data_list(batch_graphs)
+            x = batch.x
+            edge_index = batch.edge_index
 
-                # Forward pass
-                embeddings = model(pyg_data.x, pyg_data.edge_index)
+            # Enable AMP if running on CUDA
+            use_amp_ctx = (
+                torch.autocast(device_type="cuda", dtype=torch.float16)
+                if device.type == "cuda"
+                else nullcontext()
+            )
 
-                # Enhanced reconstruction loss based on type
+            with use_amp_ctx:
+                embeddings = model(x, edge_index)
                 reconstructed = decoder(embeddings)
 
+                # Reconstruction loss per node, averaged
                 if loss_type == "hybrid":
-                    recon_loss = compute_hybrid_loss(reconstructed, pyg_data.x)
+                    recon_loss = compute_hybrid_loss(reconstructed, x)
                 elif loss_type == "cosine":
-                    recon_loss = compute_scaled_cosine_loss(reconstructed, pyg_data.x)
-                else:  # "mse"
-                    recon_loss = F.mse_loss(reconstructed, pyg_data.x)
+                    recon_loss = compute_scaled_cosine_loss(reconstructed, x)
+                else:
+                    recon_loss = F.mse_loss(reconstructed, x)
 
-                # DGI contrastive loss for structural consistency
+                # DGI contrastive loss over node embeddings in the batch
                 if dgi_weight > 0:
-                    dgi_loss = compute_dgi_loss(
-                        embeddings, pyg_data.edge_index, num_negative
-                    )
-                    total_loss_batch = recon_loss + dgi_weight * dgi_loss
+                    dgi_loss = compute_dgi_loss(embeddings, edge_index, num_negative)
+                    loss = recon_loss + dgi_weight * dgi_loss
                 else:
-                    total_loss_batch = recon_loss
+                    loss = recon_loss
 
-                # Accumulate batch loss
-                if batch_loss is None:
-                    batch_loss = total_loss_batch
-                else:
-                    batch_loss += total_loss_batch
-                total_samples += 1
+            loss.backward()
+            optimizer.step()
+            decoder_opt.step()
 
-            if batch_loss is not None:
-                batch_loss.backward()
-                optimizer.step()
-                decoder_opt.step()
-                total_loss += batch_loss.item()
+            total_loss += float(loss.detach().item())
+            total_samples += 1
 
         scheduler.step()
         avg_train_loss = total_loss / max(total_samples, 1)
@@ -540,12 +539,13 @@ def evaluate_graphsage_model(
             graph = graph.to(device)
             embeddings = model(graph.x, graph.edge_index)
 
-            # Store embeddings for downstream tasks
-            val_embeddings.append(embeddings.mean(dim=0).cpu().numpy())
+            # Store pooled embeddings for downstream tasks (per-graph)
+            graph_batch = torch.zeros(graph.x.size(0), dtype=torch.long, device=device)
+            pooled = global_mean_pool(embeddings, graph_batch)
+            val_embeddings.append(pooled.squeeze(0).cpu().numpy())
 
             # Reconstruction loss - ensure decoder is on same device
             if decoder is not None:
-                # Ensure decoder is on same device as embeddings
                 if next(decoder.parameters()).device != device:
                     decoder = decoder.to(device)
                 reconstructed = decoder(embeddings)
@@ -681,7 +681,7 @@ class CrossModalFusion(nn.Module):
         graph_dim: Optional[int] = None,
         fusion_dim: Optional[int] = None,
         dropout: float = 0.1,
-        num_heads: int = 4,
+        num_heads: int = 8,
     ):
         super().__init__()
         # Set default dimensions - prioritize Legal-BERT compatibility
@@ -754,13 +754,13 @@ def train_crossmodal_fusion(
     fusion_model: CrossModalFusion,
     text_embeddings: List[torch.Tensor],
     graph_embeddings: List[torch.Tensor],
-    epochs: int = 12,  # Increased from 5 to 12
-    batch_size: int = 256,  # Added batch processing
-    temperature: float = 0.07,  # InfoNCE temperature
-    patience: int = 3,  # Early stopping patience
-    use_amp: bool = False,  # Automatic Mixed Precision
-    adaptive_temperature: bool = True,  # New: Adaptive temperature for legal text
-    hard_negative_weight: float = 1.2,  # New: Hard negative mining weight
+    epochs: int = 15,
+    batch_size: int = 256,
+    temperature: float = 0.2,
+    patience: int = 3,
+    use_amp: bool = False,
+    adaptive_temperature: bool = True,
+    hard_negative_weight: float = 1.3,
 ) -> CrossModalFusion:
     """
     Train CrossModalFusion with InfoNCE contrastive learning - optimized for legal text.

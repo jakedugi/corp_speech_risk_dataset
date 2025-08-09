@@ -864,6 +864,7 @@ def main():
         model_type=args.model_type,
         lambda_cls=args.lambda_cls,
         lambda_reg=args.lambda_reg,
+        include_scalars=add_scalars,
     )
 
     # Save config

@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import re
 from glob import glob
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import polars as pl
@@ -283,12 +284,43 @@ def generate_figures(
             plt.close()
 
 
+def _flatten_for_csv(df: pl.DataFrame) -> pl.DataFrame:
+    """Row-wise stringify for robust CSV export.
+
+    Converts every value to a UTF-8 string in Python space to avoid Polars casting
+    limitations on nested/unknown types, then rebuilds a purely-string DataFrame.
+    """
+
+    def _cell_to_str(v: object) -> str:
+        if v is None:
+            return ""
+        try:
+            if isinstance(v, (list, dict, tuple, set)):
+                return json.dumps(v, ensure_ascii=False, default=str)
+        except Exception:
+            pass
+        try:
+            return str(v)
+        except Exception:
+            return ""
+
+    rows: List[Dict[str, str]] = []
+    for rec in df.iter_rows(named=True):
+        row_str: Dict[str, str] = {}
+        for k, v in rec.items():
+            row_str[str(k)] = _cell_to_str(v)
+        rows.append(row_str)
+    return pl.DataFrame(rows, strict=False)
+
+
 def save_tables(
     df_quotes: pl.DataFrame, df_cases: pl.DataFrame, output_dir: str
 ) -> None:
     os.makedirs(output_dir, exist_ok=True)
-    df_quotes.write_csv(os.path.join(output_dir, "quotes_with_case_id.csv"))
-    df_cases.write_csv(os.path.join(output_dir, "case_level_summary.csv"))
+    q_out = _flatten_for_csv(df_quotes)
+    c_out = _flatten_for_csv(df_cases)
+    q_out.write_csv(os.path.join(output_dir, "quotes_with_case_id.csv"))
+    c_out.write_csv(os.path.join(output_dir, "case_level_summary.csv"))
 
 
 def summarize_positions(

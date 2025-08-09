@@ -441,13 +441,64 @@ def main():
         else bool(getattr(config, "include_scalars", False))
     )
 
-    # Create dataset and dataloader
+    # Create dataset and attempt to reconcile feature dimensionality with the model
     dataset = InferenceDataset(
         data, feature_keys=feature_keys, include_scalars=include_scalars
     )
     if len(dataset) == 0:
         logger.error("No valid samples found!")
         return
+
+    # Reconcile dims if needed (common pitfall: scalars on/off)
+    try:
+        sample_x, _ = dataset[0]
+        dataset_dim = int(sample_x.shape[0])
+    except Exception:
+        dataset_dim = None
+
+    # CORALMLP has BatchNorm1d(in_dim); use it to check expected dim
+    model_dim = getattr(getattr(model, "input_bn", None), "num_features", None)
+
+    if dataset_dim is not None and model_dim is not None and dataset_dim != model_dim:
+        diff = dataset_dim - model_dim
+        logger.warning(
+            f"Input dim mismatch: model expects {model_dim}, dataset assembled {dataset_dim} (diff {diff})."
+        )
+
+        # Heuristic: try toggling scalars if the diff equals scalar_dim
+        scalar_dim = getattr(dataset, "scalar_dim", 0) or 0
+        if scalar_dim and abs(diff) == scalar_dim:
+            include_scalars = not include_scalars
+            logger.warning(
+                f"Auto-adjusting include_scalars to {include_scalars} to match model input dim."
+            )
+            # Rebuild dataset
+            dataset = InferenceDataset(
+                data, feature_keys=feature_keys, include_scalars=include_scalars
+            )
+            sample_x, _ = dataset[0]
+            dataset_dim = int(sample_x.shape[0])
+            if dataset_dim != model_dim:
+                logger.error(
+                    "After toggling scalars, input dim still mismatched. "
+                    f"model={model_dim}, dataset={dataset_dim}.\n"
+                    f"Selected feature_keys={feature_keys}, scalar_dim={scalar_dim}, "
+                    f"config.feature_keys={getattr(config, 'feature_keys', None)}, "
+                    f"config.include_scalars={getattr(config, 'include_scalars', None)}.\n"
+                    "Hint: remove CLI overrides and rerun using the model's saved config, or "
+                    "pass --feature-keys exactly as in the training config and match --add-scalars."
+                )
+                return
+        else:
+            logger.error(
+                "Feature composition appears different from training. "
+                f"model={model_dim}, dataset={dataset_dim}, diff={diff}.\n"
+                f"Selected feature_keys={feature_keys}, scalar_dim={getattr(dataset, 'scalar_dim', 0)}.\n"
+                f"Training config feature_keys={getattr(config, 'feature_keys', None)}, "
+                f"include_scalars={getattr(config, 'include_scalars', None)}.\n"
+                "Hint: rerun without --feature-keys/--add-scalars overrides, or match the training config."
+            )
+            return
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
 

@@ -37,6 +37,7 @@ import shutil
 import sys
 import tempfile
 from collections import defaultdict, deque
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Deque, Dict, Iterable, List, Tuple
@@ -279,6 +280,58 @@ def iter_position_files(
             yield p
 
 
+_FILENAME_RE = re.compile(r"^(?P<base>doc_\d+_text)_stage(?P<stage>\d+)\.jsonl$")
+
+
+def parse_doc_and_stage(filename: str) -> Tuple[str, str] | None:
+    """Parse a positions/destination filename to extract base doc token and stage.
+
+    Expected pattern: `doc_<digits>_text_stage<digits>.jsonl`.
+    Returns (base_without_stage, stage_str) or None if not matched.
+    """
+    m = _FILENAME_RE.match(filename)
+    if not m:
+        return None
+    return m.group("base"), m.group("stage")
+
+
+def resolve_destination_path(
+    dest_dir: Path, positions_file: Path, *, dest_stage: str | None
+) -> Path | None:
+    """Determine the correct destination file path for a given positions file.
+
+    Logic:
+    - If the filename follows the expected pattern, construct a candidate
+      destination name by replacing the stage with `dest_stage` (if provided)
+      or keeping the same stage as the positions file.
+    - If the constructed candidate exists, return it.
+    - Otherwise, fallback to glob for any file with the same `doc_*_text` base
+      in `dest_dir`. If exactly one match is found, return it. If zero or more
+      than one are found, return None (ambiguous or missing).
+    """
+    parsed = parse_doc_and_stage(positions_file.name)
+    if parsed is None:
+        # Fallback: try exact name first
+        candidate = dest_dir / positions_file.name
+        if candidate.exists():
+            return candidate
+        # Last resort: no pattern → unresolved
+        return None
+
+    base, pos_stage = parsed
+    stage_to_use = dest_stage if dest_stage is not None else pos_stage
+    candidate = dest_dir / f"{base}_stage{stage_to_use}.jsonl"
+    if candidate.exists():
+        return candidate
+
+    # Fallback: search for any stage for this doc base
+    matches = list(dest_dir.glob(f"{base}_stage*.jsonl"))
+    if len(matches) == 1:
+        return matches[0]
+    # Ambiguous or not found
+    return None
+
+
 def parse_args(argv: List[str]) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -338,6 +391,16 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
             f"Default: {','.join(DEFAULT_POS_KEYS)}"
         ),
     )
+    parser.add_argument(
+        "--dest-stage",
+        type=str,
+        default=None,
+        help=(
+            "Optional: override the destination stage suffix used to map file names. "
+            "For example, if positions are *_stage12.jsonl but destination files are "
+            "*_stage15.jsonl, pass --dest-stage 15."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -378,7 +441,20 @@ def main(argv: List[str]) -> int:
     aggregate = MergeStats()
 
     for pos_path in iter_position_files(positions_dir, single_file):
-        dest_path = dest_dir / pos_path.name
+        # Resolve destination path considering potential stage differences
+        dest_path = resolve_destination_path(
+            dest_dir, pos_path, dest_stage=args.dest_stage
+        )
+        if dest_path is None:
+            print(
+                (
+                    f"[WARN] Could not resolve destination for positions file {pos_path.name}. "
+                    f"Consider specifying --dest-stage or ensure matching filename exists in {dest_dir}."
+                ),
+                file=sys.stderr,
+            )
+            total_files += 1
+            continue
 
         total_files += 1
         try:
@@ -409,7 +485,7 @@ def main(argv: List[str]) -> int:
         # Per-file concise log
         print(
             (
-                f"{pos_path.name}: dest_entries={stats.total_destination_entries}, "
+                f"{pos_path.name} → {dest_path.name}: dest_entries={stats.total_destination_entries}, "
                 f"matched={stats.matched_entries}, added={stats.total_keys_added}, "
                 f"changed_entries={stats.entries_with_changes}, "
                 f"unmatched_dest={stats.unmatched_destination_entries}, "

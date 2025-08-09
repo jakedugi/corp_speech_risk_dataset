@@ -521,10 +521,6 @@ def main():
     logger.success("Inference completed successfully!")
 
 
-if __name__ == "__main__":
-    main()
-
-
 # ----------------------
 # Parallel writer utility
 # ----------------------
@@ -572,3 +568,7 @@ def write_appended_outputs(results: List[Dict[str, Any]], out_root: str) -> None
                     obj.update(pred)
                 fout.write(json.dumps(obj) + "\n")
         logger.info(f"Wrote appended file: {dst_path}")
+
+
+if __name__ == "__main__":
+    main()

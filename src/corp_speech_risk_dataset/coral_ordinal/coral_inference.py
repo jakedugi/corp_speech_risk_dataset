@@ -38,42 +38,83 @@ from corp_speech_risk_dataset.coral_ordinal.utils import choose_device
 
 
 class InferenceDataset(Dataset):
-    """Dataset for CORAL inference with full metadata preservation."""
+    """Dataset for CORAL inference with full metadata preservation and dynamic features."""
 
-    def __init__(self, data: List[Dict[str, Any]]):
+    def __init__(
+        self,
+        data: List[Dict[str, Any]],
+        feature_keys: List[str] | None = None,
+        include_scalars: bool = False,
+    ):
         self.data = data
-        self.features = []
-        self.metadata = []
+        self.feature_keys = feature_keys or ["fused_emb"]
+        self.include_scalars = include_scalars
+        self.features: List[torch.Tensor] = []
+        self.metadata: List[Dict[str, Any]] = []
+
+        # Infer per-key dims for padding
+        self.key_dims: Dict[str, int] = {}
+        for key in self.feature_keys:
+            dim = 0
+            for rec in data:
+                if key in rec and isinstance(rec[key], (list, tuple)):
+                    dim = len(rec[key])
+                    break
+            self.key_dims[key] = dim
+
+        # Determine scalar dim once if requested
+        self.scalar_dim: int = 0
+        if self.include_scalars:
+            for rec in data:
+                raw = rec.get("raw_features")
+                if isinstance(raw, dict):
+                    self.scalar_dim = len(self._flatten_scalars(raw))
+                    break
 
         for record in data:
-            if "fused_emb" not in record:
+            # Assemble features
+            parts: List[torch.Tensor] = []
+            for key in self.feature_keys:
+                vals = record.get(key)
+                if isinstance(vals, (list, tuple)):
+                    parts.append(torch.tensor(vals, dtype=torch.float32))
+                else:
+                    pad_dim = self.key_dims.get(key, 0)
+                    if pad_dim > 0:
+                        parts.append(torch.zeros(pad_dim, dtype=torch.float32))
+            if self.include_scalars:
+                raw_vec = self._flatten_scalars(record.get("raw_features"))
+                if raw_vec is not None:
+                    parts.append(torch.tensor(raw_vec, dtype=torch.float32))
+                elif self.scalar_dim > 0:
+                    parts.append(torch.zeros(self.scalar_dim, dtype=torch.float32))
+
+            if not parts:
                 logger.warning(
-                    f"Skipping record without fused_emb: {record.get('doc_id', 'unknown')}"
+                    f"Skipping record without any features: {record.get('doc_id', 'unknown')}"
                 )
                 continue
 
-            # Extract features
-            features = torch.tensor(record["fused_emb"], dtype=torch.float32)
+            features = torch.cat(parts, dim=0)
             self.features.append(features)
 
-            # Preserve all metadata for traceability
+            # Preserve metadata
             metadata = {
                 "doc_id": record.get("doc_id"),
                 "text": record.get("text"),
                 "speaker": record.get("speaker"),
                 "score": record.get("score"),
                 "context": record.get("context"),
-                "st_emb": record.get(
-                    "st_emb"
-                ),  # Original sentence transformer embedding
-                "gph_emb": record.get("gph_emb"),  # Original graph embedding
+                "st_emb": record.get("st_emb"),
+                "gph_emb": record.get("gph_emb"),
                 "gph_method": record.get("gph_method"),
-                "deps": record.get("deps"),  # Dependency parse info
-                "sp_ids": record.get("sp_ids"),  # SentencePiece token IDs
+                "deps": record.get("deps"),
+                "sp_ids": record.get("sp_ids"),
                 "final_judgement_real": record.get("final_judgement_real"),
                 "_src": record.get("_src"),
                 "urls": record.get("urls", []),
                 "stage": record.get("stage"),
+                "_file": record.get("_file"),
             }
             self.metadata.append(metadata)
 
@@ -100,6 +141,7 @@ def load_data(pattern: str) -> List[Dict[str, Any]]:
                 for line_num, line in enumerate(f, 1):
                     try:
                         data = json.loads(line.strip())
+                        data["_file"] = file_path
                         all_data.append(data)
                     except json.JSONDecodeError as e:
                         logger.warning(
@@ -223,6 +265,11 @@ def run_inference(
                         config.buckets[j]: class_probs[j]
                         for j in range(len(config.buckets))
                     },
+                    # Convenience flat fields per bucket
+                    **{
+                        f"coral_prob_{config.buckets[j]}": class_probs[j]
+                        for j in range(len(config.buckets))
+                    },
                     "prediction_uncertainty": float(entropy),
                     "ordinal_scores": probs_np[i].tolist(),
                     # Model metadata
@@ -341,6 +388,24 @@ def main():
         default=None,
         help="Override model threshold (default: use model's threshold)",
     )
+    parser.add_argument(
+        "--feature-keys",
+        nargs="+",
+        default=None,
+        help="Feature keys to concatenate (defaults to model config)",
+    )
+    parser.add_argument(
+        "--add-scalars",
+        action="store_true",
+        help="Append flattened raw_features scalars (defaults to model config)",
+    )
+    parser.add_argument(
+        "--out-root",
+        default=None,
+        help=(
+            "If provided, write per-file outputs with predictions appended in a parallel directory"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -364,8 +429,22 @@ def main():
         logger.error("No data loaded!")
         return
 
+    # Determine feature selection from config unless overridden
+    feature_keys = (
+        args.feature_keys
+        if args.feature_keys
+        else getattr(config, "feature_keys", None)
+    )
+    include_scalars = (
+        args.add_scalars
+        if args.add_scalars
+        else bool(getattr(config, "include_scalars", False))
+    )
+
     # Create dataset and dataloader
-    dataset = InferenceDataset(data)
+    dataset = InferenceDataset(
+        data, feature_keys=feature_keys, include_scalars=include_scalars
+    )
     if len(dataset) == 0:
         logger.error("No valid samples found!")
         return
@@ -383,8 +462,61 @@ def main():
     # Save results
     save_results(results, analysis, args.output)
 
+    # Optionally write appended outputs mirroring input files
+    if args.out_root:
+        write_appended_outputs(results, args.out_root)
+
     logger.success("Inference completed successfully!")
 
 
 if __name__ == "__main__":
     main()
+
+
+# ----------------------
+# Parallel writer utility
+# ----------------------
+def write_appended_outputs(results: List[Dict[str, Any]], out_root: str) -> None:
+    """Write per-file JSONL outputs with predictions appended to each record.
+
+    For each unique source file in results (metadata._file), create an output file
+    under out_root with the same basename, and append the CORAL predicted fields.
+    """
+    by_file: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    # Build mapping: file -> doc_id -> prediction fields
+    for r in results:
+        src = r.get("_file")
+        doc = r.get("doc_id")
+        if not src or not doc:
+            continue
+        by_file.setdefault(src, {})[doc] = {
+            "coral_pred_bucket": r.get("predicted_bucket"),
+            "coral_pred_class": r.get("predicted_class"),
+            "coral_confidence": r.get("confidence"),
+            "coral_class_probs": r.get("class_probabilities"),
+            "coral_scores": r.get("ordinal_scores"),
+            # flat convenience
+            **{k: v for k, v in r.items() if k.startswith("coral_prob_")},
+            # metadata
+            "coral_model_threshold": r.get("model_threshold"),
+            "coral_model_buckets": r.get("model_buckets"),
+        }
+
+    out_root = Path(out_root)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    # Process each source file
+    for src_file, pred_map in by_file.items():
+        src_path = Path(src_file)
+        dst_path = out_root / src_path.name
+        with open(src_path, "r") as fin, open(dst_path, "w") as fout:
+            for line in fin:
+                if not line.strip():
+                    continue
+                obj = json.loads(line)
+                doc_id = obj.get("doc_id")
+                pred = pred_map.get(doc_id)
+                if pred:
+                    obj.update(pred)
+                fout.write(json.dumps(obj) + "\n")
+        logger.info(f"Wrote appended file: {dst_path}")

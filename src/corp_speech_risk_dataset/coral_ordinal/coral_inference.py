@@ -279,8 +279,9 @@ def run_inference(
                     **metadata,
                     # Inference metadata
                     "inference_timestamp": time.time(),
-                    "batch_index": batch_idx,
-                    "sample_index": idx,
+                    # Ensure JSON-serializable native Python integers
+                    "batch_index": int(batch_idx),
+                    "sample_index": int(idx),
                 }
 
                 results.append(result)

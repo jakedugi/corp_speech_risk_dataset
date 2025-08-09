@@ -534,11 +534,11 @@ def train_graphsage_model(
                 scores_cat = torch.cat(all_scores).numpy()
                 labels_cat = torch.cat(all_labels).numpy()
                 try:
-                    val_ap = average_precision_score(labels_cat, scores_cat)
+                    val_ap = float(average_precision_score(labels_cat, scores_cat))
                 except Exception:
                     val_ap = 0.0
                 try:
-                    val_auc = roc_auc_score(labels_cat, scores_cat)
+                    val_auc = float(roc_auc_score(labels_cat, scores_cat))
                 except Exception:
                     val_auc = 0.0
             else:

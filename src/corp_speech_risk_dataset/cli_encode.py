@@ -1671,7 +1671,24 @@ def cmd_graph(
                 and graph_embed in ["graphsage", "cross"]
                 and training_metrics
             ):
-                js["graphsage_training_metrics"] = training_metrics
+                # Convert any numpy scalars/arrays inside training_metrics to JSON-safe types
+                def _to_json_safe(obj):
+                    try:
+                        import numpy as _np  # local import to avoid top-level dep
+
+                        if isinstance(obj, _np.generic):
+                            return obj.item()
+                        if isinstance(obj, _np.ndarray):
+                            return obj.tolist()
+                    except Exception:
+                        pass
+                    if isinstance(obj, dict):
+                        return {k: _to_json_safe(v) for k, v in obj.items()}
+                    if isinstance(obj, (list, tuple)):
+                        return [_to_json_safe(v) for v in obj]
+                    return obj
+
+                js["graphsage_training_metrics"] = _to_json_safe(training_metrics)
 
             total_processed += 1
 

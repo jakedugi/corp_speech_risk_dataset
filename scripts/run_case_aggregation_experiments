@@ -1,0 +1,47 @@
+#!/bin/zsh
+set -euo pipefail
+
+QUOTES_DIR="/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/final_destination/courtlistener_v6_fused_raw_coral_pred"
+OUT_BASE="/Users/jakedugan/Projects/corporate_media_risk/corp_speech_risk_dataset/data/reports/case_modeling/experiments"
+THRESHOLDS=("docket_half" "docket_third" "token_half" "token_third" "token_2500")
+
+# Each experiment runs separately with its own output directory.
+# - labels_only: only counts/densities (i.e., using label buckets)
+# - probs_only: only mean probabilities/mean risk score
+# - max_severity: uses peak severity features (subset of mean_probs family)
+# - density_high_only: densities only
+# - confidence_only: only 'coral_confidence'
+# - combos: pairwise combos and all features
+
+# zsh associative array of experiment flags
+typeset -A EXP_FLAGS
+EXP_FLAGS[labels_only]="--feature-subset counts --with-counts"
+EXP_FLAGS[probs_only]="--feature-subset mean_probs --with-mean-probs"
+EXP_FLAGS[max_severity]="--feature-subset max_severity --with-mean-probs"
+EXP_FLAGS[density_high_only]="--feature-subset density_high --with-counts"
+EXP_FLAGS[confidence_only]="--feature-subset all --with-confidence"
+EXP_FLAGS[labels_plus_probs]="--feature-subset all --with-counts --with-mean-probs"
+EXP_FLAGS[labels_plus_confidence]="--feature-subset all --with-counts --with-confidence"
+EXP_FLAGS[probs_plus_confidence]="--feature-subset all --with-mean-probs --with-confidence"
+EXP_FLAGS[all_features]="--feature-subset all --with-counts --with-mean-probs --with-confidence --with-pred-class --with-scores --with-position-stats --with-model-threshold"
+
+mkdir -p "$OUT_BASE"
+
+for EXP in labels_only probs_only max_severity density_high_only confidence_only labels_plus_probs labels_plus_confidence probs_plus_confidence all_features; do
+  EXP_OUT="$OUT_BASE/$EXP"
+  mkdir -p "$EXP_OUT"
+  echo ">>> Running experiment: $EXP"
+  # Expand EXP flags into an array to prevent them from being consumed by --thresholds parsing
+  FLAGS_STR=${EXP_FLAGS[$EXP]:-}
+  FLAGS_ARR=(${=FLAGS_STR})
+  uv run python -m corp_speech_risk_dataset.case_aggregation.modeling.cli \
+    --quotes-dir "$QUOTES_DIR" \
+    --output-dir "$EXP_OUT" \
+    --thresholds ${THRESHOLDS[@]} \
+    ${FLAGS_ARR[@]} \
+    --test-size 0.2 \
+    --save-features
+  echo ">>> Finished: $EXP"
+  echo "Artifacts: $EXP_OUT (JSON, CSV, threshold_summary.png, executive_summary.txt, figures_*/ with violin & box plots)"
+  echo
+done

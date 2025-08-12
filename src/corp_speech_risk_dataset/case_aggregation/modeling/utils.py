@@ -1,11 +1,9 @@
-"""Utilities for case-level modeling.
+"""Streamlined utilities for case-level modeling.
 
-Responsibilities:
-- Load quote records from a directory of JSONL files
-- Extract `case_id` from `_src` fields
-- Lightweight validation and field selection
-
-We prefer to reuse the fast JSONL reader from the positional extraction module.
+Core functionality:
+- Fast loading of quote JSONL files
+- Case ID extraction from paths
+- Data normalization for modeling
 """
 
 from __future__ import annotations
@@ -38,18 +36,12 @@ except Exception:  # pragma: no cover
         return _json.loads(data)
 
 
-# Pattern that matches either numeric-only ids or ids with suffixes like `_cacd`
+# Pattern to extract case IDs from file paths
 CASE_ID_RE = re.compile(r"/(\d[^/]*?_\w+|\d[^/]*)/entries/")
 
 
 def extract_case_id_from_src(src: str) -> Optional[str]:
-    """Extract a case identifier from a `_src` path.
-
-    The expected pattern resembles:
-        results/courtlistener_v11/2:14-cv-08390_cacd/entries/entry_.../doc_...txt
-
-    Returns None if no case id can be found.
-    """
+    """Extract case ID from source path."""
     if not src:
         return None
     m = CASE_ID_RE.search(src)

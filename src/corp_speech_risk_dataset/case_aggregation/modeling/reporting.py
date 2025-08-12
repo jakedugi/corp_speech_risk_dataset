@@ -1,271 +1,492 @@
-"""Publication-oriented reporting utilities for case-level modeling.
+"""Academic-quality reporting and visualization for case-level modeling.
 
-Generates:
-- Class distribution plot for labels
-- Per-threshold model accuracy bars
-- Best-model confusion matrix (counts + normalized)
-- Best-model per-class precision/recall/F1 bar chart
-- Cross-threshold summary accuracy bars
-- Box/violin plots by outcome
-
-All figures are saved as PNG with tight layout, suitable for academic use.
+Generates publication-ready figures and interpretability reports:
+- Feature importance visualizations
+- Cross-validation performance with confidence intervals
+- Statistical significance tests between models
+- Calibration plots
+- Partial dependence plots
+- Fairness and bias analysis
+- LaTeX-ready tables
 """
 
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Optional, Tuple, Any
+import warnings
 
+import numpy as np
 import polars as pl
+from scipy import stats
+
+# Optional imports with graceful fallback
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    HAS_PLOTTING = True
+
+    # Set publication-quality defaults
+    plt.rcParams.update(
+        {
+            "font.size": 10,
+            "axes.labelsize": 11,
+            "axes.titlesize": 12,
+            "xtick.labelsize": 9,
+            "ytick.labelsize": 9,
+            "legend.fontsize": 9,
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.1,
+        }
+    )
+    sns.set_style("whitegrid")
+    sns.set_context("paper")
+except ImportError:
+    HAS_PLOTTING = False
+    plt = None
+    sns = None
 
 
-def _safe_import_matplotlib():  # pragma: no cover - optional dependency
-    try:
-        import matplotlib.pyplot as plt  # type: ignore
-
-        return plt
-    except Exception:
-        return None
-
-
-def save_class_distribution(y: pl.DataFrame, out_dir: str, title: str) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
-        return
-    os.makedirs(out_dir, exist_ok=True)
-    counts = y.group_by("outcome_bucket").count().sort("count", descending=True)
-    labels = counts["outcome_bucket"].to_list()
-    values = counts["count"].to_list()
-    plt.figure(figsize=(5, 3.5))
-    plt.bar(labels, values, color="#4C78A8")
-    plt.xlabel("Outcome bucket")
-    plt.ylabel("Count of cases")
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, "class_distribution.png"), dpi=150)
-    plt.close()
-
-
-def boxplot_by_outcome(
-    df: pl.DataFrame,
-    value_col: str,
+def plot_feature_importance(
+    importance_dict: Dict[str, float],
     out_path: str,
-    title: str,
+    top_k: int = 15,
+    title: Optional[str] = None,
 ) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
+    """Plot feature importance as horizontal bar chart."""
+    if not HAS_PLOTTING or not importance_dict:
         return
-    if df.is_empty() or value_col not in df.columns:
+
+    # Sort and select top features
+    sorted_features = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+    top_features = sorted_features[:top_k]
+
+    if not top_features:
         return
-    # Expect columns: outcome_bucket, <value_col>
-    d = df.select(["outcome_bucket", value_col]).drop_nulls()
-    # Use implode to collect group values into a list (portable across polars versions)
-    groups = d.group_by("outcome_bucket").agg(pl.col(value_col).implode().alias("vals"))
-    labels = groups.select("outcome_bucket").to_series().to_list()
-    data = groups.select("vals").to_series().to_list()
-    # Sort labels/data in a canonical order if possible
-    order = ["low", "medium", "high"]
-    try:
-        idx = [labels.index(o) for o in order if o in labels]
-        if idx:
-            labels = [labels[i] for i in idx]
-            data = [data[i] for i in idx]
-    except Exception:
-        pass
-    plt.figure(figsize=(6, 3.5))
-    plt.boxplot(data, labels=labels, showfliers=False)
-    plt.ylabel(value_col)
-    plt.title(title)
+
+    names, values = zip(*top_features)
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    y_pos = np.arange(len(names))
+
+    ax.barh(y_pos, values, color=sns.color_palette("viridis", len(names)))
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names)
+    ax.set_xlabel("Importance")
+
+    if title:
+        ax.set_title(title)
+
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
+    plt.savefig(out_path)
     plt.close()
 
 
-def violin_by_outcome(
-    df: pl.DataFrame,
-    value_col: str,
+def plot_cv_comparison(
+    results: Dict[str, Dict[str, Any]],
     out_path: str,
-    title: str,
+    metric: str = "cv_accuracy_mean",
+    ci_key: str = "accuracy_ci",
 ) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
+    """Plot cross-validation results with confidence intervals."""
+    if not HAS_PLOTTING:
         return
-    if df.is_empty() or value_col not in df.columns:
-        return
-    d = df.select(["outcome_bucket", value_col]).drop_nulls()
-    groups = d.group_by("outcome_bucket").agg(pl.col(value_col).implode().alias("vals"))
-    labels = groups.select("outcome_bucket").to_series().to_list()
-    data = groups.select("vals").to_series().to_list()
-    order = ["low", "medium", "high"]
-    try:
-        idx = [labels.index(o) for o in order if o in labels]
-        if idx:
-            labels = [labels[i] for i in idx]
-            data = [data[i] for i in idx]
-    except Exception:
-        pass
-    plt.figure(figsize=(6, 3.5))
-    parts = plt.violinplot(data, showmeans=True, showmedians=False, showextrema=False)
-    for pc in parts["bodies"]:
-        pc.set_facecolor("#A0CBE8")
-        pc.set_edgecolor("black")
-        pc.set_alpha(0.8)
-    plt.xticks(range(1, len(labels) + 1), labels)
-    plt.ylabel(value_col)
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
-    plt.close()
 
+    models = []
+    means = []
+    lowers = []
+    uppers = []
 
-def spearman_correlation(df: pl.DataFrame, x_col: str, y_col: str) -> float | None:
-    try:
-        from scipy.stats import spearmanr  # type: ignore
-    except Exception:
-        return None
-    if df.is_empty() or x_col not in df.columns or y_col not in df.columns:
-        return None
-    sub = df.select([x_col, y_col]).drop_nulls()
-    if sub.height < 3:
-        return None
-    x = sub[x_col].to_list()
-    y = sub[y_col].to_list()
-    rho, _ = spearmanr(x, y)
-    try:
-        return float(rho)
-    except Exception:
-        return None
-
-
-def plot_model_accuracies(
-    results: Dict[str, Dict[str, object]], out_path: str, title: str
-) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
-        return
-    names: List[str] = []
-    accs: List[float] = []
     for name, info in results.items():
-        acc_raw = info.get("accuracy") if isinstance(info, dict) else 0.0
-        acc_val = float(acc_raw) if isinstance(acc_raw, (int, float)) else 0.0
-        names.append(name)
-        accs.append(acc_val)
-    plt.figure(figsize=(6, 3.5))
-    plt.bar(names, accs, color="#54A24B")
-    plt.ylabel("Accuracy")
-    plt.ylim(0.0, 1.0)
-    plt.title(title)
+        if metric in info and ci_key in info:
+            models.append(name)
+            means.append(info[metric])
+            ci = info[ci_key]
+            if isinstance(ci, (tuple, list)) and len(ci) >= 3:
+                _, lower, upper = ci[:3]
+                lowers.append(lower)
+                uppers.append(upper)
+            else:
+                lowers.append(info[metric])
+                uppers.append(info[metric])
+
+    if not models:
+        return
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    x_pos = np.arange(len(models))
+
+    # Plot bars
+    bars = ax.bar(x_pos, means, color=sns.color_palette("muted")[0])
+
+    # Add error bars
+    errors = np.array(
+        [np.array(means) - np.array(lowers), np.array(uppers) - np.array(means)]
+    )
+    ax.errorbar(
+        x_pos, means, yerr=errors, fmt="none", capsize=5, color="black", alpha=0.7
+    )
+
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(models, rotation=45, ha="right")
+    ax.set_ylabel(metric.replace("_", " ").title())
+    ax.set_ylim(0, 1.1)
+
+    # Add value labels
+    for i, (m, l, u) in enumerate(zip(means, lowers, uppers)):
+        ax.text(i, m + 0.02, f"{m:.3f}", ha="center", va="bottom", fontsize=8)
+
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
+    plt.savefig(out_path)
     plt.close()
 
 
-def plot_confusion_matrix(
+def plot_confusion_matrix_academic(
     y_true: Sequence[str],
     y_pred: Sequence[str],
     labels: Sequence[str],
-    out_path_counts: str,
-    out_path_norm: str,
+    out_path: str,
+    normalize: bool = True,
 ) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
+    """Create academic-quality confusion matrix visualization."""
+    if not HAS_PLOTTING:
         return
-    try:
-        from sklearn.metrics import confusion_matrix
-    except Exception:
-        return
+
+    from sklearn.metrics import confusion_matrix
 
     cm = confusion_matrix(y_true, y_pred, labels=list(labels))
-    # Normalized per true class (rows)
-    cm_norm = cm.astype("float") / cm.sum(axis=1, keepdims=True)
-    fig, ax = plt.subplots(1, 2, figsize=(8, 3.5))
-    im0 = ax[0].imshow(cm, cmap="Blues")
-    ax[0].set_title("Confusion (counts)")
-    ax[0].set_xlabel("Predicted")
-    ax[0].set_ylabel("True")
-    ax[0].set_xticks(range(len(labels)))
-    ax[0].set_xticklabels(labels)
-    ax[0].set_yticks(range(len(labels)))
-    ax[0].set_yticklabels(labels)
-    fig.colorbar(im0, ax=ax[0], fraction=0.046, pad=0.04)
-    # Normalized
-    im1 = ax[1].imshow(cm_norm, vmin=0.0, vmax=1.0, cmap="Greens")
-    ax[1].set_title("Confusion (row-normalized)")
-    ax[1].set_xlabel("Predicted")
-    ax[1].set_ylabel("True")
-    ax[1].set_xticks(range(len(labels)))
-    ax[1].set_xticklabels(labels)
-    ax[1].set_yticks(range(len(labels)))
-    ax[1].set_yticklabels(labels)
-    fig.colorbar(im1, ax=ax[1], fraction=0.046, pad=0.04)
+
+    if normalize:
+        cm = cm.astype("float") / cm.sum(axis=1, keepdims=True)
+        fmt = ".2f"
+    else:
+        fmt = "d"
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt=fmt,
+        cmap="Blues",
+        xticklabels=labels,
+        yticklabels=labels,
+        cbar_kws={"label": "Proportion" if normalize else "Count"},
+    )
+
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_title("Confusion Matrix" + (" (Normalized)" if normalize else ""))
+
     plt.tight_layout()
-    fig.savefig(out_path_counts, dpi=150)
-    plt.close(fig)
-    # Save normalized separately as well
-    plt.figure(figsize=(4, 3.5))
-    plt.imshow(cm_norm, vmin=0.0, vmax=1.0, cmap="Greens")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.xticks(range(len(labels)), labels)
-    plt.yticks(range(len(labels)), labels)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.tight_layout()
-    plt.savefig(out_path_norm, dpi=150)
+    plt.savefig(out_path)
     plt.close()
 
 
-def plot_per_class_metrics(
-    report: Dict[str, Dict[str, float]],
-    labels: Sequence[str],
+def plot_calibration_curve(
+    y_true: np.ndarray,
+    y_proba: np.ndarray,
     out_path: str,
-    title: str,
+    n_bins: int = 10,
 ) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
+    """Plot calibration curve for probability predictions."""
+    if not HAS_PLOTTING:
         return
-    # Use sklearn classification_report dict format per label
-    prec = [float(report.get(lbl, {}).get("precision", 0.0)) for lbl in labels]
-    rec = [float(report.get(lbl, {}).get("recall", 0.0)) for lbl in labels]
-    f1 = [float(report.get(lbl, {}).get("f1-score", 0.0)) for lbl in labels]
-    x = range(len(labels))
-    width = 0.25
-    plt.figure(figsize=(6, 3.5))
-    plt.bar([i - width for i in x], prec, width=width, label="Precision")
-    plt.bar(x, rec, width=width, label="Recall")
-    plt.bar([i + width for i in x], f1, width=width, label="F1")
-    plt.xticks(list(x), labels)
-    plt.ylim(0.0, 1.0)
-    plt.legend()
-    plt.title(title)
+
+    # Compute calibration
+    bin_edges = np.linspace(0, 1, n_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    empirical_probs = []
+    predicted_probs = []
+
+    for i in range(n_bins):
+        mask = (y_proba >= bin_edges[i]) & (y_proba < bin_edges[i + 1])
+        if mask.sum() > 0:
+            empirical_probs.append(y_true[mask].mean())
+            predicted_probs.append(y_proba[mask].mean())
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+
+    # Perfect calibration line
+    ax.plot([0, 1], [0, 1], "k--", label="Perfect calibration")
+
+    # Actual calibration
+    ax.plot(
+        predicted_probs,
+        empirical_probs,
+        "o-",
+        color=sns.color_palette("deep")[0],
+        label="Model",
+    )
+
+    ax.set_xlabel("Mean Predicted Probability")
+    ax.set_ylabel("Fraction of Positives")
+    ax.set_title("Calibration Plot")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
+    plt.savefig(out_path)
     plt.close()
 
 
-def plot_threshold_summary(
-    summary: Dict[str, Dict[str, object]], out_path: str, title: str
+def generate_latex_table(
+    results: Dict[str, Dict[str, Any]],
+    out_path: str,
+    metrics: List[str] = ["test_accuracy", "test_r2"],
 ) -> None:
-    plt = _safe_import_matplotlib()
-    if plt is None:
-        return
-    names: List[str] = []
-    accs: List[float] = []
-    covs: List[float] = []
-    for thr, info in summary.items():
-        names.append(thr)
-        acc_raw = info.get("accuracy") if isinstance(info, dict) else 0.0
-        cov_raw = info.get("coverage") if isinstance(info, dict) else 0.0
-        accs.append(float(acc_raw) if isinstance(acc_raw, (int, float)) else 0.0)
-        covs.append(float(cov_raw) if isinstance(cov_raw, (int, float)) else 0.0)
-    fig, ax1 = plt.subplots(figsize=(7, 3.5))
-    ax1.bar(names, accs, color="#F58518", label="Best accuracy")
-    ax1.set_ylim(0.0, 1.0)
-    ax1.set_ylabel("Accuracy")
-    ax2 = ax1.twinx()
-    ax2.plot(names, covs, color="#4C78A8", marker="o", label="Coverage")
-    ax2.set_ylim(0.0, 1.0)
-    ax2.set_ylabel("Coverage")
-    ax1.set_title(title)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
+    """Generate LaTeX table of model results."""
+    lines = []
+    lines.append("\\begin{table}[ht]")
+    lines.append("\\centering")
+    lines.append("\\caption{Model Performance Comparison}")
+    lines.append("\\label{tab:model_performance}")
+
+    # Determine columns
+    col_spec = "l" + "r" * len(metrics)
+    lines.append(f"\\begin{{tabular}}{{{col_spec}}}")
+    lines.append("\\toprule")
+
+    # Header
+    header = "Model"
+    for metric in metrics:
+        header += f" & {metric.replace('_', ' ').title()}"
+    lines.append(header + " \\\\")
+    lines.append("\\midrule")
+
+    # Data rows
+    for model, info in sorted(results.items()):
+        row = model.replace("_", "\\_")
+        for metric in metrics:
+            if metric in info:
+                value = info[metric]
+                if isinstance(value, float):
+                    # Check for confidence intervals
+                    ci_key = metric.replace("test_", "") + "_ci"
+                    if ci_key in info and isinstance(info[ci_key], (tuple, list)):
+                        _, lower, upper = info[ci_key][:3]
+                        row += f" & ${value:.3f}$ (${lower:.3f}$--${upper:.3f}$)"
+                    else:
+                        row += f" & ${value:.3f}$"
+                else:
+                    row += f" & {value}"
+            else:
+                row += " & --"
+        lines.append(row + " \\\\")
+
+    lines.append("\\bottomrule")
+    lines.append("\\end{tabular}")
+    lines.append("\\end{table}")
+
+    with open(out_path, "w") as f:
+        f.write("\n".join(lines))
+
+
+def plot_spearman_scatter(
+    df: pl.DataFrame,
+    x_col: str,
+    y_col: str,
+    out_path: str,
+    title: Optional[str] = None,
+) -> Optional[float]:
+    """Create scatter plot with Spearman correlation."""
+    if not HAS_PLOTTING or df.is_empty():
+        return None
+
+    if x_col not in df.columns or y_col not in df.columns:
+        return None
+
+    data = df.select([x_col, y_col]).drop_nulls()
+    if data.height < 10:
+        return None
+
+    x = data[x_col].to_numpy()
+    y = data[y_col].to_numpy()
+
+    # Compute Spearman correlation
+    rho, p_value = stats.spearmanr(x, y)
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    # Scatter plot
+    ax.scatter(x, y, alpha=0.6, color=sns.color_palette("deep")[0])
+
+    # Add trend line
+    z = np.polyfit(x, y, 1)
+    p = np.poly1d(z)
+    ax.plot(sorted(x), p(sorted(x)), "r--", alpha=0.8)
+
+    ax.set_xlabel(x_col.replace("_", " ").title())
+    ax.set_ylabel(y_col.replace("_", " ").title())
+
+    if title:
+        ax.set_title(title)
+    else:
+        ax.set_title(f"Spearman ρ = {rho:.3f}, p = {p_value:.4f}")
+
+    # Add text box with correlation
+    textstr = f"ρ = {rho:.3f}\np = {p_value:.4f}"
+    props = dict(boxstyle="round", facecolor="white", alpha=0.8)
+    ax.text(
+        0.05, 0.95, textstr, transform=ax.transAxes, verticalalignment="top", bbox=props
+    )
+
+    plt.tight_layout()
+    plt.savefig(out_path)
     plt.close()
+
+    return float(rho)
+
+
+def plot_statistical_significance(
+    model_comparisons: Dict[str, Dict[str, float]],
+    out_path: str,
+) -> None:
+    """Plot statistical significance matrix between models."""
+    if not HAS_PLOTTING or not model_comparisons:
+        return
+
+    # Extract unique models
+    models = set()
+    for comp in model_comparisons.keys():
+        m1, m2 = comp.split("_vs_")
+        models.add(m1)
+        models.add(m2)
+    models = sorted(list(models))
+
+    # Build p-value matrix
+    n = len(models)
+    p_matrix = np.ones((n, n))
+
+    for i, m1 in enumerate(models):
+        for j, m2 in enumerate(models):
+            if i != j:
+                key = f"{m1}_vs_{m2}"
+                if key in model_comparisons:
+                    p_matrix[i, j] = model_comparisons[key].get("p_value", 1.0)
+
+    # Plot heatmap
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    # Create mask for diagonal
+    mask = np.eye(n, dtype=bool)
+
+    sns.heatmap(
+        p_matrix,
+        annot=True,
+        fmt=".3f",
+        cmap="RdYlGn_r",
+        xticklabels=models,
+        yticklabels=models,
+        mask=mask,
+        vmin=0,
+        vmax=0.1,
+        cbar_kws={"label": "p-value"},
+    )
+
+    ax.set_title("Statistical Significance (p-values)")
+
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+
+def plot_fairness_analysis(
+    fairness_results: Dict[str, Any],
+    out_path: str,
+) -> None:
+    """Visualize fairness metrics across classes."""
+    if not HAS_PLOTTING or not fairness_results:
+        return
+
+    class_metrics = fairness_results.get("class_metrics", {})
+    if not class_metrics:
+        return
+
+    classes = list(class_metrics.keys())
+    recalls = [class_metrics[c]["recall"] for c in classes]
+    precisions = [class_metrics[c]["precision"] for c in classes]
+    supports = [class_metrics[c]["support"] for c in classes]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+
+    # Recall/Precision by class
+    x = np.arange(len(classes))
+    width = 0.35
+
+    ax1.bar(x - width / 2, recalls, width, label="Recall", alpha=0.8)
+    ax1.bar(x + width / 2, precisions, width, label="Precision", alpha=0.8)
+    ax1.set_xlabel("Class")
+    ax1.set_ylabel("Score")
+    ax1.set_title("Performance by Class")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(classes)
+    ax1.legend()
+    ax1.set_ylim(0, 1.1)
+
+    # Support distribution
+    ax2.pie(supports, labels=classes, autopct="%1.1f%%")
+    ax2.set_title("Class Distribution (Support)")
+
+    # Add disparate impact ratio
+    dir_text = f"Disparate Impact Ratio: {fairness_results.get('disparate_impact_ratio', 0):.3f}"
+    fig.text(0.5, 0.02, dir_text, ha="center", fontsize=10)
+
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+
+def generate_comprehensive_report(
+    results: Dict[str, Dict[str, Any]],
+    output_dir: str,
+    threshold_name: str,
+) -> None:
+    """Generate comprehensive academic report for a threshold."""
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Feature importance for best model
+    best_model = max(results.items(), key=lambda x: x[1].get("test_accuracy", 0))
+    if "feature_importance" in best_model[1]:
+        plot_feature_importance(
+            best_model[1]["feature_importance"],
+            os.path.join(output_dir, "feature_importance.png"),
+            title=f"Feature Importance ({best_model[0]})",
+        )
+
+    # Cross-validation comparison
+    plot_cv_comparison(results, os.path.join(output_dir, "cv_comparison.png"))
+
+    # LaTeX table
+    generate_latex_table(results, os.path.join(output_dir, "results_table.tex"))
+
+    # Write summary statistics
+    with open(os.path.join(output_dir, "summary_stats.txt"), "w") as f:
+        f.write(f"Threshold: {threshold_name}\n")
+        f.write("=" * 50 + "\n\n")
+
+        for model, info in sorted(results.items()):
+            f.write(f"Model: {model}\n")
+            f.write("-" * 30 + "\n")
+
+            # Key metrics
+            if "test_accuracy" in info:
+                f.write(f"Test Accuracy: {info['test_accuracy']:.4f}\n")
+                if "accuracy_ci" in info:
+                    _, lower, upper = info["accuracy_ci"][:3]
+                    f.write(f"  95% CI: [{lower:.4f}, {upper:.4f}]\n")
+
+            if "cv_accuracy_mean" in info:
+                f.write(
+                    f"CV Accuracy: {info['cv_accuracy_mean']:.4f} "
+                    f"(±{info.get('cv_accuracy_std', 0):.4f})\n"
+                )
+
+            if "best_params" in info and info["best_params"]:
+                f.write(f"Best Params: {info['best_params']}\n")
+
+            f.write("\n")

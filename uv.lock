@@ -106,6 +106,23 @@ wheels = [
 ]
 
 [[package]]
+name = "aplr"
+version = "10.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4d/34/6ae90c3795bafc08da4d24263ac37482ad5cdcda5e86a6d52545bf11f650/aplr-10.9.0.tar.gz", hash = "sha256:ca480ac2f974cbbdbef34d706b0348ced687061cde1611587da214ed382fb049", size = 2801951, upload-time = "2025-04-17T08:34:16.688Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/e1/0044f3a2d15f9df0548501f3ee42a6079e78731ff7069338524e351b8a1e/aplr-10.9.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:80292ecd52357727295123dd1746b6b1e40ea6e02f353d1ead17d5506ff06586", size = 356723, upload-time = "2025-04-17T08:32:49.502Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/72/7fccd1f208d147a98325a991c173852bb3a64d455a70ef711ef4bf386613/aplr-10.9.0-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:2b1d5278242b89a1fa7eb82796e4852f7bf47cbe1ea2e896c4e3e5346ae0d1fd", size = 396977, upload-time = "2025-04-17T08:32:51.578Z" },
+    { url = "https://files.pythonhosted.org/packages/91/67/5ef1cf49afb13f368ee3d5b65b458ec2d7bed5ecee50bcc958cc7503a319/aplr-10.9.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:de43570fc55c2f7a9ee12e9852b9bd67ad8951e792f7f09835ff93d61303ad9b", size = 6641179, upload-time = "2025-04-17T08:32:56.511Z" },
+    { url = "https://files.pythonhosted.org/packages/01/0a/b1cac8ed2a831edf8f97abe5c7c2a18eff65cb845096d8fd2ea0fdcc7a22/aplr-10.9.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:500b54a25179ebe22c996d68a1ddfb132c7d0ebc68abcdccca892b6ab261a50e", size = 6748235, upload-time = "2025-04-17T08:33:01.484Z" },
+    { url = "https://files.pythonhosted.org/packages/11/22/b82d6522c0832416159cb4c9b74b31d9f1f20a4eb7f07b331e41fbd8e9f9/aplr-10.9.0-cp311-cp311-win32.whl", hash = "sha256:454904e5056f428e6546fda80d3fb141b4ea71b947f555b6bee576928f226116", size = 228411, upload-time = "2025-04-17T08:33:03.202Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/3c/796692681fc05e6ba1e816c4dd0060c9de956224015f5fdbf93ba9257478/aplr-10.9.0-cp311-cp311-win_amd64.whl", hash = "sha256:0ce65f080fd18658115efcfa8f151b7759134d4aaef51269e429ea32aa5f932c", size = 260810, upload-time = "2025-04-17T08:33:05.188Z" },
+]
+
+[[package]]
 name = "appnope"
 version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -283,6 +300,15 @@ css = [
 ]
 
 [[package]]
+name = "blinker"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz", hash = "sha256:b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf", size = 22460, upload-time = "2024-11-08T17:25:47.436Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl", hash = "sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc", size = 8458, upload-time = "2024-11-08T17:25:46.184Z" },
+]
+
+[[package]]
 name = "blis"
 version = "0.7.9"
 source = { registry = "https://pypi.org/simple" }
@@ -447,6 +473,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cloudpickle"
+version = "3.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/39/069100b84d7418bc358d81669d5748efb14b9cceacd2f9c75f550424132f/cloudpickle-3.1.1.tar.gz", hash = "sha256:b216fa8ae4019d5482a8ac3c95d8f6346115d8835911fd4aefd1a445e4242c64", size = 22113, upload-time = "2025-01-14T17:02:05.085Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7e/e8/64c37fadfc2816a7701fa8a6ed8d87327c7d54eacfbfb6edab14a2f2be75/cloudpickle-3.1.1-py3-none-any.whl", hash = "sha256:c8c5a44295039331ee9dad40ba100a9c7297b6f988e50e87ccdf3765a668350e", size = 20992, upload-time = "2025-01-14T17:02:02.417Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -557,6 +592,7 @@ dependencies = [
     { name = "hvplot", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "imblearn", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "import-linter", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "interpret", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "ipykernel", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "ipython", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "jellyfish", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
@@ -568,6 +604,7 @@ dependencies = [
     { name = "libcst", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "loguru", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "lxml", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "mord", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "msgspec", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "murmurhash", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
     { name = "mypy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
@@ -688,6 +725,7 @@ requires-dist = [
     { name = "hvplot" },
     { name = "imblearn", specifier = ">=0.0" },
     { name = "import-linter", specifier = ">=2.3" },
+    { name = "interpret", specifier = ">=0.7.2" },
     { name = "ipykernel" },
     { name = "ipython" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.0.0" },
@@ -700,6 +738,7 @@ requires-dist = [
     { name = "libcst", specifier = ">=1.8.2" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "lxml" },
+    { name = "mord", specifier = ">=0.7" },
     { name = "msgspec", specifier = "==0.19.0" },
     { name = "murmurhash", specifier = ">=1.0.9" },
     { name = "mypy" },
@@ -873,6 +912,65 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/36/16/ee2e06e65d9d533bc05cd52a0b355ba9072fc8f60d77289e529c6d2e3750/cytoolz-1.0.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:e37385db03af65763933befe89fa70faf25301effc3b0485fec1c15d4ce4f052", size = 2054431, upload-time = "2024-12-13T05:45:22.521Z" },
     { url = "https://files.pythonhosted.org/packages/d8/d5/2fac8315f210fa1bc7106e27c19e1211580aa25bb7fa17dfd79505e5baf2/cytoolz-1.0.1-cp311-cp311-win32.whl", hash = "sha256:50f9c530f83e3e574fc95c264c3350adde8145f4f8fc8099f65f00cc595e5ead", size = 322004, upload-time = "2024-12-13T05:45:24.048Z" },
     { url = "https://files.pythonhosted.org/packages/a9/9e/0b70b641850a95f9ff90adde9d094a4b1d81ec54dadfd97fec0a2aaf440e/cytoolz-1.0.1-cp311-cp311-win_amd64.whl", hash = "sha256:b7f6b617454b4326af7bd3c7c49b0fc80767f134eb9fd6449917a058d17a0e3c", size = 365358, upload-time = "2024-12-13T05:45:25.383Z" },
+]
+
+[[package]]
+name = "dash"
+version = "2.18.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dash-core-components", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "dash-html-components", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "dash-table", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "flask", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "importlib-metadata", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "nest-asyncio", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "plotly", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "requests", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "retrying", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "setuptools", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "typing-extensions", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "werkzeug", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/ae/dfd8c42c83cad1b903e4e3e7be7042074d5d7d16be97eaede6656b8ead95/dash-2.18.2.tar.gz", hash = "sha256:20e8404f73d0fe88ce2eae33c25bbc513cbe52f30d23a401fa5f24dbb44296c8", size = 7457235, upload-time = "2024-11-04T21:13:04.69Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/ef/d46131f4817f18b329e4fb7c53ba1d31774239d91266a74bccdc932708cc/dash-2.18.2-py3-none-any.whl", hash = "sha256:0ce0479d1bc958e934630e2de7023b8a4558f23ce1f9f5a4b34b65eb3903a869", size = 7792658, upload-time = "2024-11-04T21:12:56.592Z" },
+]
+
+[[package]]
+name = "dash-core-components"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/55/ad4a2cf9b7d4134779bd8d3a7e5b5f8cc757f421809e07c3e73bb374fdd7/dash_core_components-2.0.0.tar.gz", hash = "sha256:c6733874af975e552f95a1398a16c2ee7df14ce43fa60bb3718a3c6e0b63ffee", size = 3427, upload-time = "2021-09-03T17:11:19.342Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/9e/a29f726e84e531a36d56cff187e61d8c96d2cc253c5bcef9a7695acb7e6a/dash_core_components-2.0.0-py3-none-any.whl", hash = "sha256:52b8e8cce13b18d0802ee3acbc5e888cb1248a04968f962d63d070400af2e346", size = 3822, upload-time = "2022-03-02T16:50:30.899Z" },
+]
+
+[[package]]
+name = "dash-cytoscape"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dash", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/b7/0d511af853024241dc3192bea77e4753ea606187bd2dd777a8209a5b01bb/dash_cytoscape-1.0.2.tar.gz", hash = "sha256:a61019d2184d63a2b3b5c06d056d3b867a04223a674cc3c7cf900a561a9a59aa", size = 3992593, upload-time = "2024-07-15T11:39:06.185Z" }
+
+[[package]]
+name = "dash-html-components"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/c6/957d5e83b620473eb3c8557a253fb01c6a817b10ca43d3ff9d31796f32a6/dash_html_components-2.0.0.tar.gz", hash = "sha256:8703a601080f02619a6390998e0b3da4a5daabe97a1fd7a9cebc09d015f26e50", size = 3840, upload-time = "2021-09-03T17:15:28.871Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/65/1b16b853844ef59b2742a7de74a598f376ac0ab581f0dcc34db294e5c90e/dash_html_components-2.0.0-py3-none-any.whl", hash = "sha256:b42cc903713c9706af03b3f2548bda4be7307a7cf89b7d6eae3da872717d1b63", size = 4092, upload-time = "2022-03-02T16:56:07.734Z" },
+]
+
+[[package]]
+name = "dash-table"
+version = "5.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/81/34983fa0c67125d7fff9d55e5d1a065127bde7ca49ca32d04dedd55f9f35/dash_table-5.0.0.tar.gz", hash = "sha256:18624d693d4c8ef2ddec99a6f167593437a7ea0bf153aa20f318c170c5bc7308", size = 3391, upload-time = "2021-09-03T17:22:17.114Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/ce/43f77dc8e7bbad02a9f88d07bf794eaf68359df756a28bb9f2f78e255bb1/dash_table-5.0.0-py3-none-any.whl", hash = "sha256:19036fa352bb1c11baf38068ec62d172f0515f73ca3276c79dee49b95ddc16c9", size = 3912, upload-time = "2022-03-02T17:10:41.401Z" },
 ]
 
 [[package]]
@@ -1100,6 +1198,22 @@ wheels = [
 ]
 
 [[package]]
+name = "flask"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "blinker", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "click", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "itsdangerous", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "jinja2", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "werkzeug", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/41/e1/d104c83026f8d35dfd2c261df7d64738341067526406b40190bc063e829a/flask-3.0.3.tar.gz", hash = "sha256:ceb27b0af3823ea2737928a4d99d125a06175b8512c445cbd9a9ce200ef76842", size = 676315, upload-time = "2024-04-07T19:26:11.035Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl", hash = "sha256:34e815dfaa43340d1d15a5c3a02b8476004037eb4840b34910c6e21679d288f3", size = 101735, upload-time = "2024-04-07T19:26:08.569Z" },
+]
+
+[[package]]
 name = "flatbuffers"
 version = "25.2.10"
 source = { registry = "https://pypi.org/simple" }
@@ -1224,6 +1338,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/84/e46049a16fa7daa26ac9e83e41b3bc3b30867da832a5d7cb0779da893255/gensim-4.3.3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c071b4329ed1be02446eb7ef637b94c68cf0080c15c57fbcde667fce2e49c3fe", size = 26558362, upload-time = "2024-07-19T14:40:17.997Z" },
     { url = "https://files.pythonhosted.org/packages/78/4f/f6045d5d5f8e7838c42572607ce440f95dbf4de5da41ae664198c2839c05/gensim-4.3.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d662bf96e3d741b6ab61a54be842a7cbf5e45193008b2f4225c758cafd7f9cdc", size = 26662669, upload-time = "2024-07-19T14:40:26.14Z" },
     { url = "https://files.pythonhosted.org/packages/f5/57/f2e6568dbf464a4b270954e5fa3dee4a4054d163a41c0e7bf0a34eb40f0f/gensim-4.3.3-cp311-cp311-win_amd64.whl", hash = "sha256:a54bd53a0e6f991abb837f126663353657270e75be53287e8a568ada0b35b1b0", size = 24010102, upload-time = "2024-07-19T14:40:33.359Z" },
+]
+
+[[package]]
+name = "gevent"
+version = "25.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "greenlet", marker = "(platform_machine == 'arm64' and platform_python_implementation == 'CPython' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (platform_python_implementation != 'CPython' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "zope-event", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "zope-interface", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/58/267e8160aea00ab00acd2de97197eecfe307064a376fb5c892870a8a6159/gevent-25.5.1.tar.gz", hash = "sha256:582c948fa9a23188b890d0bc130734a506d039a2e5ad87dae276a456cc683e61", size = 6388207, upload-time = "2025-05-12T12:57:59.833Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/eb/015e93f16a718e2f836ecebecae9bcd7b4d2a5695d1c8bd5bba2d5d91548/gevent-25.5.1-cp311-cp311-macosx_11_0_universal2.whl", hash = "sha256:12380aba5c316e9ff53cc21d8ab80f4a91c0df3ada58f65d4f5eb2cf693db00e", size = 2877441, upload-time = "2025-05-12T11:14:57.735Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/86/42d191a6f6672ca59d6d79b4cd9b89d4a15f59c843fbbad42f2b749f8ea9/gevent-25.5.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7f0694daab1a041b69a53f53c2141c12994892b2503870515cabe6a5dbd2a928", size = 1774873, upload-time = "2025-05-12T11:52:29.015Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/9f/42dd255849c9ca2e814f5cbe180980594007ba19044a132cf674069e38bf/gevent-25.5.1-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:2797885e9aeffdc98e1846723e5aa212e7ce53007dbef40d6fd2add264235c41", size = 1857911, upload-time = "2025-05-12T11:54:19.523Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/fc/8e799a733be48f6114bfc531b94e28812741664d8af89872dd90e117f8a4/gevent-25.5.1-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:cde6aaac36b54332e10ea2a5bc0de6a8aba6c205c92603fe4396e3777c88e05d", size = 1812751, upload-time = "2025-05-12T12:00:03.719Z" },
+    { url = "https://files.pythonhosted.org/packages/52/4f/a3f3acd961887da10cb0b49c3d915201973d59ce6bf49e2922eaf2058d5f/gevent-25.5.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:24484f80f14befb8822bf29554cfb3a26a26cb69cd1e5a8be9e23b4bd7a96e25", size = 2087115, upload-time = "2025-05-12T11:33:01.128Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/27/bb38e005106a53787c13ad1f9f73ed990e403e462108acae6320ab11d442/gevent-25.5.1-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:8fdc7446895fa184890d8ca5ea61e502691114f9db55c9b76adc33f3086c4368", size = 1793549, upload-time = "2025-05-12T11:59:57.854Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/56/da817bc69e1f0ae8438f12f2cd150656b09a8c3576c6d12f992dc9ca64ef/gevent-25.5.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:5b6106e2414b1797133786258fa1962a5e836480e4d5e861577f9fc63b673a5a", size = 2145899, upload-time = "2025-05-12T11:40:53.275Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/42/989403abbdbb1346a1507083c02018bee3fedaef3f9648940c767d8c0958/gevent-25.5.1-cp311-cp311-win_amd64.whl", hash = "sha256:bc899212d90f311784c58938a9c09c59802fb6dc287a35fabdc36d180f57f575", size = 1635771, upload-time = "2025-05-12T12:26:47.644Z" },
 ]
 
 [[package]]
@@ -1569,12 +1704,79 @@ wheels = [
 ]
 
 [[package]]
+name = "importlib-metadata"
+version = "8.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "zipp", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/76/66/650a33bd90f786193e4de4b3ad86ea60b53c89b669a5c7be931fac31cdb0/importlib_metadata-8.7.0.tar.gz", hash = "sha256:d13b81ad223b890aa16c5471f2ac3056cf76c5f10f82d6f9292f0b415f389000", size = 56641, upload-time = "2025-04-27T15:29:01.736Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/b0/36bd937216ec521246249be3bf9855081de4c5e06a0c9b4219dbeda50373/importlib_metadata-8.7.0-py3-none-any.whl", hash = "sha256:e5dd1551894c77868a30651cef00984d50e1002d06942a7101d34870c5f02afd", size = 27656, upload-time = "2025-04-27T15:29:00.214Z" },
+]
+
+[[package]]
 name = "iniconfig"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f2/97/ebf4da567aa6827c909642694d71c9fcf53e5b504f2d96afea02718862f3/iniconfig-2.1.0.tar.gz", hash = "sha256:3abbd2e30b36733fee78f9c7f7308f2d0050e88f0087fd25c2645f63c773e1c7", size = 4793, upload-time = "2025-03-19T20:09:59.721Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/e1/e6716421ea10d38022b952c159d5161ca1193197fb744506875fbb87ea7b/iniconfig-2.1.0-py3-none-any.whl", hash = "sha256:9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760", size = 6050, upload-time = "2025-03-19T20:10:01.071Z" },
+]
+
+[[package]]
+name = "interpret"
+version = "0.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "interpret-core", extra = ["aplr", "dash", "debug", "notebook", "plotly", "sensitivity", "shap"], marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/64/68/5dc9834a69463aba0fea55265500d8202a7e669ddd32390976bf7470469b/interpret-0.7.2.tar.gz", hash = "sha256:e5a0d48c0465d82fa92adec51a181681244e5f194dfdfc8adafaf688067d139d", size = 1573, upload-time = "2025-08-05T07:45:28.276Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/65/5391e4dc6ca69612ef340c312711e65c512220d693aca70e74c91bd34d78/interpret-0.7.2-py3-none-any.whl", hash = "sha256:8ee4f5056e37dcd9e1b3c766a8a0dc9be78add6a1212607597dea66a1d4ebfdd", size = 1406, upload-time = "2025-08-05T07:45:23.691Z" },
+]
+
+[[package]]
+name = "interpret-core"
+version = "0.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "pandas", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "scikit-learn", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/69/32/c483332e2138be326c5201511ac805a29d81eb602b7ea0f56d60458cb906/interpret_core-0.7.2.tar.gz", hash = "sha256:0fd39adbe8350839f6161d1ae8636e9534ad9f168b53613f883f7dd87885ae90", size = 2300763, upload-time = "2025-08-05T07:45:29.433Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/a7/8b3de4f7a739b6728dee6fd7460464ab6f9a41f2ca08f52fdf9b7f9d8261/interpret_core-0.7.2-py3-none-any.whl", hash = "sha256:0a4adabfb41d92b6781acb7e478a55e7a048d0822c786b0ea0234dfbd8262f8b", size = 16529723, upload-time = "2025-08-05T07:45:26.006Z" },
+]
+
+[package.optional-dependencies]
+aplr = [
+    { name = "aplr", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+dash = [
+    { name = "dash", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "dash-cytoscape", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "gevent", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "requests", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+debug = [
+    { name = "psutil", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+notebook = [
+    { name = "ipykernel", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "ipython", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+plotly = [
+    { name = "plotly", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sensitivity = [
+    { name = "salib", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+shap = [
+    { name = "dill", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "shap", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
 ]
 
 [[package]]
@@ -1653,6 +1855,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b8/21/1e2a441f74a653a144224d7d21afe8f4169e6c7c20bb13aec3a2dc3815e0/isort-6.0.1.tar.gz", hash = "sha256:1cb5df28dfbc742e490c5e41bad6da41b805b0a8be7bc93cd0fb2a8a890ac450", size = 821955, upload-time = "2025-02-26T21:13:16.955Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/11/114d0a5f4dabbdcedc1125dee0888514c3c3b16d3e9facad87ed96fad97c/isort-6.0.1-py3-none-any.whl", hash = "sha256:2dc5d7f65c9678d94c88dfc29161a320eec67328bc97aad576874cb4be1e9615", size = 94186, upload-time = "2025-02-26T21:13:14.911Z" },
+]
+
+[[package]]
+name = "itsdangerous"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410, upload-time = "2024-04-16T21:28:15.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234, upload-time = "2024-04-16T21:28:14.499Z" },
 ]
 
 [[package]]
@@ -2277,6 +2488,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cc/2a/5421fd3dbe6eef9b844cc9d05f568b9fb568503a2e51cb1eb4443d9fc56b/ml_dtypes-0.5.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c09526488c3a9e8b7a23a388d4974b670a9a3dd40c5c8a61db5593ce9b725bab", size = 4743893, upload-time = "2025-01-07T03:34:08.333Z" },
     { url = "https://files.pythonhosted.org/packages/60/30/d3f0fc9499a22801219679a7f3f8d59f1429943c6261f445fb4bfce20718/ml_dtypes-0.5.1-cp311-cp311-win_amd64.whl", hash = "sha256:15ad0f3b0323ce96c24637a88a6f44f6713c64032f27277b069f285c3cf66478", size = 209712, upload-time = "2025-01-07T03:34:12.182Z" },
 ]
+
+[[package]]
+name = "mord"
+version = "0.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/31/409cc737a998829d28e1dff5850d5a8c8263634fb6671def6b0566558433/mord-0.7.tar.gz", hash = "sha256:b60002734e33ca7fad9f94999c70b27fe038eb069cbd0fb08d6027c3d34a7bb3", size = 8634, upload-time = "2023-05-26T11:51:49.755Z" }
 
 [[package]]
 name = "mpmath"
@@ -3379,6 +3596,15 @@ wheels = [
 ]
 
 [[package]]
+name = "retrying"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/5a/b17e1e257d3e6f2e7758930e1256832c9ddd576f8631781e6a072914befa/retrying-1.4.2.tar.gz", hash = "sha256:d102e75d53d8d30b88562d45361d6c6c934da06fab31bd81c0420acb97a8ba39", size = 11411, upload-time = "2025-08-03T03:35:25.189Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/f3/6cd296376653270ac1b423bb30bd70942d9916b6978c6f40472d6ac038e7/retrying-1.4.2-py3-none-any.whl", hash = "sha256:bbc004aeb542a74f3569aeddf42a2516efefcdaff90df0eb38fbfbf19f179f59", size = 10859, upload-time = "2025-08-03T03:35:23.829Z" },
+]
+
+[[package]]
 name = "rfc3339-validator"
 version = "0.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -3477,6 +3703,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/40/ad/2b113098e69c985a3d8fbda4b902778eae4a35b7d5188859b4a63d30c161/safetensors-0.5.3-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:37f1521be045e56fc2b54c606d4455573e717b2d887c579ee1dbba5f868ece04", size = 643147, upload-time = "2025-02-26T09:15:11.185Z" },
     { url = "https://files.pythonhosted.org/packages/0a/0c/95aeb51d4246bd9a3242d3d8349c1112b4ee7611a4b40f0c5c93b05f001d/safetensors-0.5.3-cp38-abi3-win32.whl", hash = "sha256:cfc0ec0846dcf6763b0ed3d1846ff36008c6e7290683b61616c4b040f6a54ace", size = 296677, upload-time = "2025-02-26T09:15:16.554Z" },
     { url = "https://files.pythonhosted.org/packages/69/e2/b011c38e5394c4c18fb5500778a55ec43ad6106126e74723ffaee246f56e/safetensors-0.5.3-cp38-abi3-win_amd64.whl", hash = "sha256:836cbbc320b47e80acd40e44c8682db0e8ad7123209f69b093def21ec7cafd11", size = 308878, upload-time = "2025-02-26T09:15:14.99Z" },
+]
+
+[[package]]
+name = "salib"
+version = "1.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "multiprocess", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "pandas", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "scipy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/eb/8c/3e09d6b40f90ccf04b1308a88b7bf496596704e01ca30782a524d025a0e1/salib-1.5.1.tar.gz", hash = "sha256:e4a9c319b8dd02995a8dc983f57c452cb7e5b6dbd43e7b7856c90cb6a332bb5f", size = 725018, upload-time = "2024-08-19T16:35:25.825Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/40/393b381779d379afbb0e281d9f69cb511022e41a726f7871a929faec2b11/salib-1.5.1-py3-none-any.whl", hash = "sha256:a978b619c5a93eb14dd8c527f12e22d354b02f1f7143aba3cb84c1c7bc1382e5", size = 778858, upload-time = "2024-08-19T16:35:23.951Z" },
 ]
 
 [[package]]
@@ -3607,12 +3849,47 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9e/bd/3704a8c3e0942d711c1299ebf7b9091930adae6675d7c8f476a7ce48653c/sgmllib3k-1.0.0.tar.gz", hash = "sha256:7868fb1c8bfa764c1ac563d3cf369c381d1325d36124933a726f29fcdaa812e9", size = 5750, upload-time = "2010-08-24T14:33:52.445Z" }
 
 [[package]]
+name = "shap"
+version = "0.48.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cloudpickle", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "numba", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "packaging", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "pandas", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "scikit-learn", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "scipy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "slicer", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "tqdm", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+    { name = "typing-extensions", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6c/79/edeb71f5ee8a936a1d40413188000640ab91da72771e837f1ded141a0ed4/shap-0.48.0.tar.gz", hash = "sha256:f169dc73fe144e70a0331b5507f9fd290d7695a3c7935fa8e4862e376321baf9", size = 3061913, upload-time = "2025-06-12T13:05:35.055Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/ca/9071534ce1bc5d86a231f54114f73f6fce5ec9694f07441202bbbd4135e9/shap-0.48.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:4a90e6092b127bf2070ac055889c8a10f9cdf47831e4e850e6e70c9ae9fb6572", size = 555853, upload-time = "2025-06-12T13:04:59.021Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/d5/f7d92d9cb8c7cc2b9950b34ce2c9cb90602babe0d45a0b70012306489321/shap-0.48.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:678c345ac7ef882370f6f77699c36e64fffe2079e4b1c0d06fdddf219ef2893c", size = 548025, upload-time = "2025-06-12T13:05:00.317Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/d2/52509b34f0c1162aea688d71878869a06379c84c07349da6132688fe4575/shap-0.48.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:016e3b700eef5c6efe75002ad5bf4bf279f757adb78e8b918d89bb85d57db4e5", size = 1021393, upload-time = "2025-06-12T13:05:01.806Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/c8/7b607f4524c6315c4386cb23e92e944f38478b84e34214752b668f986b1e/shap-0.48.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:935955d51bae4b6eb0fd682fcccf26540bfd1ad49ce8b2edb149cb3447246996", size = 1023927, upload-time = "2025-06-12T13:05:03.32Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/5f/35f7094687da110d2bb6f8f75c4e42269a95e44dbaca1d88c1ed08fbe06f/shap-0.48.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:e7608749336e7e1503b79e5c6e6ae5f8ce7cf4f948642d81ed7a5aa9f68435aa", size = 2090403, upload-time = "2025-06-12T13:05:05.047Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/7c/eead607a358b2466b95b302e4a7eae717eeed53615653fbbd4c1527041b9/shap-0.48.0-cp311-cp311-win_amd64.whl", hash = "sha256:a57dca9d1757172d3d4f7a18e94851902fae6feecb07554bc1ccce2f3c215bef", size = 544406, upload-time = "2025-06-12T13:05:06.352Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
+name = "slicer"
+version = "0.0.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/f9/b4bce2825b39b57760b361e6131a3dacee3d8951c58cb97ad120abb90317/slicer-0.0.8.tar.gz", hash = "sha256:2e7553af73f0c0c2d355f4afcc3ecf97c6f2156fcf4593955c3f56cf6c4d6eb7", size = 14894, upload-time = "2024-03-09T23:35:26.826Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/81/9ef641ff4e12cbcca30e54e72fb0951a2ba195d0cda0ba4100e532d929db/slicer-0.0.8-py3-none-any.whl", hash = "sha256:6c206258543aecd010d497dc2eca9d2805860a0b3758673903456b7df7934dc3", size = 15251, upload-time = "2024-03-09T07:03:07.708Z" },
 ]
 
 [[package]]
@@ -4384,14 +4661,14 @@ wheels = [
 
 [[package]]
 name = "werkzeug"
-version = "3.1.3"
+version = "3.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markupsafe", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/69/83029f1f6300c5fb2471d621ab06f6ec6b3324685a2ce0f9777fd4a8b71e/werkzeug-3.1.3.tar.gz", hash = "sha256:60723ce945c19328679790e3282cc758aa4a6040e4bb330f53d30fa546d44746", size = 806925, upload-time = "2024-11-08T15:52:18.093Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/f9/0ba83eaa0df9b9e9d1efeb2ea351d0677c37d41ee5d0f91e98423c7281c9/werkzeug-3.0.6.tar.gz", hash = "sha256:a8dd59d4de28ca70471a34cba79bed5f7ef2e036a76b3ab0835474246eb41f8d", size = 805170, upload-time = "2024-10-25T18:52:31.688Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/24/ab44c871b0f07f491e5d2ad12c9bd7358e527510618cb1b803a88e986db1/werkzeug-3.1.3-py3-none-any.whl", hash = "sha256:54b78bf3716d19a65be4fceccc0d1d7b89e608834989dfae50ea87564639213e", size = 224498, upload-time = "2024-11-08T15:52:16.132Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/69/05837f91dfe42109203ffa3e488214ff86a6d68b2ed6c167da6cdc42349b/werkzeug-3.0.6-py3-none-any.whl", hash = "sha256:1bc0c2310d2fbb07b1dd1105eba2f7af72f322e1e455f2f93c993bee8c8a5f17", size = 227979, upload-time = "2024-10-25T18:52:30.129Z" },
 ]
 
 [[package]]
@@ -4498,4 +4775,42 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/50/4f/62faab3b479dfdcb741fe9e3f0323e2a7d5cd1ab2edc73221d57ad4834b2/yarl-1.20.1-cp311-cp311-win32.whl", hash = "sha256:597f40615b8d25812f14562699e287f0dcc035d25eb74da72cae043bb884d773", size = 81485, upload-time = "2025-06-10T00:43:41.038Z" },
     { url = "https://files.pythonhosted.org/packages/f0/09/d9c7942f8f05c32ec72cd5c8e041c8b29b5807328b68b4801ff2511d4d5e/yarl-1.20.1-cp311-cp311-win_amd64.whl", hash = "sha256:26ef53a9e726e61e9cd1cda6b478f17e350fb5800b4bd1cd9fe81c4d91cfeb2e", size = 86686, upload-time = "2025-06-10T00:43:42.692Z" },
     { url = "https://files.pythonhosted.org/packages/b4/2d/2345fce04cfd4bee161bf1e7d9cdc702e3e16109021035dbb24db654a622/yarl-1.20.1-py3-none-any.whl", hash = "sha256:83b8eb083fe4683c6115795d9fc1cfaf2cbbefb19b3a1cb68f6527460f483a77", size = 46542, upload-time = "2025-06-10T00:46:07.521Z" },
+]
+
+[[package]]
+name = "zipp"
+version = "3.23.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/02/0f2892c661036d50ede074e376733dca2ae7c6eb617489437771209d4180/zipp-3.23.0.tar.gz", hash = "sha256:a07157588a12518c9d4034df3fbbee09c814741a33ff63c05fa29d26a2404166", size = 25547, upload-time = "2025-06-08T17:06:39.4Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/54/647ade08bf0db230bfea292f893923872fd20be6ac6f53b2b936ba839d75/zipp-3.23.0-py3-none-any.whl", hash = "sha256:071652d6115ed432f5ce1d34c336c0adfd6a884660d1e9712a256d3d3bd4b14e", size = 10276, upload-time = "2025-06-08T17:06:38.034Z" },
+]
+
+[[package]]
+name = "zope-event"
+version = "5.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "setuptools", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/9f/c443569a68d3844c044d9fa9711e08adb33649b527b4d432433f4c2a6a02/zope_event-5.1.1.tar.gz", hash = "sha256:c1ac931abf57efba71a2a313c5f4d57768a19b15c37e3f02f50eb1536be12d4e", size = 18811, upload-time = "2025-07-22T07:04:00.924Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/04/fd55695f6448abd22295fc68b2d3a135389558f0f49a24b0dffe019d0ecb/zope_event-5.1.1-py3-none-any.whl", hash = "sha256:8d5ea7b992c42ce73a6fa9c2ba99a004c52cd9f05d87f3220768ef0329b92df7", size = 7014, upload-time = "2025-07-22T07:03:59.9Z" },
+]
+
+[[package]]
+name = "zope-interface"
+version = "7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "setuptools", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine != 'arm64' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu') or (sys_platform != 'darwin' and extra == 'extra-24-corp-speech-risk-dataset-cpu' and extra == 'extra-24-corp-speech-risk-dataset-gpu')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/93/9210e7606be57a2dfc6277ac97dcc864fd8d39f142ca194fdc186d596fda/zope.interface-7.2.tar.gz", hash = "sha256:8b49f1a3d1ee4cdaf5b32d2e738362c7f5e40ac8b46dd7d1a65e82a4872728fe", size = 252960, upload-time = "2024-11-28T08:45:39.224Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/98/7d/2e8daf0abea7798d16a58f2f3a2bf7588872eee54ac119f99393fdd47b65/zope.interface-7.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:1909f52a00c8c3dcab6c4fad5d13de2285a4b3c7be063b239b8dc15ddfb73bd2", size = 208776, upload-time = "2024-11-28T08:47:53.009Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/2a/0c03c7170fe61d0d371e4c7ea5b62b8cb79b095b3d630ca16719bf8b7b18/zope.interface-7.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:80ecf2451596f19fd607bb09953f426588fc1e79e93f5968ecf3367550396b22", size = 209296, upload-time = "2024-11-28T08:47:57.993Z" },
+    { url = "https://files.pythonhosted.org/packages/49/b4/451f19448772b4a1159519033a5f72672221e623b0a1bd2b896b653943d8/zope.interface-7.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:033b3923b63474800b04cba480b70f6e6243a62208071fc148354f3f89cc01b7", size = 260997, upload-time = "2024-11-28T09:18:13.935Z" },
+    { url = "https://files.pythonhosted.org/packages/65/94/5aa4461c10718062c8f8711161faf3249d6d3679c24a0b81dd6fc8ba1dd3/zope.interface-7.2-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:a102424e28c6b47c67923a1f337ede4a4c2bba3965b01cf707978a801fc7442c", size = 255038, upload-time = "2024-11-28T08:48:26.381Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/aa/1a28c02815fe1ca282b54f6705b9ddba20328fabdc37b8cf73fc06b172f0/zope.interface-7.2-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:25e6a61dcb184453bb00eafa733169ab6d903e46f5c2ace4ad275386f9ab327a", size = 259806, upload-time = "2024-11-28T08:48:30.78Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/2c/82028f121d27c7e68632347fe04f4a6e0466e77bb36e104c8b074f3d7d7b/zope.interface-7.2-cp311-cp311-win_amd64.whl", hash = "sha256:3f6771d1647b1fc543d37640b45c06b34832a943c80d1db214a37c31161a93f1", size = 212305, upload-time = "2024-11-28T08:49:14.525Z" },
 ]

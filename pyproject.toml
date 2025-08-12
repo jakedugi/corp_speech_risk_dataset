@@ -123,6 +123,8 @@ dependencies = [
   "scikit-optimize>=0.10.2",
   "optuna>=4.4.0",
   "vadersentiment>=3.3.2",
+  "mord>=0.7",
+  "interpret>=0.7.2",
 ]
 
 

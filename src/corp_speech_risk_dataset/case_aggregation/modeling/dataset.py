@@ -22,17 +22,19 @@ class ThresholdSpec:
     """Specification for a positional threshold used to filter quotes.
 
     Types:
+    - complete: keep all quotes (no filtering)
     - docket_fraction: keep quotes in the first fraction of dockets
     - token_fraction: keep quotes in the first fraction of global tokens
     - token_budget: keep quotes whose token span lies under a global token budget
     """
 
     name: str
-    kind: str  # "docket_fraction" | "token_fraction" | "token_budget"
+    kind: str  # "complete" | "docket_fraction" | "token_fraction" | "token_budget"
     value: float  # fraction (0..1] for fraction kinds; integer budget for budget kind
 
 
 DEFAULT_THRESHOLDS: List[ThresholdSpec] = [
+    ThresholdSpec(name="complete_case", kind="complete", value=1.0),
     ThresholdSpec(name="docket_half", kind="docket_fraction", value=0.5),
     ThresholdSpec(name="docket_third", kind="docket_fraction", value=1.0 / 3.0),
     ThresholdSpec(name="token_half", kind="token_fraction", value=0.5),
@@ -52,6 +54,7 @@ class FeatureConfig:
     include_scores: bool = False
     include_position_stats: bool = False
     include_model_threshold: bool = False
+    use_pred_class_only: bool = False  # Use coral_pred_class as primary input
 
 
 DEFAULT_FEATURE_CONFIG = FeatureConfig()
@@ -123,7 +126,10 @@ def _aggregate_case_features_for_threshold(
 
     df_join = df.join(df_props, on="case_id", how="left")
 
-    if spec.kind == "docket_fraction":
+    if spec.kind == "complete":
+        # Keep all quotes for complete case analysis
+        df_join = df_join.with_columns(pl.lit(True).alias("keep"))
+    elif spec.kind == "docket_fraction":
         df_join = df_join.with_columns(
             (
                 pl.col("docket_number")
@@ -151,24 +157,40 @@ def _aggregate_case_features_for_threshold(
         raise ValueError(f"Unknown threshold kind: {spec.kind}")
 
     df_filt = df_join.filter(pl.col("keep"))
-    # Argmax of per-quote probabilities to choose the most likely risk bucket label
-    # Prefer provided predicted bucket; fall back to argmax of probabilities
-    df_labeled = df_filt.with_columns(
-        pl.when(pl.col("coral_pred_bucket").is_not_null())
-        .then(pl.col("coral_pred_bucket"))
-        .when(
-            (pl.col("coral_prob_low") >= pl.col("coral_prob_medium"))
-            & (pl.col("coral_prob_low") >= pl.col("coral_prob_high"))
+
+    # Determine risk label based on configuration
+    if features.use_pred_class_only:
+        # Use coral_pred_class directly, mapping 0/1/2 to low/medium/high
+        df_labeled = df_filt.with_columns(
+            pl.when(pl.col("coral_pred_class") == 0)
+            .then(pl.lit("low"))
+            .when(pl.col("coral_pred_class") == 1)
+            .then(pl.lit("medium"))
+            .when(pl.col("coral_pred_class") == 2)
+            .then(pl.lit("high"))
+            .otherwise(None)  # Handle missing/invalid values
+            .alias("risk_label")
         )
-        .then(pl.lit("low"))
-        .when(
-            (pl.col("coral_prob_medium") >= pl.col("coral_prob_low"))
-            & (pl.col("coral_prob_medium") >= pl.col("coral_prob_high"))
+        # Filter out quotes without valid pred_class
+        df_labeled = df_labeled.filter(pl.col("risk_label").is_not_null())
+    else:
+        # Original logic: use pred_bucket or argmax of probabilities
+        df_labeled = df_filt.with_columns(
+            pl.when(pl.col("coral_pred_bucket").is_not_null())
+            .then(pl.col("coral_pred_bucket"))
+            .when(
+                (pl.col("coral_prob_low") >= pl.col("coral_prob_medium"))
+                & (pl.col("coral_prob_low") >= pl.col("coral_prob_high"))
+            )
+            .then(pl.lit("low"))
+            .when(
+                (pl.col("coral_prob_medium") >= pl.col("coral_prob_low"))
+                & (pl.col("coral_prob_medium") >= pl.col("coral_prob_high"))
+            )
+            .then(pl.lit("medium"))
+            .otherwise(pl.lit("high"))
+            .alias("risk_label")
         )
-        .then(pl.lit("medium"))
-        .otherwise(pl.lit("high"))
-        .alias("risk_label")
-    )
 
     # Build aggregation list based on requested features
     agg_exprs: List[pl.Expr] = []

@@ -544,3 +544,25 @@ uv run python scripts/visualize_similarity_by_outcomes.py --input "data/outcomes
   /content/corp_speech_risk_dataset/data/outcomes/courtlistener_v3_legal_bert_graphsage \
   fuse
 """
+
+
+uv run python scripts/run_polar_cv.py --output-dir runs/polar_final_bulletproof --dev-tail-frac 0.20 --min-dev-cases 3 --min-dev-quotes 150 --embargo-days 90 --min-cal-n 100 --iso-bins 30 --max-categories 50
+
+
+
+uv run python scripts/stratified_kfold_case_split.py \
+  --input data/enhanced_combined/final_clean_dataset_no_bankruptcy.jsonl \
+  --output-dir data/final_stratified_kfold_splits_corrected_boundaries \
+  --k-folds 3 \
+  --target-field final_judgement_real \
+  --stratify-type regression \
+  --case-id-field case_id_clean \
+  --use-temporal-cv \
+  --oof-test-ratio 0.2 \
+  --oof-min-ratio 0.15 \
+  --oof-max-ratio 0.40 \
+  --oof-step 0.05 \
+  --oof-min-class-cases 5 \
+  --oof-min-class-quotes 50 \
+  --oof-class-criterion both \
+  --random-seed 42

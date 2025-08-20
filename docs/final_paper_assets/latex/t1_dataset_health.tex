@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\caption{Dataset composition, temporal purity, and deduplication}
+\label{tab:dataset_health}
+\begin{tabular}{lrrrr}
+\toprule
+Metric & Train & Dev & Test & Overall \\
+\midrule
+Cases & 85 & 15 & 25 & 125 \\
+Quotes & 19414 & 3079 & 1716 & 24209 \\
+Low/Med/High % (train) & 8.1%/10.6%/81.4% & -- & -- & -- \\
+Low/Med/High % (dev) & -- & 62.3%/26.9%/10.8% & -- & -- \\
+Low/Med/High % (test) & -- & -- & 17.8%/57.0%/25.2% & -- \\
+Quotes/case med[IQR] (train) & 37[181] & -- & -- & -- \\
+Quotes/case med[IQR] (dev) & -- & 31[61] & -- & -- \\
+Quotes/case med[IQR] (test) & -- & -- & 13[80] & -- \\
+\bottomrule
+\end{tabular}
+\end{table}

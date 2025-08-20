@@ -84,12 +84,13 @@ def build_parser() -> argparse.ArgumentParser:
             "tree",
             "linreg",
             "polr",
+            "polar",
             "ebm",
             "logistic",
             "ensemble",
         ],
-        default="polr",
-        help="model type (default: polr for ordinal regression)",
+        default="polar",
+        help="model type (default: polar for production ordinal regression)",
     )
     pt.add_argument(
         "--no-calibration", action="store_true", help="disable probability calibration"

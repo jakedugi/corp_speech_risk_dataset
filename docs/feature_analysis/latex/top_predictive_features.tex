@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+\centering
+\caption{Top 15 Features by Univariate Predictiveness}
+\label{tab:top_predictive}
+\begin{tabular}{lrrrrr}
+\toprule
+Feature & AUC & SMD(0→1) & SMD(1→2) & Mono. & KW p \\
+\midrule
+lex\_deception\_present & 0.530 & -0.23 & -0.07 & ✓ & 0.000 \\
+lex\_deception\_norm & 0.529 & -0.11 & -0.05 & ✓ & 0.000 \\
+seq\_trans\_neutral\_to\_neutral & 0.525 & 0.08 & -0.09 & ✗ & 0.000 \\
+lex\_hedges\_norm & 0.524 & -0.07 & 0.10 & ✗ & 0.000 \\
+lex\_hedges\_present & 0.523 & -0.23 & 0.13 & ✗ & 0.000 \\
+lex\_guarantee\_norm & 0.517 & -0.15 & 0.12 & ✗ & 0.000 \\
+lex\_guarantee\_present & 0.517 & -0.20 & 0.14 & ✗ & 0.000 \\
+ling\_high\_certainty & 0.516 & -0.16 & 0.06 & ✗ & 0.000 \\
+seq\_discourse\_additive & 0.510 & -0.09 & 0.00 & ✗ & 0.0030 \\
+lex\_superlatives\_present & 0.509 & -0.09 & 0.02 & ✗ & 0.0221 \\
+lex\_pricing\_claims\_present & 0.504 & -0.07 & 0.05 & ✗ & 0.0850 \\
+seq\_trans\_guarantee\_to\_deception & nan & nan & nan & ✗ & 0.0367 \\
+seq\_trans\_deception\_to\_hedges & nan & nan & nan & ✗ & 0.0045 \\
+seq\_trans\_pricing\_claims\_to\_pricing\_claims & nan & nan & nan & ✗ & nan \\
+seq\_trans\_superlatives\_to\_scienter & nan & nan & nan & ✗ & nan \\
+\bottomrule
+\end{tabular}
+\end{table}

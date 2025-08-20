@@ -1,0 +1,14 @@
+\begin{table}
+\caption{Performance stratified by quotes-per-case bucket (OOF).}
+\label{tab:robustness-qpc}
+\begin{tabular}{lrrrrr}
+\toprule
+Quotes/case & QWK & Macro-F1 & MAE & Brier & n \\
+\midrule
+1 & 0.000 & 0.250 & 1.333 & 0.966 & 3 \\
+2–3 & 0.000 & 0.000 & 2.000 & 1.507 & 7 \\
+4–7 & 0.000 & 0.360 & 0.438 & 0.731 & 16 \\
+8+ & -0.065 & 0.136 & 0.950 & 1.271 & 1690 \\
+\bottomrule
+\end{tabular}
+\end{table}

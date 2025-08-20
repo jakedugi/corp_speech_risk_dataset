@@ -482,11 +482,24 @@ def make_model(
             random_state=cfg.seed,
         )
     elif cfg.model == "polr":
-        estimator = ProportionalOddsLogisticRegression(
+        from .models import POLR
+
+        estimator = POLR(
             penalty=model_params.get("penalty", "l2"),
             C=model_params.get("C", 1.0),
             solver=model_params.get("solver", "lbfgs"),
             max_iter=model_params.get("max_iter", 1000),
+            random_state=cfg.seed,
+        )
+    elif cfg.model == "polar":
+        from .models import POLAR
+
+        estimator = POLAR(
+            penalty=model_params.get("penalty", "l2"),
+            C=model_params.get("C", 1.0),
+            solver=model_params.get("solver", "lbfgs"),
+            max_iter=model_params.get("max_iter", 500),
+            tol=model_params.get("tol", 1e-4),
             random_state=cfg.seed,
         )
     elif cfg.model == "ebm":

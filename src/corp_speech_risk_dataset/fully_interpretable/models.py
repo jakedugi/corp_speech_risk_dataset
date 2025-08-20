@@ -25,6 +25,9 @@ except ImportError:
     logger.warning("mord not available, using fallback ordinal implementation")
     HAS_MORD = False
 
+# Import our weighted ordinal regression
+from .weighted_ordinal import WeightedOrdinalRegression
+
 try:
     from interpret.glassbox import ExplainableBoostingClassifier
 
@@ -32,6 +35,107 @@ try:
 except ImportError:
     logger.warning("interpret not available, EBM models disabled")
     HAS_INTERPRET = False
+
+
+class MultinomialLogisticRegression(BaseEstimator, ClassifierMixin):
+    """Multinomial Logistic Regression for multiclass classification.
+
+    Unlike POLR, this doesn't assume proportional odds, allowing each feature
+    to have different effects across class boundaries. Fully interpretable
+    with coefficient interpretation per class.
+    """
+
+    def __init__(
+        self,
+        penalty: str = "l2",
+        C: float = 1.0,
+        solver: str = "lbfgs",
+        max_iter: int = 200,
+        tol: float = 1e-4,
+        random_state: Optional[int] = None,
+        class_weight: Optional[Union[str, Dict]] = None,
+        multi_class: str = "auto",  # Use auto to avoid deprecation warning
+    ):
+        self.penalty = penalty
+        self.C = C
+        self.solver = solver
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+        self.class_weight = class_weight
+        self.multi_class = multi_class
+
+    def fit(self, X, y, sample_weight=None):
+        """Fit multinomial logistic regression."""
+        X, y = check_X_y(X, y)
+
+        # Store classes
+        self.classes_ = np.unique(y)
+        self.n_classes_ = len(self.classes_)
+
+        # Fit multinomial logistic regression
+        self.model_ = LogisticRegression(
+            penalty=self.penalty,
+            C=self.C,
+            solver=self.solver,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            random_state=self.random_state,
+            class_weight=self.class_weight,
+            multi_class=self.multi_class,
+        )
+
+        self.model_.fit(X, y, sample_weight=sample_weight)
+
+        # Store coefficients for interpretation
+        self.coef_ = self.model_.coef_
+        self.intercept_ = self.model_.intercept_
+
+        return self
+
+    def predict(self, X):
+        """Predict class labels."""
+        check_is_fitted(self)
+        return self.model_.predict(X)
+
+    def predict_proba(self, X):
+        """Predict class probabilities."""
+        check_is_fitted(self)
+        return self.model_.predict_proba(X)
+
+    def get_cumulative_probs(self, X):
+        """Get cumulative probabilities for compatibility with POLR pipeline.
+
+        For multinomial LR, we convert class probabilities to cumulative form:
+        P(Y <= 0) = P(Y = 0)
+        P(Y <= 1) = P(Y = 0) + P(Y = 1)
+        """
+        probs = self.predict_proba(X)
+
+        # Ensure we have 3 classes (pad with zeros if needed)
+        if probs.shape[1] < 3:
+            padded_probs = np.zeros((probs.shape[0], 3))
+            padded_probs[:, : probs.shape[1]] = probs
+            probs = padded_probs
+
+        # Convert to cumulative probabilities
+        cum_probs = np.zeros((probs.shape[0], 2))
+        cum_probs[:, 0] = probs[:, 0]  # P(Y <= 0)
+        cum_probs[:, 1] = probs[:, 0] + probs[:, 1]  # P(Y <= 1)
+
+        return cum_probs
+
+    def get_feature_importance(self, feature_names=None):
+        """Get feature importance based on coefficient magnitudes."""
+        check_is_fitted(self)
+
+        if feature_names is None:
+            feature_names = [f"feature_{i}" for i in range(self.coef_.shape[1])]
+
+        # Calculate importance as mean absolute coefficient across classes
+        importance = np.mean(np.abs(self.coef_), axis=0)
+
+        return dict(zip(feature_names, importance))
 
 
 class ProportionalOddsLogisticRegression(BaseEstimator, ClassifierMixin):
@@ -61,19 +165,22 @@ class ProportionalOddsLogisticRegression(BaseEstimator, ClassifierMixin):
 
         if HAS_MORD:
             # Use mord's OrdinalRidge as proxy (similar formulation)
+            # OrdinalRidge doesn't support normalize parameter in newer sklearn versions
             self.model_ = OrdinalRidge(
                 alpha=1.0 / self.C,
                 fit_intercept=True,
-                normalize=False,
                 copy_X=True,
                 max_iter=self.max_iter,
                 tol=1e-4,
                 solver="auto",
             )
             self.model_.fit(X, y)
-            self.classes_ = self.model_.classes_
+            # OrdinalRidge uses unique_y_ instead of classes_
+            self.classes_ = np.sort(self.model_.unique_y_)
             self.coef_ = self.model_.coef_
-            self.theta_ = self.model_.theta_  # Thresholds
+            # OrdinalRidge doesn't have theta_, we'll compute thresholds from intercepts
+            self.theta_ = None  # Not available in mord
+            self.n_classes_ = len(self.classes_)
         else:
             # Fallback: One-vs-Rest with ordinal constraints
             self._fit_ovr_ordinal(X, y)
@@ -113,7 +220,40 @@ class ProportionalOddsLogisticRegression(BaseEstimator, ClassifierMixin):
         X = check_array(X, accept_sparse=True)
 
         if HAS_MORD and hasattr(self, "model_"):
-            return self.model_.predict_proba(X)
+            # OrdinalRidge doesn't have predict_proba, so we implement it
+            # Based on the ordinal regression model: P(Y=k) = P(Y<=k) - P(Y<=k-1)
+
+            # Get the linear predictions
+            decision = X @ self.model_.coef_.T
+            n_samples = X.shape[0]
+            n_classes = len(self.classes_)
+
+            # For ordinal regression, we need thresholds
+            # Since mord doesn't expose them directly, we'll use a simple approach
+            # This assumes classes are 0, 1, 2 (or similar ordered values)
+
+            # Create cumulative probabilities using logistic function
+            # We'll use uniform thresholds as a simple approximation
+            thresholds = np.linspace(decision.min() - 1, decision.max() + 1, n_classes)
+
+            cumulative_probs = np.zeros((n_samples, n_classes))
+            for i in range(n_classes - 1):
+                cumulative_probs[:, i] = 1 / (
+                    1 + np.exp(-(thresholds[i] - decision.ravel()))
+                )
+            cumulative_probs[:, -1] = 1.0
+
+            # Convert cumulative to class probabilities
+            probs = np.zeros((n_samples, n_classes))
+            probs[:, 0] = cumulative_probs[:, 0]
+            for i in range(1, n_classes):
+                probs[:, i] = cumulative_probs[:, i] - cumulative_probs[:, i - 1]
+
+            # Ensure probabilities are valid
+            probs = np.maximum(probs, 0)
+            probs = probs / probs.sum(axis=1, keepdims=True)
+
+            return probs
         else:
             # Compute cumulative probabilities
             n_samples = X.shape[0]
@@ -138,6 +278,104 @@ class ProportionalOddsLogisticRegression(BaseEstimator, ClassifierMixin):
         """Get interpretable feature coefficients."""
         check_is_fitted(self)
         return self.coef_.ravel()
+
+
+class POLR(BaseEstimator, ClassifierMixin):
+    """POLR: Proportional Odds Logistic Regression.
+
+    TRUE proportional odds logistic regression for ordinal classification.
+    ALWAYS uses logistic regression (never Ridge regression).
+    Produces interpretable odds ratios for legal domain.
+    """
+
+    def __init__(
+        self,
+        penalty: str = "l2",
+        C: float = 1.0,
+        solver: str = "lbfgs",
+        max_iter: int = 500,
+        tol: float = 1e-4,
+        random_state: Optional[int] = None,
+    ):
+        self.penalty = penalty
+        self.C = C
+        self.solver = solver
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+
+    def fit(self, X, y, sample_weight=None):
+        """Fit the POLR model - ALWAYS uses logistic regression.
+
+        Args:
+            X: Feature matrix
+            y: Target labels
+            sample_weight: Sample weights (always supported)
+
+        Returns:
+            self
+        """
+        # ALWAYS use logistic regression, never Ridge
+        logger.info("Fitting POLR (true logistic regression)")
+        self.model_ = WeightedOrdinalRegression(
+            penalty=self.penalty,
+            C=self.C,
+            solver=self.solver,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            random_state=self.random_state,
+        )
+
+        # Fit with or without weights - the model handles both
+        self.model_.fit(X, y, sample_weight=sample_weight)
+
+        # Copy attributes
+        self.classes_ = self.model_.classes_
+        self.n_classes_ = self.model_.n_classes_
+        self.coef_ = self.model_.coef_
+        self.estimators_ = self.model_.estimators_
+
+        return self
+
+    def predict_proba(self, X):
+        """Predict class probabilities using logistic model."""
+        check_is_fitted(self)
+        return self.model_.predict_proba(X)
+
+    def predict(self, X):
+        """Predict ordinal classes."""
+        check_is_fitted(self)
+        return self.model_.predict(X)
+
+    def get_cumulative_probs(self, X) -> np.ndarray:
+        """Get cumulative probabilities P(Y <= k) for calibration."""
+        check_is_fitted(self)
+        return self.model_.get_cumulative_probs(X)
+
+    def get_odds_ratios(self) -> np.ndarray:
+        """Get interpretable odds ratios from logistic coefficients.
+
+        Returns:
+            exp(coefficients) = odds ratios
+        """
+        check_is_fitted(self)
+        return np.exp(self.coef_)
+
+    def get_feature_importance(self) -> np.ndarray:
+        """Get feature coefficients (log odds ratios)."""
+        check_is_fitted(self)
+        return self.coef_.ravel()
+
+
+# Keep POLAR for backward compatibility but mark as deprecated
+class POLAR(POLR):
+    """DEPRECATED: Use POLR instead. This is kept for backward compatibility."""
+
+    def __init__(self, *args, **kwargs):
+        logger.warning(
+            "POLAR is deprecated. Use POLR for true proportional odds logistic regression."
+        )
+        super().__init__(*args, **kwargs)
 
 
 class CalibratedInterpretableClassifier(BaseEstimator, ClassifierMixin):
@@ -269,3 +507,8 @@ class TransparentEnsemble(BaseEstimator, ClassifierMixin):
         for name, estimator in self.ensemble_.estimators_:
             predictions[name] = estimator.predict_proba(X)
         return predictions
+
+
+# Aliases for backwards compatibility
+POLR = ProportionalOddsLogisticRegression
+MLR = MultinomialLogisticRegression

@@ -125,6 +125,7 @@ dependencies = [
   "vadersentiment>=3.3.2",
   "mord>=0.7",
   "interpret>=0.7.2",
+  "statsmodels>=0.14.5",
 ]
 
 

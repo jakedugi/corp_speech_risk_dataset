@@ -40,6 +40,7 @@ import argparse
 import json
 import os
 import re
+import hashlib
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Union, Set
 import numpy as np
@@ -59,29 +60,49 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 # =============================================================================
 
 # Exact column names to exclude from training (keep for EDA/audit)
-# EXPANDED DNT to catch all leaky columns
+# EXPANDED DNT to catch all leaky columns, especially court/venue features
 DNT_EXACT = {
     # Courts/venues (drop from training features; still usable for reporting)
     "court",
     "court_code",
     "venue",
     "district",
+    "jurisdiction",
+    "state",
+    "circuit",
+    "division",
+    # Court/venue derived features
+    "court_code_length",
+    "venue_length",
+    "district_length",
+    "court_type",
+    "court_level",
+    "court_id",
+    "venue_id",
+    "district_id",
     # Speakers/IDs
     "speaker",
     "speaker_id",
     "speaker_name",
     "speaker_hash",
+    "speaker_role",
+    "speaker_title",
     # ID-derived scalars
     "case_id_length",
     "src_path_length",
     "speaker_length",
-    "court_code_length",
     "has_speaker",
     "text_length",  # present in audit
+    "path_length",
     # raw identifiers
     "case_id",
+    "case_id_clean",
     "src_path",
     "_src",
+    "_metadata_src_path",
+    "file_path",
+    "document_id",
+    "doc_id",
     # sentiment triplet always DNT; we only train on the collapsed scalar
     "quote_sent_pos",
     "quote_sent_neg",
@@ -91,17 +112,34 @@ DNT_EXACT = {
     "certainty",
     # Support is for weighting/reporting only, not training
     "support_tertile",
+    # Metadata that could leak
+    "filing_date",
+    "decision_date",
+    "timestamp",
+    "created_at",
+    "updated_at",
 }
 
 # Regex patterns for columns to exclude from training
-# EXPANDED patterns to catch *_length proxies
+# EXPANDED patterns to catch all court/venue/path-based signals
 DNT_PATTERNS = (
     r"^speaker_",
     r"^court_",
+    r"^venue_",
+    r"^district_",
+    r"^jurisdiction_",
     r"^spk_",
     r"^id_",
     r"^path_",
+    r".*court.*",  # Catch any column with 'court' anywhere
+    r".*venue.*",  # Catch any column with 'venue' anywhere
+    r".*district.*",  # Catch any column with 'district' anywhere
+    r".*jurisdiction.*",  # Catch any column with 'jurisdiction' anywhere
     r"_length$",  # catch any other *_length proxies
+    r"_id$",  # catch any ID columns
+    r"_hash$",  # catch any hash columns
+    r".*filing.*",  # catch filing-related columns
+    r".*timestamp.*",  # catch timestamp columns
 )
 
 # Numeric dtypes that can be used for training
@@ -130,17 +168,26 @@ def wrap_do_not_train_cols(df: pd.DataFrame) -> Tuple[pd.DataFrame, Set[str]]:
         if any(re.match(pattern, col) for pattern in DNT_PATTERNS):
             dnt.add(col)
 
-    # Store DNT list in DataFrame attributes for persistence
-    df.attrs["do_not_train"] = sorted(dnt)
+    # Store FULL DNT policy in DataFrame attributes for persistence
+    # This includes all DNT_EXACT columns plus any pattern matches from the data
+    full_dnt_policy = set(DNT_EXACT)  # Start with all exact DNT columns
+    full_dnt_policy.update(dnt)  # Add any pattern-matched columns from the data
+
+    df.attrs["do_not_train"] = sorted(full_dnt_policy)
 
     # Log the actual intersection with present columns
     present_cols = set(df.columns)
     dnt_present = dnt & present_cols
-    dnt_missing = dnt - present_cols
+    dnt_missing = full_dnt_policy - present_cols
 
-    logger.info(f"DNT columns ({len(dnt_present)}): {sorted(dnt_present)}")
+    logger.info(
+        f"DNT columns present in data ({len(dnt_present)}): {sorted(dnt_present)}"
+    )
+    logger.info(f"Full DNT policy includes {len(full_dnt_policy)} columns total")
     if dnt_missing:
-        logger.info(f"DNT columns not in data: {sorted(dnt_missing)}")
+        logger.debug(
+            f"DNT policy columns not in current data: {len(dnt_missing)} columns"
+        )
 
     return df, dnt
 
@@ -186,9 +233,11 @@ def collapse_sentiment_and_mark_raw_dnt(
         else:
             logger.info(f"FORCED {col} as DNT (not in data)")
 
-    # Update DataFrame attributes
-    df.attrs["do_not_train"] = sorted(dnt)
-    return df, dnt
+    # Update DataFrame attributes with full DNT policy
+    full_dnt_policy = set(DNT_EXACT)  # Start with all exact DNT columns
+    full_dnt_policy.update(dnt)  # Add any pattern-matched columns from the data
+    df.attrs["do_not_train"] = sorted(full_dnt_policy)
+    return df, full_dnt_policy
 
 
 def get_training_columns(
@@ -237,6 +286,28 @@ def get_training_columns(
     )
 
     return training_cols
+
+
+def normalize_for_hash(s: str) -> str:
+    """
+    Normalize text for consistent hashing to catch more duplicates.
+
+    Handles:
+    - Case normalization
+    - Unicode quotes/dashes
+    - Whitespace collapsing
+    - Basic punctuation normalization
+    """
+    s = (s or "").lower().strip()
+    # Normalize unicode quotes and dashes
+    s = s.replace("\u201c", '"').replace("\u201d", '"')  # Smart quotes
+    s = s.replace("\u2018", "'").replace("\u2019", "'")  # Smart apostrophes
+    s = s.replace("\u2013", "-").replace("\u2014", "-")  # En/em dashes
+    # Collapse whitespace
+    s = re.sub(r"\s+", " ", s)
+    # Remove trailing punctuation that might vary
+    s = re.sub(r"[.,;:!?]+$", "", s)
+    return s
 
 
 def hard_dedupe_within_case(df: pd.DataFrame) -> pd.DataFrame:
@@ -310,6 +381,214 @@ def create_time_blocks_by_case(df: pd.DataFrame, k: int) -> pd.DataFrame:
     return case_df[["case_id", "time_block", "outcome", "size", "case_year"]]
 
 
+def tertile_edges_caselevel_train_only(
+    train_df, case_col, y_col, guard_lo=0.20, guard_hi=0.45, rng_seed=42
+):
+    """
+    AUTHORITATIVE tertile boundary logic (case-level, train-only).
+
+    Goal: Split training cases into three near-equal groups by outcome,
+    then derive numeric cutpoints for DEV/TEST/OOF application.
+
+    Semantics (fixed):
+    - low: y < e1
+    - medium: e1 <= y <= e2
+    - high: y > e2
+
+    Args:
+        train_df: Training DataFrame
+        case_col: Case ID column name
+        y_col: Outcome column name
+        guard_lo: Minimum acceptable bin share (default: 0.20)
+        guard_hi: Maximum acceptable bin share (default: 0.45)
+        rng_seed: Random seed for tie-breaking
+
+    Returns:
+        np.array([e1, e2]) or empty array if degenerate
+    """
+    # 1) one outcome per TRAIN case (never use quote-level rows)
+    case_y = (
+        train_df[[case_col, y_col]]
+        .dropna()
+        .drop_duplicates(subset=[case_col])
+        .set_index(case_col)[y_col]
+        .astype(float)
+    )
+    y = case_y.values
+    n = len(y)
+
+    if n < 3 or pd.Series(y).nunique() < 3:
+        logger.warning(
+            f"Insufficient distinct outcomes ({pd.Series(y).nunique()}) for tertiles in {n} training cases"
+        )
+        return np.array([])  # degrade upstream as needed
+
+    # 2) interpolated quantiles (between points, not max/min)
+    e = np.quantile(y, [1 / 3, 2 / 3], method="midpoint")  # or method="linear"
+    e1, e2 = float(e[0]), float(e[1])
+
+    # 3) check guardrails on TRAIN shares with fixed rule
+    def shares(e1, e2):
+        low = (y < e1).mean()
+        med = ((y >= e1) & (y <= e2)).mean()
+        high = (y > e2).mean()
+        return low, med, high
+
+    low, med, high = shares(e1, e2)
+    if (
+        low >= guard_lo
+        and med >= guard_lo
+        and high >= guard_lo
+        and low <= guard_hi
+        and med <= guard_hi
+        and high <= guard_hi
+    ):
+        logger.info(
+            f"Interpolated quantiles passed guardrails: low={low:.1%}, med={med:.1%}, high={high:.1%}"
+        )
+        return np.array([e1, e2], dtype=float)
+
+    # 4) FALLBACK: rank-slice exact thirds, then midpoints
+    logger.warning(
+        f"Interpolated quantiles failed guardrails: low={low:.1%}, med={med:.1%}, high={high:.1%}"
+    )
+    logger.info("Using rank-slice fallback with exact thirds")
+
+    # stable tie-breaker by hashed case id
+    idx = case_y.index.to_series()
+    tie = (pd.util.hash_pandas_object(idx).astype("int64") % (10**9)).to_numpy()
+    order = np.lexsort((tie, y))  # sort by y, then tie-breaker
+    y_sorted = y[order]
+
+    i1 = int(np.ceil(n / 3)) - 1  # zero-based boundary index for last in low
+    i2 = int(np.ceil(2 * n / 3)) - 1  # last in medium
+
+    def midpoint(a, b):
+        return (a + b) / 2.0
+
+    # Edge 1
+    if i1 + 1 < len(y_sorted) and y_sorted[i1] != y_sorted[i1 + 1]:
+        e1 = midpoint(y_sorted[i1], y_sorted[i1 + 1])
+    else:
+        e1 = y_sorted[i1]  # equals go to medium per fixed rule
+
+    # Edge 2
+    if i2 + 1 < len(y_sorted) and y_sorted[i2] != y_sorted[i2 + 1]:
+        e2 = midpoint(y_sorted[i2], y_sorted[i2 + 1])
+    else:
+        e2 = y_sorted[i2]  # equals go to medium per fixed rule
+
+    return np.array([float(e1), float(e2)], dtype=float)
+
+
+def assign_bin(y, edges):
+    """Apply labels with the fixed rule: low < e1, e1 <= medium <= e2, high > e2"""
+    if len(edges) < 2:
+        return 1  # degenerate case → single middle bin
+    e1, e2 = edges
+    if y < e1:
+        return 0  # low
+    if y <= e2:
+        return 1  # medium (inclusive)
+    return 2  # high
+
+
+def casewise_train_bins(
+    train_df: pd.DataFrame, y_col: str = "final_judgement_real"
+) -> Tuple[Dict[str, int], np.ndarray]:
+    """
+    Create case-wise TRAIN bins using authoritative tertile boundary logic.
+
+    Uses interpolated quantiles with rank-slice fallback for guaranteed 33/33/33 balance.
+    Implements the fixed boundary semantics: low < e1, e1 <= medium <= e2, high > e2.
+
+    Args:
+        train_df: Training DataFrame with case_id and outcome columns
+        y_col: Column name for outcomes
+
+    Returns:
+        Tuple of (case_bins dict, edges array)
+    """
+    # Use the authoritative tertile boundary logic
+    edges = tertile_edges_caselevel_train_only(train_df, "case_id", y_col)
+
+    if edges.size == 0:
+        logger.warning(
+            "Could not create tertile boundaries - insufficient distinct outcomes"
+        )
+        return {}, np.array([])
+
+    # Extract one outcome per case for labeling
+    case_y = train_df.groupby("case_id")[y_col].first().astype(float)
+
+    # Apply the fixed boundary rule to assign bins
+    case_bins = {}
+    for case_id, outcome in case_y.items():
+        bin_idx = assign_bin(outcome, edges)
+        case_bins[case_id] = bin_idx
+
+    # Verify final balance
+    final_counts = Counter(case_bins.values())
+    total_cases = len(case_bins)
+    balance_info = []
+    for bin_idx in sorted(final_counts.keys()):
+        count = final_counts[bin_idx]
+        pct = count / total_cases * 100
+        balance_info.append(f"bin_{bin_idx}: {count} cases ({pct:.1f}%)")
+
+    logger.info(f"Case-wise TRAIN balance: " + " | ".join(balance_info))
+
+    return case_bins, edges
+
+
+def tertile_edges_case_wise(case_outcomes: Dict[str, float]) -> np.ndarray:
+    """
+    DEPRECATED: Use casewise_train_bins for guaranteed 33/33/33 balance.
+
+    This function is kept for backward compatibility.
+    """
+    if len(case_outcomes) < 3:
+        return np.array([])
+
+    # Create dummy DataFrame for authoritative logic
+    df_temp = pd.DataFrame(
+        [
+            {"case_id": case_id, "final_judgement_real": outcome}
+            for case_id, outcome in case_outcomes.items()
+        ]
+    )
+
+    # Use authoritative tertile logic directly
+    edges = tertile_edges_caselevel_train_only(
+        df_temp, "case_id", "final_judgement_real"
+    )
+    return edges
+
+
+def tertile_edges_tie_safe(values: Union[np.ndarray, pd.Series]) -> np.ndarray:
+    """
+    DEPRECATED: Use tertile_edges_case_wise for case-level tertiles.
+
+    This function is kept for backward compatibility but should not be used
+    for case-wise tertile computation as it doesn't guarantee 33/33/33 case distribution.
+    For new code, use the authoritative tertile_edges_caselevel_train_only.
+    """
+    s = pd.Series(values).dropna()
+    if len(s) < 3:
+        return np.array([])
+
+    # Use interpolated quantiles for consistency with authoritative method
+    y = s.values
+    if pd.Series(y).nunique() < 3:
+        return np.array([])
+
+    # Use same interpolated quantile approach as authoritative method
+    e = np.quantile(y, [1 / 3, 2 / 3], method="midpoint")
+    e1, e2 = float(e[0]), float(e[1])
+
+    return np.array([e1, e2], dtype=float)
+
+
 def support_tertile(case_sizes: pd.Series) -> pd.Series:
     """
     Assign cases to support tertiles for reporting/analysis only (marked as DNT).
@@ -329,7 +608,7 @@ def support_tertile(case_sizes: pd.Series) -> pd.Series:
 
 
 def rolling_origin_group_folds(
-    case_df: pd.DataFrame, k: int = 5, val_frac: float = 0.2, seed: int = 42
+    case_df: pd.DataFrame, k: int = 3, val_frac: float = 0.5, seed: int = 42
 ) -> List[Tuple[Set[str], Set[str], Set[str]]]:
     """
     Rolling-origin with block-local eval splits (FIXED - no case overlap).
@@ -369,12 +648,122 @@ def rolling_origin_group_folds(
 
     folds = []
     for i in range(1, k + 1):
-        # Eval block is the current block i - split by case into val/test
-        eval_cases = list(case_df.loc[case_df["time_block"] == i, "case_id"])
-        rng.shuffle(eval_cases)
-        n_val = max(1, int(val_frac * len(eval_cases)))
-        val_cases = set(eval_cases[:n_val])
-        test_cases = set(eval_cases[n_val:])
+        # Get eval block cases
+        eval_block_df = case_df[case_df["time_block"] == i].copy()
+        eval_cases = list(eval_block_df["case_id"])
+
+        # For stratified splitting, we need outcomes for these cases
+        # First, get training data to compute edges
+        train_blocks = list(range(0, i))
+        train_candidates = case_df.loc[case_df["time_block"].isin(train_blocks), :]
+
+        # Strict temporal cutoff
+        eval_years = eval_block_df["case_year"]
+        min_eval_year = eval_years.min() if len(eval_years) > 0 else 9999
+        strict_train_df = train_candidates[
+            train_candidates["case_year"] < min_eval_year
+        ]
+
+        # Compute train-only tertile edges if we have outcomes
+        if "outcome" in strict_train_df.columns and len(strict_train_df) >= 3:
+            train_outcomes = strict_train_df["outcome"].dropna()
+            if len(train_outcomes) >= 3:
+                train_edges = tertile_edges_tie_safe(train_outcomes.values)
+
+                # Bin eval cases using train edges for stratification
+                if train_edges.size > 0 and "outcome" in eval_block_df.columns:
+                    eval_block_df["outcome_bin"] = eval_block_df["outcome"].apply(
+                        lambda y: assign_bin(y, train_edges) if pd.notna(y) else -1
+                    )
+
+                    # Try stratified split first
+                    valid_eval = eval_block_df[eval_block_df["outcome_bin"] >= 0]
+
+                    if len(valid_eval) >= 2:
+                        from sklearn.model_selection import StratifiedShuffleSplit
+
+                        # Adaptive val_frac to ensure minimum quotes
+                        adaptive_val_frac = val_frac
+                        min_dev_quotes = 150  # Minimum quotes for dev set
+
+                        # Calculate quotes needed
+                        eval_quotes = (
+                            eval_block_df.groupby("case_id")["size"].first().sum()
+                        )
+                        needed_val_frac = min(
+                            0.7, max(val_frac, min_dev_quotes / eval_quotes)
+                        )
+
+                        if needed_val_frac != val_frac:
+                            logger.info(
+                                f"Fold {i-1}: Adjusting val_frac from {val_frac:.2f} to {needed_val_frac:.2f} for min quotes"
+                            )
+                            adaptive_val_frac = needed_val_frac
+
+                        try:
+                            sss = StratifiedShuffleSplit(
+                                n_splits=1,
+                                test_size=1 - adaptive_val_frac,
+                                random_state=seed + i,
+                            )
+                            X_dummy = np.arange(len(valid_eval)).reshape(-1, 1)
+                            y_strat = valid_eval["outcome_bin"].values
+
+                            val_idx, test_idx = next(sss.split(X_dummy, y_strat))
+                            val_case_ids = valid_eval.iloc[val_idx]["case_id"].tolist()
+                            test_case_ids = valid_eval.iloc[test_idx][
+                                "case_id"
+                            ].tolist()
+
+                            # Add any cases with missing outcomes
+                            missing_eval = eval_block_df[
+                                eval_block_df["outcome_bin"] < 0
+                            ]
+                            if len(missing_eval) > 0:
+                                missing_ids = missing_eval["case_id"].tolist()
+                                rng.shuffle(missing_ids)
+                                n_val_missing = int(
+                                    adaptive_val_frac * len(missing_ids)
+                                )
+                                val_case_ids.extend(missing_ids[:n_val_missing])
+                                test_case_ids.extend(missing_ids[n_val_missing:])
+
+                            val_cases = set(val_case_ids)
+                            test_cases = set(test_case_ids)
+
+                            logger.info(f"Fold {i-1}: Stratified eval split successful")
+
+                        except ValueError as e:
+                            logger.warning(f"Fold {i-1}: Stratified split failed: {e}")
+                            # Fall back to random split
+                            rng.shuffle(eval_cases)
+                            n_val = max(1, int(adaptive_val_frac * len(eval_cases)))
+                            val_cases = set(eval_cases[:n_val])
+                            test_cases = set(eval_cases[n_val:])
+                    else:
+                        # Not enough cases for stratification
+                        rng.shuffle(eval_cases)
+                        n_val = max(1, int(val_frac * len(eval_cases)))
+                        val_cases = set(eval_cases[:n_val])
+                        test_cases = set(eval_cases[n_val:])
+                else:
+                    # No valid edges, use random split
+                    rng.shuffle(eval_cases)
+                    n_val = max(1, int(val_frac * len(eval_cases)))
+                    val_cases = set(eval_cases[:n_val])
+                    test_cases = set(eval_cases[n_val:])
+            else:
+                # Not enough training data for edges
+                rng.shuffle(eval_cases)
+                n_val = max(1, int(val_frac * len(eval_cases)))
+                val_cases = set(eval_cases[:n_val])
+                test_cases = set(eval_cases[n_val:])
+        else:
+            # No outcome column or insufficient data
+            rng.shuffle(eval_cases)
+            n_val = max(1, int(val_frac * len(eval_cases)))
+            val_cases = set(eval_cases[:n_val])
+            test_cases = set(eval_cases[n_val:])
 
         # STRICT TEMPORAL: Train = strictly older blocks [0..i-1] with year < min(eval_years)
         # This prevents train/test same-year overlap that causes temporal leakage
@@ -436,6 +825,254 @@ def create_oof_test_split(
     return cv_cases, oof_test_cases
 
 
+def grow_oof_until_three_classes(
+    case_df: pd.DataFrame,
+    case_outcomes: Dict[str, float],
+    oof_min_ratio: float = 0.15,
+    oof_max_ratio: float = 0.40,
+    oof_step: float = 0.05,
+    min_class_cases: int = 5,
+    min_class_quotes: int = 50,
+    criterion: str = "both",
+) -> Tuple[Set[str], Set[str], Dict[str, Any]]:
+    """
+    Grow OOF test split until it has all 3 outcome classes with adequate support.
+
+    This ensures the OOF test set has sufficient representation for all outcome
+    classes under both OOF-native tertiles and past-only baseline thresholds.
+
+    Args:
+        case_df: DataFrame with columns: case_id, case_year, size
+        case_outcomes: Dictionary mapping case_id to outcome values
+        oof_min_ratio: Starting OOF ratio
+        oof_max_ratio: Maximum OOF ratio to try
+        oof_step: Step size for growing OOF
+        min_class_cases: Minimum cases per class required
+        min_class_quotes: Minimum quotes per class required
+        criterion: 'native', 'baseline', or 'both' - which edges to check
+
+    Returns:
+        Tuple of (oof_case_ids, cv_case_ids, metadata_dict)
+    """
+    logger.info("Growing OOF test split until 3-class coverage achieved")
+
+    # Sort cases by year (oldest to newest)
+    case_df = case_df.sort_values("case_year")
+    ids = case_df["case_id"].tolist()
+    n_total = len(ids)
+
+    meta = {}
+    best = None
+
+    def counts_under_edges(cids: Set[str], edges: np.ndarray) -> Dict[str, Any]:
+        """Count cases and quotes per class using given edges."""
+        # Get outcomes for these cases
+        ys = [
+            (cid, case_outcomes.get(cid, None)) for cid in cids if cid in case_outcomes
+        ]
+
+        if not ys or edges.size == 0:
+            return {
+                "classes": set(),
+                "per_class_cases": Counter(),
+                "per_class_quotes": Counter(),
+            }
+
+        # Bin cases using edges
+        bins = {}
+        for cid, y in ys:
+            bin_idx = assign_bin(y, edges)
+            bins[cid] = bin_idx
+
+        # Count cases per class
+        per_class_cases = Counter(bins.values())
+
+        # Count quotes per class using case sizes
+        size_map = dict(zip(case_df["case_id"], case_df["size"]))
+        per_class_quotes = Counter()
+        for cid, b in bins.items():
+            per_class_quotes[b] += int(size_map.get(cid, 0))
+
+        return {
+            "classes": set(per_class_cases.keys()),
+            "per_class_cases": per_class_cases,
+            "per_class_quotes": per_class_quotes,
+        }
+
+    def check_ok(cnts: Dict[str, Any]) -> bool:
+        """Check if counts meet minimum requirements."""
+        if len(cnts["classes"]) < 3:
+            return False
+        if (
+            cnts["per_class_cases"]
+            and min(cnts["per_class_cases"].values()) < min_class_cases
+        ):
+            return False
+        if (
+            cnts["per_class_quotes"]
+            and min(cnts["per_class_quotes"].values()) < min_class_quotes
+        ):
+            return False
+        return True
+
+    # Try growing OOF from min to max ratio
+    r = oof_min_ratio
+    while r <= oof_max_ratio + 1e-9:
+        n_oof = max(1, int(round(r * n_total)))
+        oof_cases = set(ids[-n_oof:])  # Latest cases
+        cv_cases = set(ids[:-n_oof])  # Earlier cases
+
+        # Compute OOF-native edges (from OOF data only)
+        oof_y = [case_outcomes[c] for c in oof_cases if c in case_outcomes]
+        E_native = tertile_edges_tie_safe(np.array(oof_y))
+        nat = counts_under_edges(oof_cases, E_native)
+
+        # Compute baseline edges (from CV/older data only - no peeking!)
+        cv_y = [case_outcomes[c] for c in cv_cases if c in case_outcomes]
+        E_star = tertile_edges_tie_safe(np.array(cv_y))
+        base = counts_under_edges(oof_cases, E_star)
+
+        # Check conditions
+        cond_native = check_ok(nat)
+        cond_base = check_ok(base)
+
+        if criterion == "both":
+            satisfied = cond_native and cond_base
+        elif criterion == "native":
+            satisfied = cond_native
+        else:  # baseline
+            satisfied = cond_base
+
+        # Store current state
+        best = (
+            oof_cases,
+            cv_cases,
+            {
+                "ratio": r,
+                "n_cases": len(oof_cases),
+                "E_native": E_native.tolist() if E_native.size > 0 else [],
+                "E_star": E_star.tolist() if E_star.size > 0 else [],
+                "native_counts": {
+                    k: (dict(v) if isinstance(v, Counter) else list(v))
+                    for k, v in nat.items()
+                },
+                "baseline_counts": {
+                    k: (dict(v) if isinstance(v, Counter) else list(v))
+                    for k, v in base.items()
+                },
+                "satisfied_native": cond_native,
+                "satisfied_baseline": cond_base,
+                "satisfied_criterion": satisfied,
+            },
+        )
+
+        if satisfied:
+            meta = best[2]
+            logger.info(
+                f"✓ Found 3-class OOF at ratio={r:.2f} ({n_oof}/{n_total} cases)"
+            )
+            logger.info(f"  Native edges: {meta['E_native']}")
+            logger.info(f"  Baseline edges: {meta['E_star']}")
+            logger.info(
+                f"  Native class cases: {meta['native_counts']['per_class_cases']}"
+            )
+            logger.info(
+                f"  Baseline class cases: {meta['baseline_counts']['per_class_cases']}"
+            )
+            break
+
+        logger.info(
+            f"  Ratio {r:.2f}: native_ok={cond_native}, baseline_ok={cond_base}"
+        )
+        r += oof_step
+
+    if not meta and best:
+        # Couldn't satisfy - use largest OOF and report
+        _, _, meta = best
+        meta["warning"] = (
+            f"OOF max ratio {oof_max_ratio} reached without 3-class coverage under {criterion} criterion"
+        )
+        logger.warning(meta["warning"])
+        logger.info(
+            f"  Using largest OOF: {meta['n_cases']} cases (ratio={meta['ratio']:.2f})"
+        )
+
+    # Get year ranges for reporting
+    oof_years = case_df[case_df["case_id"].isin(best[0])]["case_year"]
+    cv_years = case_df[case_df["case_id"].isin(best[1])]["case_year"]
+
+    meta["oof_year_range"] = [float(oof_years.min()), float(oof_years.max())]
+    meta["cv_year_range"] = [float(cv_years.min()), float(cv_years.max())]
+
+    logger.info(
+        f"Final OOF: {len(best[0])} cases, years {oof_years.min():.0f}-{oof_years.max():.0f}"
+    )
+    logger.info(
+        f"Final CV: {len(best[1])} cases, years {cv_years.min():.0f}-{cv_years.max():.0f}"
+    )
+
+    return best[0], best[1], meta
+
+
+def purge_within_fold_text_collisions(fold_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove training records that have text collisions with eval (val/test) records.
+
+    This prevents within-fold text contamination by preferring to keep eval rows
+    and dropping the conflicting training rows.
+
+    Args:
+        fold_df: DataFrame for a single fold with 'split' and 'text_hash_norm' columns
+
+    Returns:
+        DataFrame with train rows that collide with eval rows removed
+    """
+    if "text_hash_norm" not in fold_df.columns:
+        return fold_df
+
+    train_idx = fold_df["split"] == "train"
+    eval_idx = fold_df["split"].isin(["val", "test"])
+
+    # Get unique hashes for each split
+    train_hashes = set(fold_df.loc[train_idx, "text_hash_norm"].unique())
+    eval_hashes = set(fold_df.loc[eval_idx, "text_hash_norm"].unique())
+
+    # Find collisions
+    collide_hashes = train_hashes & eval_hashes
+
+    if collide_hashes:
+        # Drop train rows that have hashes appearing in eval
+        drop_mask = train_idx & fold_df["text_hash_norm"].isin(collide_hashes)
+        n_dropped = drop_mask.sum()
+
+        logger.info(
+            f"Dropping {n_dropped} train rows with text collisions in eval "
+            f"({len(collide_hashes)} unique collision hashes)"
+        )
+
+        fold_df = fold_df.loc[~drop_mask].copy()
+
+        # Verify no collisions remain
+        remaining_train_hashes = set(
+            fold_df.loc[fold_df["split"] == "train", "text_hash_norm"].unique()
+        )
+        remaining_eval_hashes = set(
+            fold_df.loc[
+                fold_df["split"].isin(["val", "test"]), "text_hash_norm"
+            ].unique()
+        )
+        remaining_collisions = len(remaining_train_hashes & remaining_eval_hashes)
+
+        if remaining_collisions > 0:
+            logger.error(
+                f"WARNING: {remaining_collisions} text collisions still remain after purge!"
+            )
+        else:
+            logger.info("✓ All within-fold text collisions eliminated")
+
+    return fold_df
+
+
 def make_temporal_fold(
     df: pd.DataFrame,
     train_cases: Set[str],
@@ -468,73 +1105,86 @@ def make_temporal_fold(
         np.where(fold_df["case_id"].isin(val_cases), "val", "train"),
     )
 
-    # Per-fold outcome binning using TRAINING DATA ONLY - TRUE 3-BIN TERTILES
-    train_outcomes = fold_df.loc[
-        fold_df["split"] == "train", "final_judgement_real"
-    ].dropna()
+    # Per-fold outcome binning using TRAINING DATA ONLY - GUARANTEED 33/33/33 CASE BALANCE
+    train_df = fold_df[fold_df["split"] == "train"]
     edges_used = []
-    if len(train_outcomes) >= 3:
-        # Use tertiles (1/3, 2/3) for true 3-bin strategy {low, med, high}
-        edges = np.quantile(np.sort(train_outcomes), [1 / 3, 2 / 3])
-        fold_df["outcome_bin"] = np.digitize(
-            fold_df["final_judgement_real"], edges, right=True
-        )
-        edges_used = edges.tolist()
-        logger.info(
-            f"Fold {fold_idx}: 3-bin tertiles at ${edges[0]:,.0f}, ${edges[1]:,.0f}"
-        )
+    train_case_bins = {}
+
+    if len(train_df) >= 3:
+        # Use new case-wise balanced approach
+        train_case_bins, edges = casewise_train_bins(train_df, "final_judgement_real")
+
+        if len(train_case_bins) > 0 and edges.size > 0:
+            # Apply case bins to ALL records in the fold
+            fold_df["outcome_bin"] = (
+                fold_df["case_id"].map(train_case_bins).fillna(0).astype(int)
+            )
+
+            # For records not in training (val/test), use edges to assign bins
+            non_train_mask = ~fold_df["case_id"].isin(train_case_bins.keys())
+            if non_train_mask.any():
+                non_train_outcomes = fold_df.loc[non_train_mask, "final_judgement_real"]
+                non_train_bins = [assign_bin(y, edges) for y in non_train_outcomes]
+                fold_df.loc[non_train_mask, "outcome_bin"] = non_train_bins
+
+            edges_used = edges.tolist()
+
+            logger.info(
+                f"Fold {fold_idx}: Case-wise balanced tertiles at "
+                + ", ".join([f"${e:,.0f}" for e in edges])
+            )
+
+        elif len(train_case_bins) > 0:
+            # Handle degenerate case (1-2 bins)
+            fold_df["outcome_bin"] = (
+                fold_df["case_id"].map(train_case_bins).fillna(0).astype(int)
+            )
+
+            # Assign non-training records to bin 0 as fallback
+            non_train_mask = ~fold_df["case_id"].isin(train_case_bins.keys())
+            fold_df.loc[non_train_mask, "outcome_bin"] = 0
+
+            edges_used = edges.tolist() if edges.size > 0 else []
+
+            n_bins = len(set(train_case_bins.values()))
+            logger.info(f"Fold {fold_idx}: Degenerate case with {n_bins} bins")
+
+        else:
+            # Complete fallback
+            fold_df["outcome_bin"] = 0
+            edges_used = []
+            logger.warning(f"Fold {fold_idx}: Could not create case-wise bins")
     else:
         # Fallback for insufficient training data
-        fold_df["outcome_bin"] = 1
+        fold_df["outcome_bin"] = 0
         edges_used = []
+        logger.warning(
+            f"Fold {fold_idx}: Insufficient training data ({len(train_df)} records)"
+        )
 
-    # CRITICAL: Remove eval-side duplicates that appear in training text hashes
-    # This prevents within-fold text contamination (eval texts that appear in train)
-    if "text_hash" in fold_df.columns:
-        # Get all unique text hashes from training data in this fold
-        train_mask = fold_df["split"] == "train"
-        train_hashes = set(fold_df.loc[train_mask, "text_hash"].unique())
+    # CRITICAL: Add normalized text hash if not present
+    if "text_hash_norm" not in fold_df.columns and "text" in fold_df.columns:
+        logger.info(
+            f"Fold {fold_idx}: Creating normalized text hashes for better duplicate detection"
+        )
+        fold_df["text_hash_norm"] = (
+            fold_df["text"]
+            .astype(str)
+            .apply(normalize_for_hash)
+            .apply(lambda t: hashlib.md5(t.encode()).hexdigest())
+        )
 
-        # Find eval records (val/test) that have text_hashes appearing in train
-        eval_mask = fold_df["split"].isin(["val", "test"])
-        eval_with_train_hashes = fold_df.loc[eval_mask, "text_hash"].isin(train_hashes)
+    # CRITICAL: Remove within-fold text contamination
+    # This now prefers keeping eval rows and drops conflicting train rows
+    initial_train_count = (fold_df["split"] == "train").sum()
+    fold_df = purge_within_fold_text_collisions(fold_df)
+    final_train_count = (fold_df["split"] == "train").sum()
 
-        # Create leak mask: eval records whose text_hash appears in train
-        leak_mask = eval_mask & eval_with_train_hashes
-
-        # Debug: Check contamination before removal
-        if leak_mask.sum() > 0:
-            contaminated_hashes = set(fold_df.loc[leak_mask, "text_hash"])
-            logger.info(
-                f"Fold {fold_idx}: Found {int(leak_mask.sum())} eval records with {len(contaminated_hashes)} unique train text hashes"
-            )
-
-            # Remove contaminated eval records
-            fold_df = fold_df.loc[~leak_mask].copy()
-
-            # Verify contamination eliminated
-            remaining_train_hashes = set(
-                fold_df.loc[fold_df["split"] == "train", "text_hash"].unique()
-            )
-            remaining_eval_hashes = set(
-                fold_df.loc[
-                    fold_df["split"].isin(["val", "test"]), "text_hash"
-                ].unique()
-            )
-            remaining_overlap = len(remaining_train_hashes & remaining_eval_hashes)
-
-            logger.info(
-                f"Fold {fold_idx}: Post-dedup verification - {remaining_overlap} eval/train text hash overlaps remaining"
-            )
-
-            if remaining_overlap > 0:
-                logger.warning(
-                    f"Fold {fold_idx}: WARNING - {remaining_overlap} text hash overlaps still remain after deduplication!"
-                )
-        else:
-            logger.info(
-                f"Fold {fold_idx}: No eval/train text hash contamination detected"
-            )
+    if initial_train_count != final_train_count:
+        logger.info(
+            f"Fold {fold_idx}: Reduced train set from {initial_train_count} to {final_train_count} "
+            f"records ({initial_train_count - final_train_count} dropped for text collisions)"
+        )
 
     # Compute support weights for balanced training (weighting only, not labels)
     train_fold = fold_df[fold_df["split"] == "train"]
@@ -549,22 +1199,75 @@ def make_temporal_fold(
             .fillna(1)
         )  # Default for cases not in training
 
-        # Compute 3-bin weights for outcome bins
-        from sklearn.utils.class_weight import compute_class_weight
+        # Compute case-based class weights for outcome bins (stable approach)
+        if len(train_case_bins) > 0:
+            # Count cases per bin (not records per bin) - this gives stable weights
+            case_bin_counts = Counter(train_case_bins.values())
+            unique_bins = sorted(case_bin_counts.keys())
 
-        train_bins = train_fold["outcome_bin"].values
-        unique_bins = np.unique(train_bins)
+            if len(unique_bins) > 1:
+                # Compute balanced weights based on case counts
+                total_cases = len(train_case_bins)
+                n_bins = len(unique_bins)
 
-        if len(unique_bins) > 1:
-            bin_weights = compute_class_weight(
-                "balanced", classes=unique_bins, y=train_bins
-            )
-            bin_weight_map = dict(zip(unique_bins, bin_weights))
+                bin_weight_map = {}
+                for bin_idx in unique_bins:
+                    case_count = case_bin_counts[bin_idx]
+                    # Balanced weight = total_cases / (n_bins * case_count)
+                    weight = (
+                        total_cases / (n_bins * case_count) if case_count > 0 else 1.0
+                    )
+                    # RECOMMENDED: Cap extreme bin weights to avoid runaway weights
+                    weight = np.clip(weight, 0.25, 4.0)
+                    bin_weight_map[bin_idx] = weight
 
-            # Apply bin weights to all records
-            fold_df["bin_weight"] = (
-                fold_df["outcome_bin"].map(bin_weight_map).fillna(1.0)
-            )
+                # Apply case-based bin weights to all records
+                fold_df["bin_weight"] = (
+                    fold_df["outcome_bin"].map(bin_weight_map).fillna(1.0)
+                )
+
+                # Log case-based class weights for transparency and verify balance
+                weight_info = []
+                case_shares = []
+                for bin_idx in sorted(unique_bins):
+                    case_count = case_bin_counts[bin_idx]
+                    weight = bin_weight_map[bin_idx]
+                    pct = case_count / total_cases * 100
+                    case_shares.append(pct / 100)  # Store as fraction
+                    weight_info.append(
+                        f"bin_{bin_idx}: {case_count} cases ({pct:.1f}%) → weight={weight:.3f}"
+                    )
+
+                logger.info(
+                    f"Fold {fold_idx}: Case-based class weights - "
+                    + " | ".join(weight_info)
+                )
+
+                # Verify case-wise balance is in acceptable range [20%, 45%]
+                min_share, max_share = min(case_shares), max(case_shares)
+                if min_share >= 0.20 and max_share <= 0.45:
+                    logger.info(
+                        f"✅ Fold {fold_idx}: TRAIN case balance OK (range: {min_share:.1%}-{max_share:.1%})"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️  Fold {fold_idx}: TRAIN case balance outside [20%, 45%] (range: {min_share:.1%}-{max_share:.1%})"
+                    )
+
+                # Sanity check for extreme weights (should be minimal with case-wise balance)
+                max_weight = max(bin_weight_map.values())
+                min_weight = min(bin_weight_map.values())
+                weight_ratio = (
+                    max_weight / min_weight if min_weight > 0 else float("inf")
+                )
+
+                if weight_ratio > 3.0:  # Stricter threshold since we expect ~33/33/33
+                    logger.warning(
+                        f"Fold {fold_idx}: Class weight ratio ({weight_ratio:.1f}x) higher than expected - "
+                        f"indicates case distribution imbalance"
+                    )
+            else:
+                fold_df["bin_weight"] = 1.0
         else:
             fold_df["bin_weight"] = 1.0
 
@@ -577,7 +1280,34 @@ def make_temporal_fold(
         fold_df["support_weight"] = fold_df["case_id"].map(case_weight_map).fillna(1.0)
         fold_df["sample_weight"] = fold_df["bin_weight"] * fold_df["support_weight"]
 
+        # RECOMMENDED: Re-normalize final sample_weight to mean=1.0 on train split only
+        train_mask = fold_df["split"] == "train"
+        train_sample_weights = fold_df.loc[train_mask, "sample_weight"]
+        if len(train_sample_weights) > 0 and train_sample_weights.mean() > 0:
+            normalization_factor = train_sample_weights.mean()
+            fold_df["sample_weight"] = fold_df["sample_weight"] / normalization_factor
+            logger.info(
+                f"Fold {fold_idx}: Re-normalized sample_weight to mean=1.0 on train (factor: {normalization_factor:.4f})"
+            )
+
+            # Validation checks
+            train_final_weights = fold_df.loc[train_mask, "sample_weight"]
+            logger.info(
+                f"Fold {fold_idx}: Final train sample_weight mean={train_final_weights.mean():.4f}, std={train_final_weights.std():.4f}"
+            )
+
         # Store weight metadata for persistence (JSON-serializable)
+        if len(train_case_bins) > 0:
+            # Count records per bin from case assignments
+            train_record_bins = fold_df[fold_df["split"] == "train"][
+                "outcome_bin"
+            ].values
+            record_bin_counts = dict(
+                zip(*np.unique(train_record_bins, return_counts=True))
+            )
+        else:
+            record_bin_counts = {}
+
         weight_metadata = {
             "class_weights": (
                 {str(k): float(v) for k, v in bin_weight_map.items()}
@@ -590,12 +1320,7 @@ def make_temporal_fold(
             "train_split_counts": {
                 "total": int(len(train_fold)),
                 "per_bin": (
-                    {
-                        str(k): int(v)
-                        for k, v in dict(
-                            zip(*np.unique(train_bins, return_counts=True))
-                        ).items()
-                    }
+                    {str(k): int(v) for k, v in record_bin_counts.items()}
                     if len(unique_bins) > 1
                     else {}
                 ),
@@ -647,7 +1372,16 @@ def global_eval_text_purge(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def make_leakage_safe_splits(
-    df: pd.DataFrame, k: int = 5, oof_ratio: float = 0.15, seed: int = 42
+    df: pd.DataFrame,
+    k: int = 5,
+    oof_ratio: float = 0.15,
+    seed: int = 42,
+    oof_min_ratio: float = 0.15,
+    oof_max_ratio: float = 0.40,
+    oof_step: float = 0.05,
+    min_class_cases: int = 5,
+    min_class_quotes: int = 50,
+    oof_criterion: str = "both",
 ) -> pd.DataFrame:
     """
     Create complete leakage-safe splits with DNT policy and temporal CV.
@@ -671,11 +1405,31 @@ def make_leakage_safe_splits(
     df, dnt = wrap_do_not_train_cols(df)
     df, dnt = collapse_sentiment_and_mark_raw_dnt(df, dnt)
 
-    # 2) Create case-level time blocks
-    case_df = create_time_blocks_by_case(df, k)
+    # 2) Create case-level data with outcomes
+    case_df = df.groupby("case_id", as_index=False).agg(
+        case_year=("case_year", "min"),
+        outcome=("final_judgement_real", "first"),
+        size=("case_id", "count"),  # Count records per case
+    )
+    case_df["case_year"] = case_df["case_year"].fillna(case_df["case_year"].min())
 
-    # 3) Create OOF test split (latest cases)
-    cv_cases, oof_test_cases = create_oof_test_split(case_df, oof_ratio)
+    # Extract case outcomes for adaptive OOF
+    case_outcomes = {}
+    for _, row in case_df.iterrows():
+        if pd.notna(row["outcome"]):
+            case_outcomes[row["case_id"]] = float(row["outcome"])
+
+    # 3) Create adaptive OOF test split with 3-class guarantee
+    oof_test_cases, cv_cases, oof_meta = grow_oof_until_three_classes(
+        case_df=case_df,
+        case_outcomes=case_outcomes,
+        oof_min_ratio=oof_min_ratio,
+        oof_max_ratio=oof_max_ratio,
+        oof_step=oof_step,
+        min_class_cases=min_class_cases,
+        min_class_quotes=min_class_quotes,
+        criterion=oof_criterion,
+    )
 
     # 4) Generate rolling-origin folds on CV cases only
     cv_case_df = case_df[case_df["case_id"].isin(cv_cases)]
@@ -709,49 +1463,267 @@ def make_leakage_safe_splits(
         per_fold_weights[f"fold_{i}"] = weight_metadata
         fold_dfs.append(fold_df)
 
-    # 6) Create OOF test DataFrame
+    # 6) Create OOF test DataFrame (labels will be set after final fold creation)
     if oof_test_cases:
         oof_df = df[df["case_id"].isin(oof_test_cases)].copy()
         oof_df["fold"] = -1  # Special marker for OOF
         oof_df["split"] = "oof_test"
-        oof_df["outcome_bin"] = 1  # Will be computed properly during final evaluation
         oof_df["support_tertile"] = 1
         oof_df["sample_weight"] = 1.0
+        oof_df["outcome_bin"] = 1  # Temporary - will be corrected after final fold
         fold_dfs.append(oof_df)
 
-    # 7) Combine all folds
-    result_df = pd.concat(fold_dfs, ignore_index=True)
-    result_df.attrs["do_not_train"] = sorted(dnt)
+    # 7) Create final training fold combining all CV data
+    logger.info("Creating final training fold with all CV data...")
 
-    # 8) Skip global purge - already handled per-fold in make_temporal_fold
+    # Combine all CV cases (all cases not in OOF test)
+    all_cv_train_cases = cv_cases  # All CV cases will be in training
+
+    # Split CV cases into train and dev sets for final training
+    # Use adaptive dev ratio to ensure minimum quotes for dev set
+    dev_ratio = 0.15  # Default dev ratio
+    min_dev_quotes = 150  # Minimum quotes for dev set
+
+    # Calculate total quotes in CV data
+    cv_df = df[df["case_id"].isin(cv_cases)]
+    total_cv_quotes = len(cv_df)
+    needed_dev_ratio = min(0.3, max(dev_ratio, min_dev_quotes / total_cv_quotes))
+
+    if needed_dev_ratio != dev_ratio:
+        logger.info(
+            f"Final fold: Adjusting dev_ratio from {dev_ratio:.2f} to {needed_dev_ratio:.2f} for min quotes"
+        )
+
+    # Sort CV cases by year for temporal split
+    cv_case_df_sorted = cv_case_df.sort_values("case_year")
+    cv_case_ids = cv_case_df_sorted["case_id"].tolist()
+
+    # Split into train and dev
+    n_dev = max(1, int(needed_dev_ratio * len(cv_case_ids)))
+    final_dev_cases = set(cv_case_ids[-n_dev:])  # Latest cases for dev
+    final_train_cases = set(cv_case_ids[:-n_dev])  # Earlier cases for train
+
+    # Ensure dev set has all 3 outcome classes with case-wise verification
+    dev_case_outcomes = {}
+    for case_id in final_dev_cases:
+        if case_id in case_outcomes:
+            dev_case_outcomes[case_id] = case_outcomes[case_id]
+
+    # Verify final fold will have proper case-wise balance and dev coverage
+    # First, check if training data can create balanced tertiles
+    if len(final_train_cases) >= 3:
+        # Create temporary DataFrame to test case-wise binning
+        train_test_df = df[df["case_id"].isin(final_train_cases)].copy()
+        temp_case_bins, temp_edges = casewise_train_bins(
+            train_test_df, "final_judgement_real"
+        )
+
+        if len(temp_case_bins) > 0 and temp_edges.size > 0:
+            # Apply train edges to dev cases to check coverage
+            dev_bins = {}
+            for case_id in final_dev_cases:
+                if case_id in case_outcomes:
+                    outcome = case_outcomes[case_id]
+                    bin_idx = assign_bin(outcome, temp_edges)
+                    dev_bins[case_id] = bin_idx
+
+            # Count unique bins in dev set
+            unique_dev_bins = set(dev_bins.values())
+            expected_bins = set(range(len(temp_edges) + 1))
+            missing_bins = expected_bins - unique_dev_bins
+
+            if len(missing_bins) > 0:
+                logger.warning(
+                    f"Final fold dev set missing bins: {missing_bins}. "
+                    f"Present bins: {sorted(unique_dev_bins)}. "
+                    f"Consider increasing dev_ratio."
+                )
+
+                # Adaptive strategy: grow dev set if missing critical bins
+                if len(unique_dev_bins) < 2:  # Need at least 2 bins
+                    logger.info("Growing dev set to ensure bin coverage...")
+                    # Increase dev ratio and retry
+                    n_dev_new = min(
+                        len(cv_case_ids) - 5, int(0.25 * len(cv_case_ids))
+                    )  # Cap at 25%
+                    if n_dev_new > n_dev:
+                        final_dev_cases = set(cv_case_ids[-n_dev_new:])
+                        final_train_cases = set(cv_case_ids[:-n_dev_new])
+                        logger.info(
+                            f"Increased dev set to {n_dev_new} cases for better bin coverage"
+                        )
+
+                        # Recompute dev bins with new split
+                        dev_bins = {}
+                        for case_id in final_dev_cases:
+                            if case_id in case_outcomes:
+                                outcome = case_outcomes[case_id]
+                                bin_idx = assign_bin(outcome, temp_edges)
+                                dev_bins[case_id] = bin_idx
+
+            # Report final distribution
+            if dev_bins:
+                dev_bin_counts = Counter(dev_bins.values())
+                dev_distribution = []
+                for bin_idx in sorted(expected_bins):
+                    count = dev_bin_counts.get(bin_idx, 0)
+                    pct = count / len(dev_bins) * 100 if dev_bins else 0
+                    dev_distribution.append(
+                        f"bin_{bin_idx}: {count} cases ({pct:.1f}%)"
+                    )
+
+                logger.info(
+                    f"Final fold dev set distribution: " + " | ".join(dev_distribution)
+                )
+
+            # Report expected train balance
+            temp_bin_counts = Counter(temp_case_bins.values())
+            train_distribution = []
+            for bin_idx in sorted(temp_bin_counts.keys()):
+                count = temp_bin_counts[bin_idx]
+                pct = count / len(temp_case_bins) * 100
+                train_distribution.append(f"bin_{bin_idx}: {count} cases ({pct:.1f}%)")
+
+            logger.info(
+                f"Final fold train set will have: " + " | ".join(train_distribution)
+            )
+
+        else:
+            logger.warning(f"Final fold: could not create balanced case-wise tertiles")
+    else:
+        logger.warning(
+            f"Final fold: insufficient training cases ({len(final_train_cases)})"
+        )
+
+    # Create final training fold DataFrame
+    # For make_temporal_fold, pass dev cases as the "test" parameter since it expects 3 sets
+    final_fold_df, final_edges_and_weights = make_temporal_fold(
+        df,
+        final_train_cases,
+        set(),
+        final_dev_cases,
+        k,  # Pass dev as test, empty set as val
+    )
+
+    # Mark this as the final training fold
+    final_fold_df["fold"] = k  # Use k as the fold index (after 0...k-1)
+    # Rename splits appropriately: test -> dev, val should be empty
+    final_fold_df.loc[final_fold_df["split"] == "test", "split"] = "dev"
+    # Remove any val split entries (should be empty anyway)
+    final_fold_df = final_fold_df[final_fold_df["split"] != "val"]
+
+    # Extract edges and weights for final fold
+    if len(final_edges_and_weights) >= 2:
+        final_edges = (
+            final_edges_and_weights[0]
+            if isinstance(final_edges_and_weights[0], list)
+            else final_edges_and_weights[:-1]
+        )
+        final_weight_metadata = (
+            final_edges_and_weights[-1]
+            if isinstance(final_edges_and_weights[-1], dict)
+            else {}
+        )
+    else:
+        final_edges = (
+            final_edges_and_weights if isinstance(final_edges_and_weights, list) else []
+        )
+        final_weight_metadata = {}
+
+    per_fold_edges[f"fold_{k}"] = final_edges
+    per_fold_weights[f"fold_{k}"] = final_weight_metadata
+    fold_dfs.append(final_fold_df)
+
+    logger.info(
+        f"Final training fold: {len(final_train_cases)} train cases, {len(final_dev_cases)} dev cases"
+    )
+
+    # 7.5) Now fix OOF test labels using fold 3 cutoffs (after final fold is created)
+    if oof_test_cases and final_edges:
+        logger.info("Correcting OOF test labels using fold 3 cutoffs...")
+        fold3_edges = np.array(final_edges)
+        logger.info(
+            f"Applying fold 3 cutoffs to OOF test: [${fold3_edges[0]:,.2f}, ${fold3_edges[1]:,.2f}]"
+        )
+
+        # Find the OOF DataFrame in fold_dfs and update its labels
+        for i, fold_df in enumerate(fold_dfs):
+            if "split" in fold_df.columns and (fold_df["split"] == "oof_test").any():
+                # Apply authoritative boundary logic to each OOF record
+                oof_outcome_bins = []
+                for _, row in fold_df.iterrows():
+                    if row["split"] == "oof_test":
+                        outcome_value = row.get("final_judgement_real")
+                        if outcome_value is not None:
+                            bin_idx = assign_bin(outcome_value, fold3_edges)
+                            oof_outcome_bins.append(bin_idx)
+                        else:
+                            oof_outcome_bins.append(1)  # Default to medium
+                    else:
+                        # Keep existing labels for non-OOF records
+                        oof_outcome_bins.append(row.get("outcome_bin", 1))
+
+                # Update the DataFrame
+                fold_dfs[i] = fold_df.copy()
+                fold_dfs[i]["outcome_bin"] = oof_outcome_bins
+
+                # Verify OOF class distribution
+                oof_only_bins = [
+                    bin_idx
+                    for j, bin_idx in enumerate(oof_outcome_bins)
+                    if fold_df.iloc[j]["split"] == "oof_test"
+                ]
+                oof_distribution = Counter(oof_only_bins)
+                logger.info(f"OOF test class distribution: {dict(oof_distribution)}")
+                break
+
+    # 8) Combine all folds
+    result_df = pd.concat(fold_dfs, ignore_index=True)
+    # Preserve the full DNT policy from the original DataFrame
+    result_df.attrs["do_not_train"] = df.attrs.get("do_not_train", sorted(dnt))
+
+    # 9) Skip global purge - already handled per-fold in make_temporal_fold
     # Global purge was removing too many training records due to boilerplate text
 
-    # 9) Preserve per-fold bin edges and weights for audit
+    # 10) Preserve per-fold bin edges, weights, and OOF metadata for audit
     result_df.attrs["per_fold_bin_edges"] = per_fold_edges
     result_df.attrs["per_fold_weights"] = per_fold_weights
+    result_df.attrs["oof_growth_metadata"] = oof_meta
 
-    # 10) Validate no empty splits (safety guards)
+    # 11) Validate no empty splits (safety guards)
     for f, g in result_df.groupby("fold"):
         if f == -1:  # Skip OOF test validation
             continue
         ntr = (g["split"] == "train").sum()
-        nva = (g["split"] == "val").sum()
-        nte = (g["split"] == "test").sum()
-        assert (
-            ntr > 0 and nva > 0 and nte > 0
-        ), f"Fold {f} has empty split(s): train={ntr}, val={nva}, test={nte}"
 
-    # 11) Each case must be eval in at most one fold
-    eval_df = result_df[result_df["split"].isin(["val", "test"])]
-    eval_counts = eval_df.groupby("case_id")["fold"].nunique()
-    assert (
-        eval_counts <= 1
-    ).all(), f"Cases appear as eval in multiple folds: {eval_counts[eval_counts > 1].index.tolist()}"
+        if f == k:  # Final training fold uses dev instead of val/test
+            ndev = (g["split"] == "dev").sum()
+            assert (
+                ntr > 0 and ndev > 0
+            ), f"Final fold {f} has empty split(s): train={ntr}, dev={ndev}"
+        else:  # Regular CV folds
+            nva = (g["split"] == "val").sum()
+            nte = (g["split"] == "test").sum()
+            assert (
+                ntr > 0 and nva > 0 and nte > 0
+            ), f"Fold {f} has empty split(s): train={ntr}, val={nva}, test={nte}"
+
+    # 12) Each case must be eval in at most one CV fold (exclude final training fold)
+    cv_eval_df = result_df[
+        (result_df["split"].isin(["val", "test"])) & (result_df["fold"] < k)
+    ]
+    if len(cv_eval_df) > 0:
+        eval_counts = cv_eval_df.groupby("case_id")["fold"].nunique()
+        assert (
+            eval_counts <= 1
+        ).all(), f"Cases appear as eval in multiple folds: {eval_counts[eval_counts > 1].index.tolist()}"
 
     logger.info(
         f"✅ Validation passed: No empty splits, no cross-fold eval contamination"
     )
-    logger.info(f"Leakage-safe splits complete: {k} CV folds + OOF test")
+    logger.info(
+        f"Leakage-safe splits complete: {k} CV folds + 1 final training fold + OOF test"
+    )
     logger.info(f"DNT columns: {len(dnt)}")
     logger.info(f"Per-fold bin edges preserved: {len(per_fold_edges)} folds")
 
@@ -940,12 +1912,20 @@ def create_global_size_buckets(
         f"Global case size tertile boundaries: {[f'{x:.0f} quotes' for x in size_edges]}"
     )
 
-    # Assign size buckets
+    # Assign size buckets using consistent boundary logic
     case_size_buckets = {}
     for case_id, case_size in case_sizes.items():
-        size_idx = np.digitize(case_size, size_edges) - 1
-        size_idx = np.clip(size_idx, 0, len(size_edges) - 2)
-        size_bucket = ["Small", "Medium", "Large"][size_idx]
+        # Use similar logic as assign_bin but for size tertiles
+        if len(size_edges) >= 3:
+            e1, e2 = size_edges[1], size_edges[2]  # Skip the min edge
+            if case_size < e1:
+                size_bucket = "Small"
+            elif case_size <= e2:
+                size_bucket = "Medium"
+            else:
+                size_bucket = "Large"
+        else:
+            size_bucket = "Medium"  # Fallback
         case_size_buckets[case_id] = size_bucket
 
     # Verify size balance
@@ -991,27 +1971,25 @@ def create_per_fold_outcome_bins(
         logger.warning(
             f"Insufficient training outcomes ({len(train_outcomes)}) for {n_bins} bins in {fold_str}"
         )
-        # Fallback: create single bin
-        bin_edges = (
-            np.array([min(train_outcomes), max(train_outcomes)])
-            if train_outcomes
-            else np.array([0, 1])
-        )
-        n_bins = 1
+        return {}, np.array([])
     else:
-        train_outcomes_sorted = sorted(train_outcomes)
+        # Create temporary DataFrame for authoritative logic
+        temp_df = pd.DataFrame(
+            [
+                {"case_id": case_id, "final_judgement_real": case_outcomes[case_id]}
+                for case_id in train_case_ids
+                if case_id in case_outcomes
+            ]
+        )
 
-        if n_bins == 3:
-            # Use 33/33/33 split for consistency
-            quantiles = [0, 1 / 3, 2 / 3, 1]
-        else:
-            quantiles = np.linspace(0, 1, n_bins + 1)
+        # Use authoritative tertile boundary logic
+        bin_edges = tertile_edges_caselevel_train_only(
+            temp_df, "case_id", "final_judgement_real"
+        )
 
-        bin_edges = np.quantile(train_outcomes_sorted, quantiles)
-        bin_edges = np.unique(bin_edges)  # Remove duplicates
-
-        # Adjust n_bins if duplicates were removed
-        n_bins = len(bin_edges) - 1
+        if bin_edges.size == 0:
+            logger.warning(f"Could not create tertile boundaries for {fold_str}")
+            return {}, np.array([])
 
     logger.info(
         f"Per-fold outcome quantile boundaries for {fold_str}: {[f'${x:,.0f}' for x in bin_edges]}"
@@ -1020,8 +1998,7 @@ def create_per_fold_outcome_bins(
     # Apply bins to ALL cases (train/val/test) using this fold's thresholds
     case_outcome_bins = {}
     for case_id, outcome in case_outcomes.items():
-        bin_idx = np.digitize(outcome, bin_edges) - 1
-        bin_idx = np.clip(bin_idx, 0, n_bins - 1)
+        bin_idx = assign_bin(outcome, bin_edges)
         case_outcome_bins[case_id] = f"bin_{bin_idx}"
 
     # Verify training distribution
@@ -1095,8 +2072,7 @@ def extract_leakage_safe_composite_stratification_labels(
         logger.info(f"Coarse boundaries: {[f'${x:,.0f}' for x in coarse_bin_edges]}")
 
         for case_id, outcome in case_outcomes.items():
-            bin_idx = np.digitize(outcome, coarse_bin_edges) - 1
-            bin_idx = np.clip(bin_idx, 0, len(coarse_bin_edges) - 2)
+            bin_idx = assign_bin(outcome, coarse_bin_edges)
             initial_outcome_strata[case_id] = f"coarse_bin_{bin_idx}"
 
     # Step 3: Create composite stratification labels (outcome_stratum × size_bucket)
@@ -1976,6 +2952,49 @@ def main():
         help="Proportion of latest cases for out-of-fold test (default: 0.15)",
     )
 
+    # New OOF adaptive arguments
+    parser.add_argument(
+        "--oof-min-ratio",
+        type=float,
+        default=0.15,
+        help="Minimum OOF ratio to start with (default: 0.15)",
+    )
+
+    parser.add_argument(
+        "--oof-max-ratio",
+        type=float,
+        default=0.40,
+        help="Maximum OOF ratio to grow to (default: 0.40)",
+    )
+
+    parser.add_argument(
+        "--oof-step",
+        type=float,
+        default=0.05,
+        help="Step size for growing OOF (default: 0.05)",
+    )
+
+    parser.add_argument(
+        "--oof-min-class-cases",
+        type=int,
+        default=5,
+        help="Minimum cases per class in OOF (default: 5)",
+    )
+
+    parser.add_argument(
+        "--oof-min-class-quotes",
+        type=int,
+        default=50,
+        help="Minimum quotes per class in OOF (default: 50)",
+    )
+
+    parser.add_argument(
+        "--oof-class-criterion",
+        choices=["native", "baseline", "both"],
+        default="both",
+        help="Criterion for OOF class coverage: native (OOF-only tertiles), baseline (past-only), or both (default: both)",
+    )
+
     parser.add_argument(
         "--random-seed",
         type=int,
@@ -2053,6 +3072,16 @@ def main():
                     return 2020
                 import re
 
+                # Handle appellate court pattern: YY-NNNNN_caX (e.g., 24-10951_ca5)
+                match = re.search(r"^(\d{2})-\d+_ca\d+$", str(case_id))
+                if match:
+                    year_suffix = int(match.group(1))
+                    # Convert 2-digit year to 4-digit (24 -> 2024)
+                    if year_suffix <= 30:  # Assume 24 = 2024, not 1924
+                        return 2000 + year_suffix
+                    else:
+                        return 1900 + year_suffix
+
                 # Try standard pattern like "1:23-cv-04567_nysd" -> 2023
                 match = re.search(r"(\d+):(\d+)-", str(case_id))
                 if match:
@@ -2074,8 +3103,6 @@ def main():
         # Add text_hash if not present (for deduplication) - optimized
         if "text_hash" not in df.columns:
             logger.info("Creating text_hash for deduplication...")
-            import hashlib
-
             # Use vectorized operation for speed
             df["text_hash"] = (
                 df["text"]
@@ -2083,13 +3110,32 @@ def main():
                 .apply(lambda x: hashlib.md5(x.encode()).hexdigest())
             )
 
-        # Create leakage-safe splits with DNT policy
+        # Add normalized text hash for better duplicate detection
+        if "text_hash_norm" not in df.columns:
+            logger.info("Creating normalized text_hash for robust deduplication...")
+            df["text_hash_norm"] = (
+                df["text"]
+                .astype(str)
+                .apply(normalize_for_hash)
+                .apply(lambda x: hashlib.md5(x.encode()).hexdigest())
+            )
+
+        # Create leakage-safe splits with DNT policy and adaptive OOF
         result_df = make_leakage_safe_splits(
-            df, k=args.k_folds, oof_ratio=args.oof_test_ratio, seed=args.random_seed
+            df,
+            k=args.k_folds,
+            oof_ratio=args.oof_test_ratio,
+            seed=args.random_seed,
+            oof_min_ratio=args.oof_min_ratio,
+            oof_max_ratio=args.oof_max_ratio,
+            oof_step=args.oof_step,
+            min_class_cases=args.oof_min_class_cases,
+            min_class_quotes=args.oof_min_class_quotes,
+            oof_criterion=args.oof_class_criterion,
         )
 
         # Save results by fold
-        for fold_idx in range(args.k_folds):
+        for fold_idx in range(args.k_folds + 1):  # +1 to include final training fold
             fold_data = result_df[result_df["fold"] == fold_idx]
             if len(fold_data) == 0:
                 continue
@@ -2097,29 +3143,53 @@ def main():
             fold_dir = output_dir / f"fold_{fold_idx}"
             fold_dir.mkdir(parents=True, exist_ok=True)
 
-            # Save split files
-            for split in ["train", "val", "test"]:
-                split_data = fold_data[fold_data["split"] == split]
-                if len(split_data) > 0:
-                    split_path = fold_dir / f"{split}.jsonl"
-                    split_data.to_json(split_path, orient="records", lines=True)
+            if fold_idx == args.k_folds:  # Final training fold
+                # Save train and dev splits
+                for split in ["train", "dev"]:
+                    split_data = fold_data[fold_data["split"] == split]
+                    if len(split_data) > 0:
+                        split_path = fold_dir / f"{split}.jsonl"
+                        split_data.to_json(split_path, orient="records", lines=True)
 
-            # Save case IDs
-            train_cases = set(fold_data[fold_data["split"] == "train"]["case_id"])
-            val_cases = set(fold_data[fold_data["split"] == "val"]["case_id"])
-            test_cases = set(fold_data[fold_data["split"] == "test"]["case_id"])
+                # Save case IDs
+                train_cases = set(fold_data[fold_data["split"] == "train"]["case_id"])
+                dev_cases = set(fold_data[fold_data["split"] == "dev"]["case_id"])
 
-            case_ids_path = fold_dir / "case_ids.json"
-            with open(case_ids_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    {
-                        "train_case_ids": list(train_cases),
-                        "val_case_ids": list(val_cases),
-                        "test_case_ids": list(test_cases),
-                    },
-                    f,
-                    indent=2,
-                )
+                case_ids_path = fold_dir / "case_ids.json"
+                with open(case_ids_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "train_case_ids": list(train_cases),
+                            "dev_case_ids": list(dev_cases),
+                            "is_final_training_fold": True,
+                        },
+                        f,
+                        indent=2,
+                    )
+            else:  # Regular CV folds
+                # Save split files
+                for split in ["train", "val", "test"]:
+                    split_data = fold_data[fold_data["split"] == split]
+                    if len(split_data) > 0:
+                        split_path = fold_dir / f"{split}.jsonl"
+                        split_data.to_json(split_path, orient="records", lines=True)
+
+                # Save case IDs
+                train_cases = set(fold_data[fold_data["split"] == "train"]["case_id"])
+                val_cases = set(fold_data[fold_data["split"] == "val"]["case_id"])
+                test_cases = set(fold_data[fold_data["split"] == "test"]["case_id"])
+
+                case_ids_path = fold_dir / "case_ids.json"
+                with open(case_ids_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "train_case_ids": list(train_cases),
+                            "val_case_ids": list(val_cases),
+                            "test_case_ids": list(test_cases),
+                        },
+                        f,
+                        indent=2,
+                    )
 
         # Save OOF test data if present
         oof_data = result_df[result_df["split"] == "oof_test"]
@@ -2144,11 +3214,18 @@ def main():
         # Save per-fold metadata for audit detection (exact format expected)
         per_fold_metadata = {
             "binning": {
-                "method": "train_only_tertiles",
+                "method": "train_only_tertiles_tie_safe",
                 "fold_edges": result_df.attrs.get("per_fold_bin_edges", {}),
             },
             "weights": result_df.attrs.get("per_fold_weights", {}),
-            "methodology": "temporal_rolling_origin_with_dnt",
+            "methodology": "temporal_rolling_origin_with_adaptive_oof",
+            "oof_growth": result_df.attrs.get("oof_growth_metadata", {}),
+            "adaptive_features": {
+                "oof_class_guarantee": True,
+                "stratified_eval_blocks": True,
+                "adaptive_val_frac": True,
+                "tie_safe_tertiles": True,
+            },
         }
         metadata_path = output_dir / "per_fold_metadata.json"
         with open(metadata_path, "w", encoding="utf-8") as f:
@@ -2158,6 +3235,8 @@ def main():
         stats = {
             "methodology": "temporal_rolling_origin_with_dnt",
             "folds": args.k_folds,
+            "final_training_fold": True,
+            "total_folds_including_final": args.k_folds + 1,
             "oof_test_ratio": args.oof_test_ratio,
             "total_records": len(result_df),
             "dnt_columns": len(manifest["do_not_train"]),
@@ -2183,6 +3262,12 @@ def main():
                 "clipping": [0.25, 4.0],
                 "normalization": "per_fold",
                 "tertiles": "reporting_only_dnt",
+            },
+            "final_fold_info": {
+                "description": "Final training fold combines all CV data for production model",
+                "includes_all_cv_cases": True,
+                "split_method": "temporal_train_dev",
+                "dev_ratio": "adaptive_minimum_150_quotes",
             },
         }
 

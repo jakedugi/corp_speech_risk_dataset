@@ -1,0 +1,19 @@
+# Final Kept Features for Training
+# Total: 11 features
+# Applied filtering rules:
+# - Drop if missing_pct > 20%
+# - Drop if zero_pct > 95%
+# - Drop if psi_train_dev > 0.25
+# - Drop if temporal drift flag
+
+interpretable_lex_deception_norm
+interpretable_lex_deception_present
+interpretable_lex_guarantee_norm
+interpretable_lex_guarantee_present
+interpretable_lex_hedges_norm
+interpretable_lex_hedges_present
+interpretable_lex_pricing_claims_present
+interpretable_lex_superlatives_present
+interpretable_ling_high_certainty
+interpretable_seq_discourse_additive
+interpretable_seq_trans_neutral_to_neutral

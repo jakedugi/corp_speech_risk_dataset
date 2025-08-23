@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this dataset or code, please cite it as below."
+title: "Quantifying Legal Risk in Corporate Speech — Outcome-Linked Quotes Dataset"
+authors:
+  - family-names: Dugan
+    given-names: Jacob
+    affiliation: University of Edinburgh
+    orcid: "https://orcid.org/0009-0008-4253-1578
+date-released: 2025-08-24
+version: "v1.0.0"
+doi: "10.5281/zenodo.16934610"
+license: "CC-BY-4.0"
+repository-code: "https://github.com/jakedugi/corp_speech_risk_dataset"
+type: dataset
+keywords:
+  - legal NLP
+  - corporate speech
+  - litigation risk
+  - outcome prediction
+  - explainable AI

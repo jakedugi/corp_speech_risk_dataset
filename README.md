@@ -2,6 +2,8 @@
 
 ! Work in Progress: This repository is under active development. Some modules are still being tested and refactored. !
 
+You can find the dataset here: https://doi.org/10.5281/zenodo.16934609
+
 This repository contains code and data for analyzing corporate speech risk across multiple regulatory and legal sources, including FTC, SEC, and CourtListener data.
 
 This project follows **Clean Architecture** with Domain-Driven Design patterns:

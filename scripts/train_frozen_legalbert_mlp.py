@@ -195,6 +195,9 @@ class PyTorchMLPEvaluator:
         device: Optional[str] = None,
         grid_search: bool = False,
         amp: Optional[bool] = None,
+        target_recall: float = 0.10,
+        topk_percent: Optional[float] = None,
+        seed: int = 42,
     ):
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
@@ -215,6 +218,23 @@ class PyTorchMLPEvaluator:
             self.amp = bool(amp) and (self.device.type == "cuda")
         logger.info(f"Using device: {self.device}")
         logger.info(f"AMP (mixed precision) enabled: {self.amp}")
+
+        # Selection knobs for more candidates
+        self.target_recall = float(target_recall)
+        self.topk_percent = float(topk_percent) if topk_percent is not None else None
+        self.seed = int(seed)
+        try:
+            np.random.seed(self.seed)
+            torch.manual_seed(self.seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(self.seed)
+        except Exception:
+            pass
+        logger.info(f"Target recall for aux threshold: {self.target_recall}")
+        if self.topk_percent is not None:
+            logger.info(
+                f"Top-K percent for aux threshold: {self.topk_percent*100:.2f}%"
+            )
 
         # Load metadata (reusing existing logic)
         self.metadata = self.load_metadata()
@@ -565,6 +585,47 @@ class PyTorchMLPEvaluator:
 
         return best_threshold, best_mcc
 
+    def find_threshold_for_recall(
+        self,
+        y_true: np.ndarray,
+        y_prob: np.ndarray,
+        target_recall: float,
+        n_steps: int = 401,
+    ) -> float:
+        """Find smallest threshold that achieves at least target_recall (on suppressed dev).
+        Falls back to the threshold with closest recall if exact not reached.
+        """
+        thresholds = np.linspace(0.0, 1.0, n_steps)
+        best_thr = 0.5
+        best_gap = 1e9
+        for thr in thresholds:
+            y_pred = (y_prob >= thr).astype(int)
+            rec = recall_score(y_true, y_pred, zero_division=0.0)
+            gap = abs(rec - target_recall)
+            if rec >= target_recall and gap < best_gap:
+                best_gap = gap
+                best_thr = thr
+        if best_gap == 1e9:
+            # No threshold reached target; return closest overall
+            for thr in thresholds:
+                y_pred = (y_prob >= thr).astype(int)
+                rec = recall_score(y_true, y_pred, zero_division=0.0)
+                gap = abs(rec - target_recall)
+                if gap < best_gap:
+                    best_gap = gap
+                    best_thr = thr
+        return float(best_thr)
+
+    def find_threshold_for_topk_percent(
+        self, y_prob: np.ndarray, topk_percent: float
+    ) -> float:
+        """Return probability cutoff for the top-k% most confident positives (quantile)."""
+        topk_percent = max(0.0, min(1.0, float(topk_percent)))
+        if topk_percent <= 0.0:
+            return 1.0
+        q = 1.0 - topk_percent
+        return float(np.quantile(y_prob, q))
+
     def calculate_operating_point_metrics(
         self, y_true: np.ndarray, y_prob: np.ndarray, threshold: float
     ) -> Dict[str, Any]:
@@ -613,6 +674,7 @@ class PyTorchMLPEvaluator:
                     "dropout": [0.1, 0.2],
                     "lr": [1e-3, 3e-4],
                     "weight_decay": [1e-4, 1e-3],
+                    "pos_weight_mul": [1.0, 1.5, 2.0],
                     "batch_size": [128],
                     "max_epochs": [30],
                     "patience": [5],
@@ -622,6 +684,7 @@ class PyTorchMLPEvaluator:
                     "dropout": [0.1, 0.2],
                     "lr": [1e-3, 3e-4],
                     "weight_decay": [1e-4, 1e-3],
+                    "pos_weight_mul": [1.0, 1.5, 2.0],
                     "batch_size": [128],
                     "max_epochs": [30],
                     "patience": [5],
@@ -636,6 +699,7 @@ class PyTorchMLPEvaluator:
                     "dropout": [0.2],
                     "lr": [1e-3],
                     "weight_decay": [1e-4],
+                    "pos_weight_mul": [1.0],
                     "batch_size": [128],
                     "max_epochs": [30],
                     "patience": [5],
@@ -645,6 +709,7 @@ class PyTorchMLPEvaluator:
                     "dropout": [0.2],
                     "lr": [1e-3],
                     "weight_decay": [1e-4],
+                    "pos_weight_mul": [1.0],
                     "batch_size": [128],
                     "max_epochs": [30],
                     "patience": [5],
@@ -675,6 +740,7 @@ class PyTorchMLPEvaluator:
         max_epochs = hyperparams.get("max_epochs", 30)
         patience = hyperparams.get("patience", 5)
         scalar_proj_dim = hyperparams.get("scalar_proj_dim", 16)
+        pos_weight_mul = hyperparams.get("pos_weight_mul", 1.0)
 
         use_scalars = X_scal_train is not None
         emb_dim = X_emb_train.shape[1]
@@ -737,6 +803,7 @@ class PyTorchMLPEvaluator:
             pos = (y_train == 1).sum()
             neg = (y_train == 0).sum()
             pos_weight = float(neg / max(pos, 1))
+        pos_weight *= float(pos_weight_mul)
 
         pos_weight_tensor = torch.tensor(pos_weight, device=self.device)
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
@@ -907,8 +974,32 @@ class PyTorchMLPEvaluator:
         dev_brier_suppressed = brier_score_loss(y_dev, probs_sup)
         dev_ece_suppressed = self.calculate_ece(y_dev, probs_sup)
 
-        # Store optimal threshold from training (already optimized on suppressed view)
-        self.optimal_thresholds[model_name] = threshold
+        # Auxiliary thresholds for more candidates
+        thr_mcc = threshold  # from training artifacts (suppressed MCC-optimal)
+        thr_recall = self.find_threshold_for_recall(
+            y_dev, probs_sup, self.target_recall
+        )
+        thr_topk = None
+        if self.topk_percent is not None:
+            thr_topk = self.find_threshold_for_topk_percent(
+                probs_sup, self.topk_percent
+            )
+
+        # Store for later test evaluation
+        self.optimal_thresholds[model_name] = {
+            "mcc": float(thr_mcc),
+            "recall_target": float(thr_recall),
+            "topk_percent": float(thr_topk) if thr_topk is not None else None,
+        }
+
+        # Log candidate rates on dev-suppressed
+        def _rate_at(th):
+            yp = (probs_sup >= th).astype(int)
+            return yp.mean()
+
+        logger.info(
+            f"  Aux thresholds (dev-supp): mcc={thr_mcc:.4f} | recall@{self.target_recall:.2f}={thr_recall:.4f} | topk%={self.topk_percent if self.topk_percent is not None else 'n/a'} -> dev pos rates: mcc={_rate_at(thr_mcc):.3f}, recallT={_rate_at(thr_recall):.3f}{', topk='+str(self.topk_percent) if self.topk_percent is not None else ''}"
+        )
 
         # Calculate delta (raw - suppressed)
         delta_mcc = dev_mcc_raw - dev_mcc_suppressed
@@ -1022,6 +1113,36 @@ class PyTorchMLPEvaluator:
         test_brier_suppressed = brier_score_loss(y_test, probs_sup)
         test_ece_suppressed = self.calculate_ece(y_test, probs_sup)
 
+        # Fetch thresholds (set during dev evaluation)
+        thr_pack = self.optimal_thresholds.get(model_name, {})
+        thr_mcc = float(thr_pack.get("mcc", threshold))
+        thr_recall = float(thr_pack.get("recall_target", threshold))
+        thr_topk = thr_pack.get("topk_percent", None)
+        if thr_topk is not None:
+            thr_topk = float(thr_topk)
+
+        # Metrics at alternative thresholds (suppressed view)
+        test_ops_at_recall = self.calculate_operating_point_metrics(
+            y_test, probs_sup, thr_recall
+        )
+        test_ops_at_mcc = self.calculate_operating_point_metrics(
+            y_test, probs_sup, thr_mcc
+        )
+        test_ops_at_topk = None
+        if thr_topk is not None:
+            test_ops_at_topk = self.calculate_operating_point_metrics(
+                y_test, probs_sup, thr_topk
+            )
+
+        logger.info(
+            f"  Test pos rates (suppressed): mcc={test_ops_at_mcc['confusion_matrix']} | recallT={test_ops_at_recall['confusion_matrix']}"
+            + (
+                f" | topk={test_ops_at_topk['confusion_matrix']}"
+                if test_ops_at_topk
+                else ""
+            )
+        )
+
         # Delta calculations
         delta_mcc_test = (
             test_operating_metrics_raw["mcc"] - test_operating_metrics_suppressed["mcc"]
@@ -1068,6 +1189,10 @@ class PyTorchMLPEvaluator:
             "test_confusion_matrix_suppressed": test_operating_metrics_suppressed[
                 "confusion_matrix"
             ],
+            # Also return alt-threshold metrics (suppressed)
+            "test_ops_suppressed_mcc": test_ops_at_mcc,
+            "test_ops_suppressed_recallT": test_ops_at_recall,
+            "test_ops_suppressed_topk": test_ops_at_topk,
             # Delta and comparison metrics
             "delta_mcc_test": delta_mcc_test,
             "delta_auc_test": delta_auc_test,
@@ -1383,6 +1508,19 @@ def main():
     parser.add_argument(
         "--no-amp", action="store_true", help="Disable mixed precision on CUDA"
     )
+    parser.add_argument(
+        "--target-recall",
+        type=float,
+        default=0.10,
+        help="Target recall for auxiliary threshold on dev-suppressed",
+    )
+    parser.add_argument(
+        "--topk-percent",
+        type=float,
+        default=None,
+        help="Top-k percent (0..1) for auxiliary threshold on dev-suppressed",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     args = parser.parse_args()
 
@@ -1394,6 +1532,9 @@ def main():
         device=args.device,
         grid_search=args.grid_search,
         amp=(not args.no_amp),
+        target_recall=args.target_recall,
+        topk_percent=args.topk_percent,
+        seed=args.seed,
     )
 
     evaluator.run_comprehensive_evaluation()

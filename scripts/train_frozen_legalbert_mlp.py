@@ -243,6 +243,9 @@ class PyTorchMLPEvaluator:
         self.results = {}
         self.test_predictions = {}
         self.optimal_thresholds = {}
+        # Storage for scalers and best artifacts per variant (for later inference)
+        self._scalers: Dict[str, Tuple[StandardScaler, Optional[StandardScaler]]] = {}
+        self._best_artifacts: Dict[str, Dict[str, Any]] = {}
 
         # Court-based identity suppression storage (reusing existing logic)
         self.court_means_emb_ = None
@@ -1235,6 +1238,8 @@ class PyTorchMLPEvaluator:
                 X_emb_train, X_scal_train, emb_scaler, scal_scaler = (
                     self.prepare_features(train_df, variant, fit=True)
                 )
+                # Keep scalers for later full-dataset inference
+                self._scalers[variant] = (emb_scaler, scal_scaler)
                 X_emb_dev, X_scal_dev, _, _ = self.prepare_features(
                     dev_df, variant, emb_scaler=emb_scaler, scal_scaler=scal_scaler
                 )
@@ -1300,6 +1305,8 @@ class PyTorchMLPEvaluator:
                             best_dev_mcc = dev_mcc
                             best_artifacts = artifacts
                             best_params = params
+                            # Cache best artifacts for this variant (used by infer-all)
+                            self._best_artifacts[variant] = artifacts
                             logger.info(f"    New best: {dev_mcc:.4f}")
 
                     except Exception as e:
@@ -1393,6 +1400,219 @@ class PyTorchMLPEvaluator:
         logger.info("=" * 80)
         logger.info("PYTORCH MLP TEMPORAL EVALUATION COMPLETED")
         logger.info("=" * 80)
+
+    def _list_all_jsonl_files(self) -> List[Path]:
+        """List all JSONL files under data_dir we want to mirror (fold_* train/dev and oof_test/test)."""
+        files: List[Path] = []
+        # fold_* train/dev
+        for fold_dir in sorted(self.data_dir.glob("fold_*")):
+            for name in ["train.jsonl", "dev.jsonl"]:
+                p = fold_dir / name
+                if p.exists():
+                    files.append(p)
+        # oof_test/test.jsonl
+        ptest = self.data_dir / "oof_test" / "test.jsonl"
+        if ptest.exists():
+            files.append(ptest)
+        return files
+
+    def _load_jsonl_fast(self, path: Path) -> pd.DataFrame:
+        """Fast JSONL loader (reusing orjson logic)."""
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        rows = []
+        if ORJSON_AVAILABLE:
+            with open(path, "rb") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rows.append(_loads_bytes(line))
+                    except Exception:
+                        try:
+                            rows.append(
+                                _loads_str(line.decode("utf-8", errors="ignore"))
+                            )
+                        except Exception:
+                            continue
+        else:
+            with open(path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        rows.append(_json.loads(line))
+        return pd.DataFrame(rows)
+
+    @torch.no_grad()
+    def _forward_in_batches(
+        self,
+        model: nn.Module,
+        emb: np.ndarray,
+        scal: Optional[np.ndarray],
+        batch_size: int = 2048,
+    ) -> np.ndarray:
+        """Compute probabilities in batches to control memory."""
+        model.eval()
+        probs: List[np.ndarray] = []
+        for i in range(0, emb.shape[0], batch_size):
+            e = torch.tensor(
+                emb[i : i + batch_size], dtype=torch.float32, device=self.device
+            )
+            if scal is not None:
+                s = torch.tensor(
+                    scal[i : i + batch_size], dtype=torch.float32, device=self.device
+                )
+                with torch.cuda.amp.autocast(enabled=self.amp):
+                    logits = model(e, s)
+            else:
+                with torch.cuda.amp.autocast(enabled=self.amp):
+                    logits = model(e)
+            p = torch.sigmoid(logits).detach().cpu().numpy()
+            probs.append(p)
+        return np.concatenate(probs, axis=0)
+
+    def infer_full_dataset(self, variant: str, write_format: str = "jsonl"):
+        """Mirror the dataset with predictions from the best model of the given variant.
+        - Uses the train-fitted scalers for that variant.
+        - Uses stored thresholds: mcc, recall-target (from dev-suppressed), and computes top-k% on the full set if requested.
+        Output is written to output_dir/"mirror_with_predictions" preserving relative paths.
+        """
+        if variant not in self._best_artifacts:
+            raise RuntimeError(
+                f"No trained artifacts cached for variant {variant}. Run evaluation first."
+            )
+        if variant not in self._scalers:
+            raise RuntimeError(
+                f"No scalers cached for variant {variant}. Run evaluation first."
+            )
+
+        artifacts = self._best_artifacts[variant]
+        emb_scaler, scal_scaler = self._scalers[variant]
+        use_scalars = artifacts.get("use_scalars", False)
+        model: nn.Module = artifacts["model"]
+
+        # Get stored thresholds (dev-suppressed)
+        thr_pack = self.optimal_thresholds.get(variant, {})
+        thr_mcc = float(thr_pack.get("mcc", 0.5))
+        thr_recall = float(thr_pack.get("recall_target", 0.5))
+        topk_percent = self.topk_percent
+
+        out_root = (
+            self.output_dir / "mirror_with_predictions" / variant.replace("+", "plus")
+        )
+        out_root.mkdir(parents=True, exist_ok=True)
+
+        files = self._list_all_jsonl_files()
+        logger.info(f"Mirroring {len(files)} files with predictions to {out_root}")
+
+        # Pass 1: compute probabilities for all rows (to support global top-k)
+        all_probs: List[np.ndarray] = []
+        file_rows: List[int] = []
+        data_frames: List[Tuple[Path, pd.DataFrame]] = []
+        for path in files:
+            df = self._load_jsonl_fast(path)
+            data_frames.append((path, df))
+            X_emb, X_scal, _, _ = self.prepare_features(
+                df, variant, emb_scaler=emb_scaler, scal_scaler=scal_scaler, fit=False
+            )
+            probs = self._forward_in_batches(
+                model, X_emb, X_scal if use_scalars else None, batch_size=4096
+            )
+            all_probs.append(probs)
+            file_rows.append(len(df))
+        concat_probs = (
+            np.concatenate(all_probs, axis=0)
+            if all_probs
+            else np.array([], dtype=np.float32)
+        )
+
+        # Compute top-k threshold globally if requested
+        thr_topk = None
+        if topk_percent is not None and concat_probs.size > 0:
+            q = max(0.0, min(1.0, 1.0 - float(topk_percent)))
+            thr_topk = float(np.quantile(concat_probs, q))
+            logger.info(
+                f"Global top-k threshold for {topk_percent*100:.2f}% is {thr_topk:.4f}"
+            )
+
+        # Pass 2: write mirrors with predictions
+        offset = 0
+        for (path, df), n in zip(data_frames, file_rows):
+            probs = concat_probs[offset : offset + n]
+            offset += n
+            # Labels at thresholds
+            pred_mcc = (probs >= thr_mcc).astype(int)
+            pred_recallT = (probs >= thr_recall).astype(int)
+            if thr_topk is not None:
+                pred_topk = (probs >= thr_topk).astype(int)
+            else:
+                pred_topk = None
+
+            # Add columns
+            df = df.copy()
+            df["mlp_feature_config"] = variant
+            df["mlp_probability"] = probs
+            df["mlp_pred_strict"] = pred_mcc
+            df["mlp_threshold_strict"] = thr_mcc
+            df["mlp_pred_recallT"] = pred_recallT
+            df["mlp_threshold_recallT"] = thr_recall
+            if pred_topk is not None:
+                df["mlp_pred_topk"] = pred_topk
+                df["mlp_threshold_topk"] = thr_topk
+
+            # Write mirror file preserving relative structure
+            rel = path.relative_to(self.data_dir)
+            out_path = out_root / rel
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if write_format == "csv":
+                out_path = out_path.with_suffix(".csv")
+                df.to_csv(out_path, index=False)
+            elif write_format == "parquet":
+                out_path = out_path.with_suffix(".parquet")
+                try:
+                    import pyarrow  # noqa: F401
+
+                    df.to_parquet(out_path, index=False)
+                except Exception:
+                    # Fallback to csv if pyarrow isn't available
+                    out_path = out_path.with_suffix(".csv")
+                    df.to_csv(out_path, index=False)
+            else:
+                # Default: JSONL
+                out_path = out_path.with_suffix("")  # keep .jsonl
+                with open(out_path, "w") as f:
+                    for rec in df.to_dict(orient="records"):
+                        if ORJSON_AVAILABLE:
+                            f.write(_dumps(rec).decode("utf-8") + "\n")
+                        else:
+                            f.write(_json.dumps(rec) + "\n")
+            logger.info(f"Wrote predictions: {out_path}")
+
+        # Summary
+        total = concat_probs.size
+        pos_strict = int((concat_probs >= thr_mcc).sum()) if total else 0
+        pos_recall = int((concat_probs >= thr_recall).sum()) if total else 0
+        pos_topk = (
+            int((concat_probs >= thr_topk).sum())
+            if (total and thr_topk is not None)
+            else None
+        )
+        logger.info(
+            "Mirror summary: N=%d | strict@MCC=%d (%.2f%%) | recallT=%d (%.2f%%)%s"
+            % (
+                total,
+                pos_strict,
+                100.0 * pos_strict / max(total, 1),
+                pos_recall,
+                100.0 * pos_recall / max(total, 1),
+                (
+                    f" | topk={pos_topk} ({100.0*pos_topk/max(total,1):.2f}%)"
+                    if pos_topk is not None
+                    else ""
+                ),
+            )
+        )
 
     def _get_param_combinations(self, grid: Dict[str, List]) -> List[Dict[str, Any]]:
         """Generate all combinations of hyperparameters."""
@@ -1521,6 +1741,25 @@ def main():
         help="Top-k percent (0..1) for auxiliary threshold on dev-suppressed",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--infer-all",
+        action="store_true",
+        help="After evaluation, mirror the entire dataset with predictions from the best model",
+    )
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default="auto",
+        choices=["auto", "E", "E+3"],
+        help="Which variant to use for infer-all. 'auto' picks the higher dev_mcc_suppressed",
+    )
+    parser.add_argument(
+        "--write-format",
+        type=str,
+        default="jsonl",
+        choices=["jsonl", "csv", "parquet"],
+        help="Output format for mirrored predictions",
+    )
 
     args = parser.parse_args()
 
@@ -1538,6 +1777,22 @@ def main():
     )
 
     evaluator.run_comprehensive_evaluation()
+
+    if args.infer_all:
+        # Decide which variant to use
+        pick_variant = args.variant
+        if pick_variant == "auto":
+            # choose by dev_mcc_suppressed
+            best = None
+            best_score = -1e9
+            for v, res in getattr(evaluator, "results", {}).items():
+                if isinstance(res, dict) and "dev_mcc_suppressed" in res:
+                    if res["dev_mcc_suppressed"] > best_score:
+                        best_score = res["dev_mcc_suppressed"]
+                        best = v
+            pick_variant = best or "E+3"
+        logger.info(f"Infer-all using variant: {pick_variant}")
+        evaluator.infer_full_dataset(pick_variant, write_format=args.write_format)
 
 
 if __name__ == "__main__":

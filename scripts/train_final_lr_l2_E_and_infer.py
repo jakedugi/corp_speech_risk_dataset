@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore")
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import matthews_corrcoef
+from sklearn.metrics import matthews_corrcoef, recall_score
 
 # Fast JSON loading with orjson optimization
 try:
@@ -73,10 +73,22 @@ EMBEDDING_FEATURE = "legal_bert_emb"  # 768-dimensional Legal-BERT embeddings
 class FinalModelTrainer:
     """Train final lr_l2_E model on all available data and infer on entire dataset."""
 
-    def __init__(self, data_dir: str, output_dir: str):
+    def __init__(
+        self,
+        data_dir: str,
+        output_dir: str,
+        target_recall: float = 0.10,
+        topk_percent: float | None = None,
+    ):
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Threshold tuning knobs
+        self.target_recall = float(target_recall)
+        self.topk_percent = float(topk_percent) if topk_percent is not None else None
+        # Storage for auxiliary thresholds computed from OOF
+        self.recall_threshold = None
 
         # Winning model configuration from deep run
         self.final_config = {
@@ -224,6 +236,42 @@ class FinalModelTrainer:
 
         return best_threshold, best_mcc
 
+    def find_threshold_for_recall(
+        self,
+        y_true: np.ndarray,
+        y_prob: np.ndarray,
+        target_recall: float,
+        n_steps: int = 401,
+    ) -> float:
+        """Smallest threshold achieving at least target_recall; closest otherwise."""
+        thresholds = np.linspace(0.0, 1.0, n_steps)
+        best_thr, best_gap, found = 0.5, 1e9, False
+        for thr in thresholds:
+            y_pred = (y_prob >= thr).astype(int)
+            rec = recall_score(y_true, y_pred, zero_division=0.0)
+            gap = abs(rec - target_recall)
+            if rec >= target_recall and gap < best_gap:
+                best_thr, best_gap, found = float(thr), gap, True
+        if not found:
+            # fallback: closest recall overall
+            for thr in thresholds:
+                y_pred = (y_prob >= thr).astype(int)
+                rec = recall_score(y_true, y_pred, zero_division=0.0)
+                gap = abs(rec - target_recall)
+                if gap < best_gap:
+                    best_thr, best_gap = float(thr), gap
+        return best_thr
+
+    def find_threshold_for_topk_percent(
+        self, y_prob: np.ndarray, topk_percent: float
+    ) -> float:
+        """Quantile cutoff to surface the top-k% most confident as positive."""
+        topk_percent = max(0.0, min(1.0, float(topk_percent)))
+        if topk_percent <= 0.0:
+            return 1.0
+        q = 1.0 - topk_percent
+        return float(np.quantile(y_prob, q))
+
     def train_final_model(self, X_train: np.ndarray, y_train: np.ndarray) -> None:
         """Train the final lr_l2_E model with sigmoid calibration."""
         logger.info("Training final lr_l2_E model...")
@@ -287,6 +335,61 @@ class FinalModelTrainer:
             f"  Positive predictions: {test_pred.sum()}/{len(y_oof)} ({100*test_pred.sum()/len(y_oof):.1f}%)"
         )
 
+        # --- Auxiliary thresholds for higher candidate yield ---
+        # Threshold to hit target recall on OOF (for reporting + optional production use)
+        try:
+            thr_recall = self.find_threshold_for_recall(
+                y_oof, test_proba, self.target_recall
+            )
+            self.recall_threshold = thr_recall
+            y_pred_recall = (test_proba >= thr_recall).astype(int)
+            tp_r = ((y_pred_recall == 1) & (y_oof == 1)).sum()
+            fp_r = ((y_pred_recall == 1) & (y_oof == 0)).sum()
+            tn_r = ((y_pred_recall == 0) & (y_oof == 0)).sum()
+            fn_r = ((y_pred_recall == 0) & (y_oof == 1)).sum()
+            precision_r = tp_r / (tp_r + fp_r) if (tp_r + fp_r) > 0 else 0.0
+            recall_r = tp_r / (tp_r + fn_r) if (tp_r + fn_r) > 0 else 0.0
+            mcc_r = (
+                matthews_corrcoef(y_oof, y_pred_recall)
+                if len(np.unique(y_pred_recall)) > 1
+                else 0.0
+            )
+            logger.info(
+                f"  Aux threshold (recall@{self.target_recall:.2f}) on OOF: thr={thr_recall:.4f} | P={precision_r:.4f}, R={recall_r:.4f}, MCC={mcc_r:.4f} | PosRate={(y_pred_recall.mean()*100):.2f}%"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to compute recall-target threshold: {e}")
+            thr_recall = None
+
+        # If top-k% requested, estimate top-k threshold from OOF for logging
+        thr_topk = None
+        if self.topk_percent is not None:
+            try:
+                thr_topk = self.find_threshold_for_topk_percent(
+                    test_proba, self.topk_percent
+                )
+                y_pred_topk = (test_proba >= thr_topk).astype(int)
+                logger.info(
+                    f"  Aux threshold (top-k={self.topk_percent*100:.2f}%) on OOF: thr={thr_topk:.4f} | PosRate={(y_pred_topk.mean()*100):.2f}%"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to compute top-k threshold: {e}")
+
+        # Augment results
+        results.update(
+            {
+                "aux_thresholds": {
+                    "mcc": self.optimal_threshold,
+                    "recall_target": (
+                        float(thr_recall) if thr_recall is not None else None
+                    ),
+                    "topk_percent": float(thr_topk) if thr_topk is not None else None,
+                    "target_recall": self.target_recall,
+                    "topk": self.topk_percent,
+                }
+            }
+        )
+
         return results
 
     def infer_on_entire_dataset(self) -> pd.DataFrame:
@@ -331,18 +434,48 @@ class FinalModelTrainer:
         # Get predictions
         logger.info("Generating predictions...")
         full_proba = self.calibrated_model.predict_proba(X_full)[:, 1]
-        full_pred = (full_proba >= self.optimal_threshold).astype(int)
+        # Strict (MCC-optimal) threshold
+        full_pred_strict = (full_proba >= self.optimal_threshold).astype(int)
+
+        # Recall-target threshold (computed on OOF); if absent, fall back to strict
+        thr_recall = self.recall_threshold
+        full_pred_recall = None
+        if thr_recall is not None:
+            full_pred_recall = (full_proba >= thr_recall).astype(int)
+
+        # Top-k% threshold computed on the full dataset distribution
+        thr_topk = None
+        full_pred_topk = None
+        if self.topk_percent is not None:
+            thr_topk = self.find_threshold_for_topk_percent(
+                full_proba, self.topk_percent
+            )
+            full_pred_topk = (full_proba >= thr_topk).astype(int)
 
         # Add predictions to dataframe
         full_dataset["lr_l2_E_probability"] = full_proba
-        full_dataset["lr_l2_E_prediction"] = full_pred
-        full_dataset["lr_l2_E_threshold"] = self.optimal_threshold
+        full_dataset["lr_l2_E_prediction_strict"] = full_pred_strict
+        full_dataset["lr_l2_E_threshold_strict"] = self.optimal_threshold
+        if full_pred_recall is not None:
+            full_dataset["lr_l2_E_prediction_recallT"] = full_pred_recall
+            full_dataset["lr_l2_E_threshold_recallT"] = thr_recall
+        if full_pred_topk is not None:
+            full_dataset["lr_l2_E_prediction_topk"] = full_pred_topk
+            full_dataset["lr_l2_E_threshold_topk"] = thr_topk
         full_dataset["model_config"] = f"C={self.final_config['C']}_sigmoid_calibrated"
 
-        logger.info(f"Predictions generated:")
+        logger.info("Predictions generated:")
         logger.info(
-            f"  Positive predictions: {full_pred.sum()}/{len(full_pred)} ({100*full_pred.sum()/len(full_pred):.1f}%)"
+            f"  Strict@MCC: {full_pred_strict.sum()}/{len(full_pred_strict)} ({100*full_pred_strict.mean():.1f}%)"
         )
+        if full_pred_recall is not None:
+            logger.info(
+                f"  Recall@{self.target_recall:.2f}: {full_pred_recall.sum()}/{len(full_pred_recall)} ({100*full_pred_recall.mean():.1f}%)"
+            )
+        if full_pred_topk is not None:
+            logger.info(
+                f"  Top-k@{self.topk_percent*100:.2f}%: {full_pred_topk.sum()}/{len(full_pred_topk)} ({100*full_pred_topk.mean():.1f}%)"
+            )
         logger.info(f"  Mean probability: {full_proba.mean():.4f}")
         logger.info(
             f"  Probability range: [{full_proba.min():.4f}, {full_proba.max():.4f}]"
@@ -388,6 +521,15 @@ class FinalModelTrainer:
             "configuration": self.final_config,
             "calibration_method": self.calibration_method,
             "optimal_threshold": self.optimal_threshold,
+            "aux_thresholds": {
+                "recall_target": (
+                    float(self.recall_threshold)
+                    if self.recall_threshold is not None
+                    else None
+                ),
+                "target_recall": self.target_recall,
+                "topk_percent": self.topk_percent,
+            },
             "oof_test_results": oof_results,
             "training_data_size": len(
                 dataset_with_predictions[
@@ -412,11 +554,59 @@ class FinalModelTrainer:
         # Save summary statistics
         summary = {
             "total_samples": len(dataset_with_predictions),
-            "positive_predictions": int(
-                dataset_with_predictions["lr_l2_E_prediction"].sum()
+            "positive_predictions": (
+                int(
+                    dataset_with_predictions.get(
+                        "lr_l2_E_prediction", pd.Series(dtype=int)
+                    ).sum()
+                )
+                if "lr_l2_E_prediction" in dataset_with_predictions.columns
+                else None
             ),
-            "positive_rate": float(
-                dataset_with_predictions["lr_l2_E_prediction"].mean()
+            "positive_rate": (
+                float(
+                    dataset_with_predictions.get(
+                        "lr_l2_E_prediction", pd.Series(dtype=float)
+                    ).mean()
+                )
+                if "lr_l2_E_prediction" in dataset_with_predictions.columns
+                else None
+            ),
+            "positive_predictions_recallT": (
+                int(
+                    dataset_with_predictions.get(
+                        "lr_l2_E_prediction_recallT", pd.Series(dtype=int)
+                    ).sum()
+                )
+                if "lr_l2_E_prediction_recallT" in dataset_with_predictions.columns
+                else None
+            ),
+            "positive_rate_recallT": (
+                float(
+                    dataset_with_predictions.get(
+                        "lr_l2_E_prediction_recallT", pd.Series(dtype=float)
+                    ).mean()
+                )
+                if "lr_l2_E_prediction_recallT" in dataset_with_predictions.columns
+                else None
+            ),
+            "positive_predictions_topk": (
+                int(
+                    dataset_with_predictions.get(
+                        "lr_l2_E_prediction_topk", pd.Series(dtype=int)
+                    ).sum()
+                )
+                if "lr_l2_E_prediction_topk" in dataset_with_predictions.columns
+                else None
+            ),
+            "positive_rate_topk": (
+                float(
+                    dataset_with_predictions.get(
+                        "lr_l2_E_prediction_topk", pd.Series(dtype=float)
+                    ).mean()
+                )
+                if "lr_l2_E_prediction_topk" in dataset_with_predictions.columns
+                else None
             ),
             "mean_probability": float(
                 dataset_with_predictions["lr_l2_E_probability"].mean()
@@ -493,11 +683,28 @@ def main():
     parser.add_argument(
         "--output-dir", required=True, help="Output directory for predictions"
     )
+    parser.add_argument(
+        "--target-recall",
+        type=float,
+        default=0.10,
+        help="Target recall for auxiliary threshold (on OOF)",
+    )
+    parser.add_argument(
+        "--topk-percent",
+        type=float,
+        default=None,
+        help="Top-k fraction (0..1) for auxiliary threshold (on full dataset)",
+    )
 
     args = parser.parse_args()
 
     # Create trainer and run pipeline
-    trainer = FinalModelTrainer(data_dir=args.data_dir, output_dir=args.output_dir)
+    trainer = FinalModelTrainer(
+        data_dir=args.data_dir,
+        output_dir=args.output_dir,
+        target_recall=args.target_recall,
+        topk_percent=args.topk_percent,
+    )
 
     trainer.run_final_pipeline()
 

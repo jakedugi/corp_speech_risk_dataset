@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+\centering
+\caption{Binary sensitivity analysis: coefficients with and without court fixed effects}
+\label{tab:binary_court_sensitivity}
+\begin{tabular}{lrrrr}
+\toprule
+Feature & OR (Main) & OR (+ Court FE) & p (Main) & p (+ FE) \\
+\midrule
+lex\_deception\_norm & 401.77 & 13323997.66 & 0.999 & 1.000 \\
+lex\_deception\_present & 0.00 & 0.00 & 0.998 & 1.000 \\
+lex\_guarantee\_norm & 0.00 & 0.00 & 0.995 & 1.000 \\
+lex\_guarantee\_present & 6249693452406.80 & 96355615475923184.00 & 0.996 & 1.000 \\
+lex\_hedges\_norm & 0.73 & 0.70 & 0.559 & 0.591 \\
+lex\_hedges\_present & 1.65 & 1.41 & 0.341 & 0.548 \\
+lex\_pricing\_claims\_present & 1.14 & 0.72 & 0.763 & 0.531 \\
+lex\_superlatives\_present & 1.02 & 1.81 & 0.967 & 0.362 \\
+ling\_high\_certainty & 0.51 & 1.34 & 0.568 & 0.828 \\
+seq\_discourse\_additive & 0.00 & 0.00 & 0.997 & 1.000 \\
+\midrule
+Courts included & \multicolumn{4}{l}{4} \\
+Pseudo-R² (Main) & \multicolumn{4}{l}{0.265} \\
+Pseudo-R² (+ FE) & \multicolumn{4}{l}{0.328} \\
+\bottomrule
+\end{tabular}
+\end{table}

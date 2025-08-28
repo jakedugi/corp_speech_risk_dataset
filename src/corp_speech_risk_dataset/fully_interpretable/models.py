@@ -16,6 +16,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.svm import LinearSVC
 
 try:
     from mord import OrdinalRidge
@@ -367,6 +368,211 @@ class POLR(BaseEstimator, ClassifierMixin):
         return self.coef_.ravel()
 
 
+# =============================================================
+# Binary Logistic Regression variants (interpretable)
+# =============================================================
+
+
+class LogisticRegressionL2(BaseEstimator, ClassifierMixin):
+    """Binary Logistic Regression with L2 penalty.
+
+    Fully interpretable via coefficients. Supports sample_weight.
+    """
+
+    def __init__(
+        self,
+        C: float = 1.0,
+        solver: str = "lbfgs",
+        max_iter: int = 200,
+        tol: float = 1e-4,
+        random_state: Optional[int] = None,
+    ):
+        self.C = C
+        self.solver = solver
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+
+    def fit(self, X, y, sample_weight=None):
+        clf = LogisticRegression(
+            penalty="l2",
+            C=self.C,
+            solver=self.solver,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            random_state=self.random_state,
+        )
+        clf.fit(X, y, sample_weight=sample_weight)
+        self.model_ = clf
+        self.coef_ = clf.coef_
+        self.intercept_ = clf.intercept_
+        self.classes_ = clf.classes_
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self)
+        return self.model_.predict(X)
+
+    def predict_proba(self, X):
+        check_is_fitted(self)
+        return self.model_.predict_proba(X)
+
+    def get_feature_importance(self, feature_names=None):
+        check_is_fitted(self)
+        return self.coef_.ravel()
+
+
+class LogisticRegressionL1(BaseEstimator, ClassifierMixin):
+    """Binary Logistic Regression with L1 penalty (sparse, interpretable)."""
+
+    def __init__(
+        self,
+        C: float = 1.0,
+        solver: str = "liblinear",
+        max_iter: int = 200,
+        tol: float = 1e-4,
+        random_state: Optional[int] = None,
+    ):
+        self.C = C
+        self.solver = solver
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+
+    def fit(self, X, y, sample_weight=None):
+        clf = LogisticRegression(
+            penalty="l1",
+            C=self.C,
+            solver=self.solver,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            random_state=self.random_state,
+        )
+        clf.fit(X, y, sample_weight=sample_weight)
+        self.model_ = clf
+        self.coef_ = clf.coef_
+        self.intercept_ = clf.intercept_
+        self.classes_ = clf.classes_
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self)
+        return self.model_.predict(X)
+
+    def predict_proba(self, X):
+        check_is_fitted(self)
+        return self.model_.predict_proba(X)
+
+    def get_feature_importance(self, feature_names=None):
+        check_is_fitted(self)
+        return self.coef_.ravel()
+
+
+class LogisticRegressionElasticNet(BaseEstimator, ClassifierMixin):
+    """Binary Logistic Regression with ElasticNet penalty (L1/L2 mix)."""
+
+    def __init__(
+        self,
+        C: float = 1.0,
+        l1_ratio: float = 0.5,
+        solver: str = "saga",
+        max_iter: int = 500,
+        tol: float = 1e-4,
+        random_state: Optional[int] = None,
+    ):
+        self.C = C
+        self.l1_ratio = l1_ratio
+        self.solver = solver
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+
+    def fit(self, X, y, sample_weight=None):
+        clf = LogisticRegression(
+            penalty="elasticnet",
+            C=self.C,
+            l1_ratio=self.l1_ratio,
+            solver=self.solver,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            random_state=self.random_state,
+        )
+        clf.fit(X, y, sample_weight=sample_weight)
+        self.model_ = clf
+        self.coef_ = clf.coef_
+        self.intercept_ = clf.intercept_
+        self.classes_ = clf.classes_
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self)
+        return self.model_.predict(X)
+
+    def predict_proba(self, X):
+        check_is_fitted(self)
+        return self.model_.predict_proba(X)
+
+    def get_feature_importance(self, feature_names=None):
+        check_is_fitted(self)
+        return self.coef_.ravel()
+
+
+class LinearSVMClassifier(BaseEstimator, ClassifierMixin):
+    """Linear SVM (LinearSVC) wrapper with sample_weight support.
+
+    Notes:
+    - LinearSVC does not natively provide predict_proba; downstream calibration
+      should use decision_function outputs.
+    - This wrapper exposes decision_function and standard predict methods.
+    """
+
+    def __init__(
+        self,
+        C: float = 1.0,
+        loss: str = "squared_hinge",
+        tol: float = 1e-4,
+        max_iter: int = 5000,
+        random_state: Optional[int] = None,
+    ):
+        self.C = C
+        self.loss = loss
+        self.tol = tol
+        self.max_iter = max_iter
+        self.random_state = random_state
+
+    def fit(self, X, y, sample_weight=None):
+        X, y = check_X_y(X, y)
+        self.model_ = LinearSVC(
+            C=self.C,
+            loss=self.loss,
+            tol=self.tol,
+            max_iter=self.max_iter,
+            random_state=self.random_state,
+        )
+        self.model_.fit(X, y, sample_weight=sample_weight)
+        self.classes_ = np.unique(y)
+        # LinearSVC exposes coef_ and intercept_ after fit
+        self.coef_ = getattr(self.model_, "coef_", None)
+        self.intercept_ = getattr(self.model_, "intercept_", None)
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self)
+        X = check_array(X)
+        return self.model_.predict(X)
+
+    def decision_function(self, X):
+        check_is_fitted(self)
+        X = check_array(X)
+        return self.model_.decision_function(X)
+
+    def get_feature_importance(self, feature_names=None):
+        check_is_fitted(self)
+        if self.coef_ is None:
+            return np.zeros((X.shape[1],), dtype=float)  # type: ignore[name-defined]
+        return self.coef_.ravel()
+
+
 # Keep POLAR for backward compatibility but mark as deprecated
 class POLAR(POLR):
     """DEPRECATED: Use POLR instead. This is kept for backward compatibility."""
@@ -510,5 +716,10 @@ class TransparentEnsemble(BaseEstimator, ClassifierMixin):
 
 
 # Aliases for backwards compatibility
-POLR = ProportionalOddsLogisticRegression
+# Note: POLR class (line 283) already supports sample_weight, ProportionalOddsLogisticRegression doesn't
+# Using the real POLR class that supports sample weights
 MLR = MultinomialLogisticRegression
+LR_L2 = LogisticRegressionL2
+LR_L1 = LogisticRegressionL1
+LR_ElasticNet = LogisticRegressionElasticNet
+SVM_Linear = LinearSVMClassifier

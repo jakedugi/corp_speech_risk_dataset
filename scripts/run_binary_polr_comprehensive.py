@@ -1,25 +1,18 @@
 #!/usr/bin/env python3
-"""Comprehensive POLR Pipeline Runner
+"""Comprehensive Binary POLR Pipeline Runner
 
-This script provides a complete interface for running the POLR pipeline in different modes
-while ensuring all weights and labels are inherited from the authoritative dataset.
+This script provides a complete interface for running the binary POLR pipeline in different modes
+while ensuring all weights and labels are inherited from the binary dataset.
 
-CRITICAL: This script NEVER recomputes weights, tertiles, or labels - everything is inherited
-from the pre-computed authoritative data in data/final_stratified_kfold_splits_authoritative/
-
-Modes:
-1. cv-only: Run cross-validation for hyperparameter search only
-2. final-only: Train final model (requires existing CV results)
-3. full: Complete pipeline (CV + final training + evaluation)
-4. validate: Validate data integrity and weight inheritance
-5. assets: Generate paper assets from existing results
+CRITICAL: This script NEVER recomputes weights or labels - everything is inherited
+from the pre-computed binary data in data/final_stratified_kfold_splits_binary_quote_balanced/
 
 Features:
+- Binary classification (2 classes: low/high risk)
+- Exactly 10 features from feature importance analysis
+- 4-fold CV (fold_0,1,2,3) + fold_4 final training
 - Built-in validation and confirmation steps
-- Flexible hyperparameter configuration
-- Comprehensive logging and progress reporting
-- Optional figure and table generation
-- Sanity checks and data integrity validation
+- Support for both POLR and MLR models
 """
 
 import sys
@@ -27,27 +20,27 @@ import json
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from loguru import logger
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from corp_speech_risk_dataset.fully_interpretable.polar_pipeline import (
-    POLARConfig,
-    train_polar_cv,
-    train_final_polar_model,
+from corp_speech_risk_dataset.fully_interpretable.binary_polar_pipeline import (
+    BinaryPOLARConfig,
+    train_binary_polar_cv,
+    train_final_binary_polar_model,
 )
 
 
 @dataclass
-class ComprehensiveConfig:
-    """Configuration for comprehensive POLR pipeline runner."""
+class BinaryComprehensiveConfig:
+    """Configuration for comprehensive binary POLR pipeline runner."""
 
-    # Data paths (FIXED - always use authoritative data)
-    kfold_dir: str = "data/final_stratified_kfold_splits_authoritative"
-    output_dir: str = "runs/polr_comprehensive"
+    # Data paths (FIXED - always use binary data)
+    kfold_dir: str = "data/final_stratified_kfold_splits_binary_quote_balanced"
+    output_dir: str = "runs/binary_polr_comprehensive"
 
     # Mode selection
     mode: str = "full"  # cv-only, final-only, full, validate, assets
@@ -61,8 +54,6 @@ class ComprehensiveConfig:
 
     # Pipeline options
     generate_assets: bool = True
-    generate_figures: bool = True
-    generate_tables: bool = True
     skip_validation: bool = False
     require_confirmation: bool = True
 
@@ -70,25 +61,39 @@ class ComprehensiveConfig:
     seed: int = 42
     n_jobs: int = -1
 
-    # Safety options
-    force_authoritative: bool = True  # Always use authoritative data
-    validate_inheritance: bool = True  # Validate weight inheritance
-
     def __post_init__(self):
         """Validate configuration and set hyperparameter grid."""
         if self.hyperparameter_preset == "fast":
-            self.custom_hyperparameters = {
-                "C": [1.0],
-                "solver": ["lbfgs"],
-                "max_iter": [200],
-                "tol": [1e-4],
-            }
+            if self.model_type == "lr_elasticnet":
+                self.custom_hyperparameters = {
+                    "C": [1.0],
+                    "l1_ratio": [0.5],
+                    "solver": ["saga"],
+                    "max_iter": [200],
+                }
+            elif self.model_type == "lr_l1":
+                self.custom_hyperparameters = {
+                    "C": [1.0],
+                    "solver": ["liblinear"],
+                    "max_iter": [200],
+                }
+            elif self.model_type == "svm_linear":
+                self.custom_hyperparameters = {
+                    "C": [1.0],
+                    "loss": ["squared_hinge"],
+                    "max_iter": [1000],
+                }
+            else:
+                self.custom_hyperparameters = {
+                    "C": [1.0],
+                    "solver": ["lbfgs"],
+                    "max_iter": [200],
+                }
         elif self.hyperparameter_preset == "thorough":
             self.custom_hyperparameters = {
                 "C": [0.001, 0.01, 0.1, 1.0, 10, 100],
                 "solver": ["lbfgs", "newton-cg"],
                 "max_iter": [200, 500, 1000],
-                "tol": [1e-4, 1e-5],
             }
         elif self.hyperparameter_preset == "default":
             if self.model_type == "mlr":
@@ -99,26 +104,53 @@ class ComprehensiveConfig:
                     "tol": [1e-4],
                     "class_weight": ["balanced", None],
                 }
+            elif self.model_type == "lr_l2":
+                self.custom_hyperparameters = {
+                    "C": [0.01, 0.1, 1.0, 10.0, 100.0],
+                    "solver": ["lbfgs"],
+                    "max_iter": [200],
+                    "tol": [1e-4],
+                }
+            elif self.model_type == "lr_l1":
+                self.custom_hyperparameters = {
+                    "C": [0.01, 0.1, 1.0, 10.0, 100.0],
+                    "solver": ["liblinear"],
+                    "max_iter": [200],
+                    "tol": [1e-4],
+                }
+            elif self.model_type == "lr_elasticnet":
+                self.custom_hyperparameters = {
+                    "C": [0.01, 0.1, 1.0, 10.0],
+                    "l1_ratio": [0.1, 0.3, 0.5, 0.7, 0.9],
+                    "solver": ["saga"],
+                    "max_iter": [500],
+                    "tol": [1e-4],
+                }
+            elif self.model_type == "svm_linear":
+                self.custom_hyperparameters = {
+                    "C": [0.03, 0.1, 0.3, 1.0, 3.0],
+                    "loss": ["squared_hinge"],
+                    "max_iter": [5000],
+                    "tol": [1e-4],
+                }
             else:
                 self.custom_hyperparameters = {
                     "C": [0.01, 1, 100],
                     "solver": ["lbfgs"],
                     "max_iter": [200],
-                    "tol": [1e-4],
                 }
-        # custom preset uses provided custom_hyperparameters
 
 
-class ValidationError(Exception):
-    """Raised when validation checks fail."""
+class BinaryValidationError(Exception):
+    """Raised when binary validation checks fail."""
 
     pass
 
 
-class PipelineRunner:
-    """Comprehensive POLR pipeline runner with validation and safety checks."""
+class BinaryPipelineRunner:
+    """Comprehensive binary POLR pipeline runner with validation and safety checks."""
 
-    def __init__(self, config: ComprehensiveConfig):
+    def __init__(self, config: BinaryComprehensiveConfig):
         self.config = config
         self.setup_logging()
         self.validate_config()
@@ -140,7 +172,7 @@ class PipelineRunner:
 
         logger.add(
             output_dir
-            / f"polr_comprehensive_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+            / f"binary_polr_comprehensive_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
             level="DEBUG",
             rotation="100 MB",
             retention="7 days",
@@ -148,13 +180,13 @@ class PipelineRunner:
 
     def validate_config(self):
         """Validate configuration and paths."""
-        logger.info("🔍 Validating configuration...")
+        logger.info("🔍 Validating binary configuration...")
 
-        # Check authoritative data directory
+        # Check binary data directory
         kfold_path = Path(self.config.kfold_dir)
         if not kfold_path.exists():
-            raise ValidationError(
-                f"Authoritative data directory not found: {kfold_path}"
+            raise BinaryValidationError(
+                f"Binary data directory not found: {kfold_path}"
             )
 
         # Check required files
@@ -163,27 +195,32 @@ class PipelineRunner:
         for file_name in required_files:
             file_path = kfold_path / file_name
             if not file_path.exists():
-                raise ValidationError(f"Required metadata file not found: {file_path}")
+                raise BinaryValidationError(
+                    f"Required metadata file not found: {file_path}"
+                )
 
-        # Check fold directories
-        required_folds = ["fold_0", "fold_1", "fold_2", "fold_3", "oof_test"]
+        # Check fold directories (0,1,2,3,4 + oof_test)
+        required_folds = ["fold_0", "fold_1", "fold_2", "fold_3", "fold_4", "oof_test"]
         for fold_name in required_folds:
             fold_path = kfold_path / fold_name
             if not fold_path.exists():
-                raise ValidationError(f"Required fold directory not found: {fold_path}")
+                raise BinaryValidationError(
+                    f"Required fold directory not found: {fold_path}"
+                )
 
-        logger.info("✅ Configuration validation passed")
+        logger.info("✅ Binary configuration validation passed")
 
-    def validate_data_integrity(self) -> Dict[str, Any]:
-        """Validate data integrity and weight inheritance."""
-        logger.info("🔍 Validating data integrity and weight inheritance...")
+    def validate_binary_data_integrity(self) -> Dict[str, Any]:
+        """Validate binary data integrity and weight inheritance."""
+        logger.info("🔍 Validating binary data integrity and weight inheritance...")
 
         kfold_path = Path(self.config.kfold_dir)
-        validation_results: Dict[str, Any] = {
+        validation_results = {
             "metadata_valid": False,
             "weights_inherited": False,
             "labels_inherited": False,
             "fold_consistency": False,
+            "binary_classification": False,
             "issues": [],
         }
 
@@ -199,12 +236,20 @@ class PipelineRunner:
                 if key not in metadata:
                     validation_results["issues"].append(f"Missing metadata key: {key}")
 
-            # Check binning metadata
+            # Check binary classification type
+            if metadata.get("binning", {}).get("classification_type") == "binary":
+                validation_results["binary_classification"] = True
+            else:
+                validation_results["issues"].append(
+                    "Metadata does not indicate binary classification"
+                )
+
+            # Check binning metadata for 5 folds
             if "binning" in metadata:
                 binning = metadata["binning"]
                 if "fold_edges" in binning:
                     fold_edges = binning["fold_edges"]
-                    expected_folds = ["fold_0", "fold_1", "fold_2", "fold_3"]
+                    expected_folds = ["fold_0", "fold_1", "fold_2", "fold_3", "fold_4"]
 
                     for fold in expected_folds:
                         if fold not in fold_edges:
@@ -213,18 +258,22 @@ class PipelineRunner:
                             )
                         else:
                             edges = fold_edges[fold]
-                            if not isinstance(edges, list) or len(edges) != 2:
+                            # Binary should have single edge
+                            if not isinstance(edges, list) or len(edges) != 1:
                                 validation_results["issues"].append(
-                                    f"Invalid edges for {fold}: {edges}"
+                                    f"Invalid binary edges for {fold}: {edges}"
                                 )
 
-                    if not validation_results["issues"]:
+                    if not any(
+                        "Missing fold edges" in issue
+                        for issue in validation_results["issues"]
+                    ):
                         validation_results["labels_inherited"] = True
 
-            # Check weights metadata
+            # Check weights metadata for 5 folds
             if "weights" in metadata:
                 weights = metadata["weights"]
-                expected_folds = ["fold_0", "fold_1", "fold_2", "fold_3"]
+                expected_folds = ["fold_0", "fold_1", "fold_2", "fold_3", "fold_4"]
 
                 for fold in expected_folds:
                     if fold not in weights:
@@ -237,6 +286,13 @@ class PipelineRunner:
                             validation_results["issues"].append(
                                 f"Missing class_weights for {fold}"
                             )
+                        else:
+                            # Check binary class weights (should have keys "0" and "1")
+                            class_weights = fold_weights["class_weights"]
+                            if not all(k in class_weights for k in ["0", "1"]):
+                                validation_results["issues"].append(
+                                    f"Missing binary class weights for {fold}"
+                                )
 
                 if not any(
                     "Missing weights" in issue or "Missing class_weights" in issue
@@ -247,10 +303,10 @@ class PipelineRunner:
             validation_results["metadata_valid"] = not validation_results["issues"]
 
             # Check sample data for precomputed fields
-            logger.info("🔍 Checking sample data for precomputed fields...")
+            logger.info("🔍 Checking sample binary data for precomputed fields...")
             sample_checks = []
 
-            for fold_name in ["fold_0", "fold_1", "fold_2", "fold_3"]:
+            for fold_name in ["fold_0", "fold_1", "fold_2", "fold_3", "fold_4"]:
                 fold_dir = kfold_path / fold_name
                 train_file = fold_dir / "train.jsonl"
 
@@ -272,17 +328,25 @@ class PipelineRunner:
                             if field not in sample_row:
                                 missing_fields.append(field)
 
+                        # Check binary target values
+                        if "outcome_bin" in sample_row:
+                            outcome_value = sample_row["outcome_bin"]
+                            if outcome_value not in [0, 1]:
+                                validation_results["issues"].append(
+                                    f"{fold_name}: outcome_bin has non-binary value {outcome_value}"
+                                )
+
                         if missing_fields:
                             sample_checks.append(
                                 f"{fold_name}: missing {missing_fields}"
                             )
                         else:
                             sample_checks.append(
-                                f"{fold_name}: ✅ all required fields present"
+                                f"{fold_name}: ✅ all required binary fields present"
                             )
 
             if sample_checks:
-                logger.info("Sample data checks:")
+                logger.info("Binary data sample checks:")
                 for check in sample_checks:
                     if "✅" in check:
                         logger.info(f"  {check}")
@@ -298,9 +362,14 @@ class PipelineRunner:
                     if first_line:
                         oof_sample = json.loads(first_line)
                         if "outcome_bin" in oof_sample:
-                            logger.info(
-                                "✅ OOF test set has precomputed outcome_bin labels"
-                            )
+                            if oof_sample["outcome_bin"] in [0, 1]:
+                                logger.info(
+                                    "✅ OOF test set has binary outcome_bin labels"
+                                )
+                            else:
+                                validation_results["issues"].append(
+                                    f"OOF test set has non-binary outcome_bin value: {oof_sample['outcome_bin']}"
+                                )
                         else:
                             validation_results["issues"].append(
                                 "OOF test set missing outcome_bin labels"
@@ -313,15 +382,17 @@ class PipelineRunner:
             # Summary
             if not validation_results["issues"]:
                 logger.info(
-                    "✅ Data integrity validation passed - all weights and labels properly inherited"
+                    "✅ Binary data integrity validation passed - all weights and labels properly inherited"
                 )
             else:
-                logger.error("❌ Data integrity validation failed:")
+                logger.error("❌ Binary data integrity validation failed:")
                 for issue in validation_results["issues"]:
                     logger.error(f"  - {issue}")
 
         except Exception as e:
-            logger.error(f"❌ Data integrity validation failed with exception: {e}")
+            logger.error(
+                f"❌ Binary data integrity validation failed with exception: {e}"
+            )
             validation_results["issues"].append(f"Validation exception: {str(e)}")
 
         return validation_results
@@ -335,9 +406,9 @@ class PipelineRunner:
         response = input("Continue? [y/N]: ").lower().strip()
         return response in ["y", "yes"]
 
-    def create_polar_config(self) -> POLARConfig:
-        """Create POLAR configuration from comprehensive config."""
-        return POLARConfig(
+    def create_binary_polar_config(self) -> BinaryPOLARConfig:
+        """Create binary POLAR configuration from comprehensive config."""
+        return BinaryPOLARConfig(
             kfold_dir=self.config.kfold_dir,
             output_dir=self.config.output_dir,
             model_type=self.config.model_type,
@@ -348,82 +419,83 @@ class PipelineRunner:
 
     def run_cv_mode(self) -> Dict[str, Any]:
         """Run cross-validation only mode."""
-        logger.info("🔄 Starting CV-only mode...")
+        logger.info("🔄 Starting binary CV-only mode...")
 
         if not self.get_user_confirmation(
-            "This will run hyperparameter search using folds 0, 1, 2"
+            "This will run binary hyperparameter search using folds 0, 1, 2, 3"
         ):
-            logger.info("❌ CV mode cancelled by user")
+            logger.info("❌ Binary CV mode cancelled by user")
             return {}
 
-        polar_config = self.create_polar_config()
+        binary_config = self.create_binary_polar_config()
 
-        logger.info("🚀 Starting cross-validation...")
-        cv_results = train_polar_cv(polar_config)
+        logger.info("🚀 Starting binary cross-validation...")
+        cv_results = train_binary_polar_cv(binary_config)
 
-        logger.info("✅ CV-only mode completed")
+        logger.info("✅ Binary CV-only mode completed")
         return cv_results
 
     def run_final_mode(self) -> Dict[str, Any]:
-        """Run final model training only mode."""
-        logger.info("🎯 Starting final-only mode...")
+        """Run final binary model training only mode."""
+        logger.info("🎯 Starting binary final-only mode...")
 
-        # Check for existing CV results
+        # Check for existing CV results; if missing, proceed with defaults
         cv_results_path = Path(self.config.output_dir) / "cv_results.json"
         if not cv_results_path.exists():
-            raise ValidationError(
-                f"CV results not found at {cv_results_path}. Run CV first or use 'full' mode."
+            logger.warning(
+                f"CV results not found at {cv_results_path}. Proceeding with default hyperparameters for final training."
             )
-
-        with open(cv_results_path, "r") as f:
-            cv_results = json.load(f)
+            cv_results = {"folds": {}}
+        else:
+            with open(cv_results_path, "r") as f:
+                cv_results = json.load(f)
 
         if not self.get_user_confirmation(
-            "This will train final model on fold 3 and evaluate on OOF test"
+            "This will train final binary model on fold_4 and evaluate on OOF test"
         ):
-            logger.info("❌ Final mode cancelled by user")
+            logger.info("❌ Binary final mode cancelled by user")
             return {}
 
-        polar_config = self.create_polar_config()
+        binary_config = self.create_binary_polar_config()
 
-        logger.info("🚀 Starting final model training...")
-        final_results = train_final_polar_model(polar_config, cv_results)
+        logger.info("🚀 Starting final binary model training...")
+        final_results = train_final_binary_polar_model(binary_config, cv_results)
 
-        logger.info("✅ Final-only mode completed")
+        logger.info("✅ Binary final-only mode completed")
         return final_results
 
     def run_full_mode(self) -> Dict[str, Any]:
-        """Run complete pipeline mode."""
-        logger.info("🎭 Starting full pipeline mode...")
+        """Run complete binary pipeline mode."""
+        logger.info("🎭 Starting binary full pipeline mode...")
 
         if not self.get_user_confirmation(
-            "This will run complete pipeline: CV + final training + evaluation"
+            "This will run complete binary pipeline: 4-fold CV + final training on fold_4 + OOF evaluation"
         ):
-            logger.info("❌ Full mode cancelled by user")
+            logger.info("❌ Binary full mode cancelled by user")
             return {}
 
-        polar_config = self.create_polar_config()
+        binary_config = self.create_binary_polar_config()
 
         # Run CV
-        logger.info("🚀 Phase 1: Cross-validation...")
-        cv_results = train_polar_cv(polar_config)
+        logger.info("🚀 Phase 1: Binary cross-validation...")
+        cv_results = train_binary_polar_cv(binary_config)
 
         # Run final training
-        logger.info("🚀 Phase 2: Final model training...")
-        final_results = train_final_polar_model(polar_config, cv_results)
+        logger.info("🚀 Phase 2: Final binary model training...")
+        final_results = train_final_binary_polar_model(binary_config, cv_results)
 
-        logger.info("✅ Full pipeline completed")
+        logger.info("✅ Binary full pipeline completed")
         return {"cv_results": cv_results, "final_results": final_results}
 
     def run_validate_mode(self) -> Dict[str, Any]:
-        """Run validation-only mode."""
-        logger.info("🔍 Starting validation-only mode...")
+        """Run binary validation-only mode."""
+        logger.info("🔍 Starting binary validation-only mode...")
 
-        validation_results = self.validate_data_integrity()
+        validation_results = self.validate_binary_data_integrity()
 
         # Print detailed validation report
         logger.info("\n" + "=" * 80)
-        logger.info("VALIDATION REPORT")
+        logger.info("BINARY VALIDATION REPORT")
         logger.info("=" * 80)
 
         logger.info(
@@ -438,141 +510,35 @@ class PipelineRunner:
         logger.info(
             f"Fold consistency: {'✅' if validation_results['fold_consistency'] else '❌'}"
         )
+        logger.info(
+            f"Binary classification: {'✅' if validation_results['binary_classification'] else '❌'}"
+        )
 
         if validation_results["issues"]:
             logger.info("\nIssues found:")
             for issue in validation_results["issues"]:
                 logger.warning(f"  - {issue}")
         else:
-            logger.info("\n🎉 All validation checks passed!")
+            logger.info("\n🎉 All binary validation checks passed!")
 
         logger.info("=" * 80)
 
         return validation_results
 
-    def run_assets_mode(self) -> Dict[str, Any]:
-        """Generate paper assets from existing results."""
-        logger.info("📊 Starting assets generation mode...")
-
-        output_dir = Path(self.config.output_dir)
-
-        # Check for required files
-        required_files = {
-            "cv_results": output_dir / "cv_results.json",
-            "oof_predictions": output_dir / "final_oof_predictions.jsonl",
-        }
-
-        missing_files = []
-        for file_type, file_path in required_files.items():
-            if not file_path.exists():
-                missing_files.append(f"{file_type}: {file_path}")
-
-        if missing_files:
-            logger.error("❌ Required files missing for asset generation:")
-            for missing in missing_files:
-                logger.error(f"  - {missing}")
-            return {"error": "missing_files", "missing": missing_files}
-
-        if not self.get_user_confirmation(
-            "This will generate paper assets (tables, figures) from existing results"
-        ):
-            logger.info("❌ Assets mode cancelled by user")
-            return {}
-
-        results = {}
-        assets_dir = output_dir / "paper_assets"
-        assets_dir.mkdir(exist_ok=True)
-
-        try:
-            if self.config.generate_tables:
-                logger.info("📊 Generating LaTeX tables...")
-                results["tables"] = self.generate_tables(
-                    required_files["oof_predictions"],
-                    required_files["cv_results"],
-                    assets_dir,
-                )
-
-            if self.config.generate_figures:
-                logger.info("📈 Generating figures...")
-                results["figures"] = self.generate_figures(
-                    required_files["oof_predictions"],
-                    required_files["cv_results"],
-                    assets_dir,
-                )
-
-            logger.info("✅ Assets generation completed")
-
-        except Exception as e:
-            logger.error(f"❌ Asset generation failed: {e}")
-            results["error"] = str(e)
-
-        return results
-
-    def generate_tables(
-        self, oof_path: Path, cv_path: Path, output_dir: Path
-    ) -> Dict[str, Any]:
-        """Generate LaTeX tables."""
-        import subprocess
-
-        cmd = [
-            sys.executable,
-            "scripts/make_paper_tables.py",
-            "--oof",
-            str(oof_path),
-            "--cv",
-            str(cv_path),
-            "--out",
-            str(output_dir),
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path.cwd())
-
-        if result.returncode == 0:
-            logger.info("✅ Tables generated successfully")
-            return {"status": "success", "output": result.stdout}
-        else:
-            logger.error(f"❌ Table generation failed: {result.stderr}")
-            return {"status": "failed", "error": result.stderr}
-
-    def generate_figures(
-        self, oof_path: Path, cv_path: Path, output_dir: Path
-    ) -> Dict[str, Any]:
-        """Generate paper figures."""
-        import subprocess
-
-        cmd = [
-            sys.executable,
-            "scripts/make_paper_figures.py",
-            "--oof",
-            str(oof_path),
-            "--cv",
-            str(cv_path),
-            "--out",
-            str(output_dir),
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path.cwd())
-
-        if result.returncode == 0:
-            logger.info("✅ Figures generated successfully")
-            return {"status": "success", "output": result.stdout}
-        else:
-            logger.error(f"❌ Figure generation failed: {result.stderr}")
-            return {"status": "failed", "error": result.stderr}
-
     def run(self) -> Dict[str, Any]:
-        """Run the pipeline in the specified mode."""
-        logger.info("🚀 Starting POLR Comprehensive Pipeline Runner")
+        """Run the binary pipeline in the specified mode."""
+        logger.info("🚀 Starting Binary POLR Comprehensive Pipeline Runner")
         logger.info("=" * 80)
         logger.info(f"Mode: {self.config.mode}")
         logger.info(f"Output directory: {self.config.output_dir}")
-        logger.info(f"Data directory: {self.config.kfold_dir}")
+        logger.info(f"Binary data directory: {self.config.kfold_dir}")
+        logger.info(f"Model type: {self.config.model_type}")
         logger.info(f"Hyperparameter preset: {self.config.hyperparameter_preset}")
         logger.info("=" * 80)
 
-        # Always validate data integrity unless skipped
+        # Always validate binary data integrity unless skipped
         if not self.config.skip_validation:
-            validation_results = self.validate_data_integrity()
+            validation_results = self.validate_binary_data_integrity()
             if validation_results["issues"] and not self.get_user_confirmation(
                 f"Found {len(validation_results['issues'])} validation issues. Continue anyway?"
             ):
@@ -587,59 +553,47 @@ class PipelineRunner:
                 results = self.run_final_mode()
             elif self.config.mode == "full":
                 results = self.run_full_mode()
-
-                # Generate assets if requested
-                if self.config.generate_assets and results:
-                    logger.info("🎨 Generating additional paper assets...")
-                    asset_results = self.run_assets_mode()
-                    results["assets"] = asset_results
-
             elif self.config.mode == "validate":
                 results = self.run_validate_mode()
-            elif self.config.mode == "assets":
-                results = self.run_assets_mode()
             else:
                 raise ValueError(f"Unknown mode: {self.config.mode}")
 
-            logger.info("\n🎉 Pipeline completed successfully!")
+            logger.info("\n🎉 Binary pipeline completed successfully!")
             return {"status": "success", "results": results}
 
         except Exception as e:
-            logger.error(f"❌ Pipeline failed: {e}")
+            logger.error(f"❌ Binary pipeline failed: {e}")
             return {"status": "failed", "error": str(e)}
 
 
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
-        description="Comprehensive POLR Pipeline Runner",
+        description="Comprehensive Binary POLR Pipeline Runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full pipeline with default settings (POLR)
-  python scripts/run_polr_comprehensive.py --mode full
+  # Full binary pipeline with default settings (POLR)
+  python scripts/run_binary_polr_comprehensive.py --mode full
 
-  # Test multinomial LR with enhanced features
-  python scripts/run_polr_comprehensive.py --mode full --model mlr --output-dir runs/mlr_enhanced
+  # Test multinomial LR with binary data
+  python scripts/run_binary_polr_comprehensive.py --mode full --model mlr --output-dir runs/binary_mlr
 
   # CV only with thorough hyperparameter search
-  python scripts/run_polr_comprehensive.py --mode cv-only --hyperparameters thorough
+  python scripts/run_binary_polr_comprehensive.py --mode cv-only --hyperparameters thorough
 
-  # Validate data integrity
-  python scripts/run_polr_comprehensive.py --mode validate
-
-  # Generate assets from existing results
-  python scripts/run_polr_comprehensive.py --mode assets --output-dir runs/existing_run
+  # Validate binary data integrity
+  python scripts/run_binary_polr_comprehensive.py --mode validate
 
   # Fast development run with MLR
-  python scripts/run_polr_comprehensive.py --mode full --model mlr --hyperparameters fast --no-confirmation
+  python scripts/run_binary_polr_comprehensive.py --mode full --model mlr --hyperparameters fast --no-confirmation
         """,
     )
 
     # Mode selection
     parser.add_argument(
         "--mode",
-        choices=["cv-only", "final-only", "full", "validate", "assets"],
+        choices=["cv-only", "final-only", "full", "validate"],
         default="full",
         help="Pipeline mode to run (default: full)",
     )
@@ -647,22 +601,26 @@ Examples:
     # Model selection
     parser.add_argument(
         "--model",
-        choices=["polr", "mlr"],
+        choices=["polr", "mlr", "lr_l2", "lr_l1", "lr_elasticnet", "svm_linear"],
         default="polr",
-        help="Model type: polr (Proportional Odds LR) or mlr (Multinomial LR) (default: polr)",
+        help=(
+            "Model type: polr (Proportional Odds LR), mlr (Multinomial LR), "
+            "lr_l2 (Logistic L2), lr_l1 (Logistic L1), lr_elasticnet (ElasticNet Logistic), "
+            "svm_linear (Linear SVM with Platt calibration)"
+        ),
     )
 
     # Data paths
     parser.add_argument(
         "--data-dir",
-        default="data/final_stratified_kfold_splits_authoritative",
-        help="Authoritative data directory (default: data/final_stratified_kfold_splits_authoritative)",
+        default="data/final_stratified_kfold_splits_binary_quote_balanced",
+        help="Binary data directory (default: data/final_stratified_kfold_splits_binary_quote_balanced)",
     )
 
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="Output directory (default: runs/polr_comprehensive_TIMESTAMP)",
+        help="Output directory (default: runs/binary_polr_comprehensive_TIMESTAMP)",
     )
 
     # Hyperparameter configuration
@@ -679,29 +637,11 @@ Examples:
         help="Custom hyperparameters as JSON string (for custom preset)",
     )
 
-    # Asset generation
-    parser.add_argument(
-        "--generate-assets",
-        action="store_true",
-        default=True,
-        help="Generate paper assets after training (default: True)",
-    )
-
-    parser.add_argument(
-        "--no-assets", action="store_true", help="Skip asset generation"
-    )
-
-    parser.add_argument(
-        "--no-figures", action="store_true", help="Skip figure generation"
-    )
-
-    parser.add_argument(
-        "--no-tables", action="store_true", help="Skip table generation"
-    )
-
     # Safety and validation
     parser.add_argument(
-        "--skip-validation", action="store_true", help="Skip data integrity validation"
+        "--skip-validation",
+        action="store_true",
+        help="Skip binary data integrity validation",
     )
 
     parser.add_argument(
@@ -728,7 +668,7 @@ def main():
     # Create output directory with timestamp if not specified
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        args.output_dir = f"runs/polr_comprehensive_{timestamp}"
+        args.output_dir = f"runs/binary_polr_comprehensive_{timestamp}"
 
     # Handle custom hyperparameters
     custom_hyperparameters = None
@@ -744,16 +684,13 @@ def main():
             sys.exit(1)
 
     # Create configuration
-    config = ComprehensiveConfig(
+    config = BinaryComprehensiveConfig(
         kfold_dir=args.data_dir,
         output_dir=args.output_dir,
         mode=args.mode,
         model_type=args.model,
         hyperparameter_preset=args.hyperparameters,
         custom_hyperparameters=custom_hyperparameters,
-        generate_assets=args.generate_assets and not args.no_assets,
-        generate_figures=not args.no_figures,
-        generate_tables=not args.no_tables,
         skip_validation=args.skip_validation,
         require_confirmation=not args.no_confirmation,
         seed=args.seed,
@@ -761,17 +698,23 @@ def main():
     )
 
     # Run pipeline
-    runner = PipelineRunner(config)
+    runner = BinaryPipelineRunner(config)
     results = runner.run()
 
     # Print final results
     print("\n" + "=" * 80)
-    print("PIPELINE SUMMARY")
+    print("BINARY PIPELINE SUMMARY")
     print("=" * 80)
     print(f"Status: {results['status']}")
     if results["status"] == "success":
         print(f"Output directory: {config.output_dir}")
-        print("✅ Pipeline completed successfully!")
+        print("✅ Binary pipeline completed successfully!")
+        print("\nKey features:")
+        print("  - Binary classification (low/high risk)")
+        print("  - 10 features from importance analysis")
+        print("  - 4-fold CV + fold_4 final training")
+        print("  - Inherited weights and labels")
+        print("  - polr_ prefixed predictions")
     else:
         print(f"Error: {results.get('error', 'Unknown error')}")
         sys.exit(1)

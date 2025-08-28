@@ -1,0 +1,27 @@
+\begin{table}[htbp]
+\centering
+\caption{Binary logistic regression associations (case-level, train); evaluated on DEV/OOF Test}
+\label{tab:binary_logistic}
+\begin{tabular}{lrrrl}
+\toprule
+Feature & OR & 95\% CI & p-value & Direction \\
+\midrule
+lex\_deception\_norm & 0.00 & (nan, nan) & nan & ↓ Low Risk \\
+lex\_deception\_present & 0.00 & (nan, nan) & nan & ↓ Low Risk \\
+lex\_guarantee\_norm & 0.00 & (nan, nan) & nan & ↓ Low Risk \\
+lex\_guarantee\_present & 215087557034472863387634432114425856.00 & (nan, nan) & nan & ↑ High Risk \\
+lex\_hedges\_norm & 0.79 & (nan, nan) & nan & ↓ Low Risk \\
+lex\_hedges\_present & 1.42 & (nan, nan) & nan & ↑ High Risk \\
+lex\_pricing\_claims\_present & 1.16 & (nan, nan) & nan & ↑ High Risk \\
+lex\_superlatives\_present & 1.23 & (nan, nan) & nan & ↑ High Risk \\
+ling\_high\_certainty & 0.42 & (nan, nan) & nan & ↓ Low Risk \\
+seq\_discourse\_additive & 0.00 & (nan, nan) & nan & ↓ Low Risk \\
+\midrule
+DEV Accuracy & \multicolumn{4}{l}{0.600} \\
+DEV Macro-F1 & \multicolumn{4}{l}{0.375} \\
+OOF Accuracy & \multicolumn{4}{l}{0.789} \\
+OOF Macro-F1 & \multicolumn{4}{l}{0.604} \\
+Pseudo-R² & \multicolumn{4}{l}{0.230} \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,11 @@
+\subsubsection{3.7 Evaluation metrics and reporting policy}\label{evaluation-metrics-and-reporting-policy}
+
+\paragraph{Discrimination metrics}\label{discrimination-metrics}
+
+We evaluate ordinal models with quadratic weighted kappa (QWK) and binary reductions with Matthews correlation coefficient (MCC). QWK measures agreement while penalising disagreements in proportion to their ordinal distance:
+
+80908\kappa\emph{w = 1 - rac\{\sum}\{i,j\} w\_\{ij\} O\_\{ij\}\}\{\sum\emph{\{i,j\} w}\{ij\} E\_\{ij\}\},\quad w\_\{ij\} = rac\{(i-j)\textsuperscript{2\}\{(k-1)}2\}80908
+
+MCC summarizes binary performance under imbalance and yields a single, interpretable score:
+
+80908\mathrm{MCC} = rac\{TP

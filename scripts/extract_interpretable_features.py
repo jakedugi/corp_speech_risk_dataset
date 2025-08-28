@@ -1,334 +1,246 @@
 #!/usr/bin/env python3
 """
-Extract Interpretable Features Script
+Extract all interpretable features from raw data and save enhanced dataset.
 
-This script:
-1. Loads JSONL data from the balanced splits
-2. Extracts interpretable features using the fully interpretable feature extractor
-3. Appends features as new fields to each record
-4. Saves enhanced data with features
-
-Key features:
-- Batch processing for memory efficiency
-- Progress tracking with detailed logging
-- Feature name prefixing to avoid conflicts
-- Context-aware feature extraction
-- Robust error handling
-
-Usage:
-    python scripts/extract_interpretable_features.py \
-        --input data/balanced_case_splits/train.jsonl \
-        --output data/balanced_case_splits/train_with_features.jsonl \
-        --text-field text \
-        --context-field context \
-        --batch-size 1000 \
-        --feature-prefix interpretable
+This script applies the comprehensive InterpretableFeatureExtractor to raw data
+and saves the feature-enhanced dataset for model training.
 """
 
 import argparse
 import json
-from pathlib import Path
-from typing import List, Dict, Any, Optional
+import os
 import sys
+from pathlib import Path
+from typing import Dict, Any, List
+import pandas as pd
 from loguru import logger
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add the src directory to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from corp_speech_risk_dataset.fully_interpretable.features import (
     InterpretableFeatureExtractor,
 )
 
 
-class FeatureProcessor:
-    """Process JSONL files and append interpretable features."""
+def load_jsonl_data(file_path: str) -> List[Dict[str, Any]]:
+    """Load data from JSONL file."""
+    records = []
 
-    def __init__(
-        self,
-        text_field: str = "text",
-        context_field: str = "context",
-        feature_prefix: str = "interpretable",
-        batch_size: int = 1000,
-        include_lexicons: bool = True,
-        include_sequence: bool = True,
-        include_linguistic: bool = True,
-        include_structural: bool = True,
-    ):
-        """Initialize the feature processor.
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
 
-        Args:
-            text_field: Name of the field containing the main text
-            context_field: Name of the field containing context (optional)
-            feature_prefix: Prefix to add to all feature names
-            batch_size: Number of records to process in each batch
-            include_lexicons: Whether to include lexicon-based features
-            include_sequence: Whether to include sequence features
-            include_linguistic: Whether to include linguistic features
-            include_structural: Whether to include structural features
-        """
-        self.text_field = text_field
-        self.context_field = context_field
-        self.feature_prefix = feature_prefix
-        self.batch_size = batch_size
+                try:
+                    record = json.loads(line)
+                    records.append(record)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Skipping invalid JSON on line {line_num}: {e}")
+                    continue
 
-        # Initialize feature extractor
-        self.extractor = InterpretableFeatureExtractor(
-            include_lexicons=include_lexicons,
-            include_sequence=include_sequence,
-            include_linguistic=include_linguistic,
-            include_structural=include_structural,
-        )
+    except FileNotFoundError:
+        logger.error(f"File not found: {file_path}")
+        raise
+    except Exception as e:
+        logger.error(f"Error reading {file_path}: {e}")
+        raise
 
-        logger.info(f"Initialized FeatureProcessor with:")
-        logger.info(f"  Text field: {text_field}")
-        logger.info(f"  Context field: {context_field}")
-        logger.info(f"  Feature prefix: {feature_prefix}")
-        logger.info(f"  Batch size: {batch_size}")
-        logger.info(
-            f"  Feature types: lexicons={include_lexicons}, sequence={include_sequence}, "
-            f"linguistic={include_linguistic}, structural={include_structural}"
-        )
+    logger.info(f"Loaded {len(records)} records from {file_path}")
+    return records
 
-    def load_jsonl(self, file_path: Path) -> List[Dict[str, Any]]:
-        """Load records from JSONL file."""
-        records = []
 
-        logger.info(f"Loading data from {file_path}...")
+def save_jsonl_data(records: List[Dict[str, Any]], file_path: str) -> None:
+    """Save data to JSONL file."""
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            for record in records:
+                json.dump(record, f, ensure_ascii=False)
+                f.write("\n")
+        logger.info(f"Saved {len(records)} records to {file_path}")
+    except Exception as e:
+        logger.error(f"Error saving to {file_path}: {e}")
+        raise
+
+
+def extract_features_batch(
+    records: List[Dict[str, Any]],
+    extractor: InterpretableFeatureExtractor,
+    text_field: str = "text",
+    context_field: str = "context",
+) -> List[Dict[str, Any]]:
+    """Extract features for a batch of records."""
+    enhanced_records = []
+
+    for i, record in enumerate(records):
+        if i % 1000 == 0:
+            logger.info(f"Processing record {i}/{len(records)}")
+
+        # Get text and context
+        text = record.get(text_field, "")
+        context = record.get(context_field, "")
+
+        if not text:
+            logger.warning(f"Empty text field for record {i}")
+            # Still process to maintain record alignment
+
+        # Extract features
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                for line_num, line in enumerate(f, 1):
-                    try:
-                        record = json.loads(line.strip())
-                        records.append(record)
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"JSON decode error at line {line_num}: {e}")
-                        continue
+            features = extractor.extract_features(text, context)
+
+            # Create enhanced record
+            enhanced_record = record.copy()
+
+            # Add all features with 'feat_' prefix to avoid conflicts
+            for feature_name, feature_value in features.items():
+                enhanced_record[f"feat_{feature_name}"] = feature_value
+
+            enhanced_records.append(enhanced_record)
 
         except Exception as e:
-            logger.error(f"Error reading file {file_path}: {e}")
-            raise
+            logger.error(f"Error extracting features for record {i}: {e}")
+            # Add record without features to maintain alignment
+            enhanced_record = record.copy()
+            enhanced_records.append(enhanced_record)
 
-        logger.info(f"Loaded {len(records)} records from {file_path}")
-        return records
-
-    def save_jsonl(self, records: List[Dict[str, Any]], file_path: Path) -> None:
-        """Save records to JSONL file."""
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        logger.info(f"Saving {len(records)} records to {file_path}...")
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                for record in records:
-                    f.write(json.dumps(record) + "\n")
-
-        except Exception as e:
-            logger.error(f"Error writing file {file_path}: {e}")
-            raise
-
-        logger.success(f"Successfully saved records to {file_path}")
-
-    def extract_features_for_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract interpretable features for a single record."""
-        try:
-            # Get text and context
-            text = record.get(self.text_field, "")
-            context = record.get(self.context_field, "")
-
-            if not text:
-                logger.warning(
-                    f"Empty text field for record: {record.get('doc_id', 'unknown')}"
-                )
-                text = ""
-
-            # Extract features
-            features = self.extractor.extract_features(
-                text, context if context else None
-            )
-
-            # Add prefix to feature names to avoid conflicts
-            prefixed_features = {}
-            for name, value in features.items():
-                prefixed_name = (
-                    f"{self.feature_prefix}_{name}" if self.feature_prefix else name
-                )
-                prefixed_features[prefixed_name] = value
-
-            return prefixed_features
-
-        except Exception as e:
-            logger.error(
-                f"Error extracting features for record {record.get('doc_id', 'unknown')}: {e}"
-            )
-            return {}
-
-    def process_batch(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Process a batch of records and append features."""
-        enhanced_records = []
-
-        for i, record in enumerate(records):
-            try:
-                # Create enhanced record with original data
-                enhanced_record = record.copy()
-
-                # Extract and add features
-                features = self.extract_features_for_record(record)
-                enhanced_record.update(features)
-
-                enhanced_records.append(enhanced_record)
-
-                # Log progress within batch
-                if (i + 1) % 100 == 0:
-                    logger.debug(
-                        f"Processed {i + 1}/{len(records)} records in current batch"
-                    )
-
-            except Exception as e:
-                logger.error(f"Error processing record {i}: {e}")
-                # Include original record without features rather than failing
-                enhanced_records.append(record)
-
-        return enhanced_records
-
-    def process_file(self, input_path: Path, output_path: Path) -> None:
-        """Process entire file with batch processing."""
-        logger.info(f"Starting feature extraction from {input_path} to {output_path}")
-
-        # Load all records
-        records = self.load_jsonl(input_path)
-
-        if not records:
-            logger.warning("No records to process")
-            return
-
-        # Process in batches
-        all_enhanced_records = []
-        total_batches = (len(records) + self.batch_size - 1) // self.batch_size
-
-        for batch_idx in range(0, len(records), self.batch_size):
-            batch_num = batch_idx // self.batch_size + 1
-            batch_records = records[batch_idx : batch_idx + self.batch_size]
-
-            logger.info(
-                f"Processing batch {batch_num}/{total_batches} "
-                f"({len(batch_records)} records)"
-            )
-
-            try:
-                enhanced_batch = self.process_batch(batch_records)
-                all_enhanced_records.extend(enhanced_batch)
-
-                logger.info(f"Completed batch {batch_num}/{total_batches}")
-
-            except Exception as e:
-                logger.error(f"Error processing batch {batch_num}: {e}")
-                # Add original records without features
-                all_enhanced_records.extend(batch_records)
-
-        # Save enhanced records
-        self.save_jsonl(all_enhanced_records, output_path)
-
-        # Log summary
-        if all_enhanced_records:
-            # Check feature extraction success rate
-            sample_record = all_enhanced_records[0]
-            feature_count = sum(
-                1
-                for key in sample_record.keys()
-                if key.startswith(self.feature_prefix + "_")
-            )
-
-            logger.success(f"Feature extraction complete!")
-            logger.info(f"  Processed: {len(all_enhanced_records)} records")
-            logger.info(f"  Features per record: {feature_count}")
-            logger.info(f"  Output saved to: {output_path}")
+    return enhanced_records
 
 
-def main() -> None:
+def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(
-        description="Extract interpretable features from JSONL data"
+        description="Extract interpretable features from raw data",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument("--input", required=True, help="Input JSONL file path")
     parser.add_argument("--output", required=True, help="Output JSONL file path")
     parser.add_argument(
-        "--text-field", default="text", help="Name of text field (default: text)"
+        "--text-field",
+        default="text",
+        help="Field name containing text (default: text)",
     )
     parser.add_argument(
         "--context-field",
         default="context",
-        help="Name of context field (default: context)",
-    )
-    parser.add_argument(
-        "--feature-prefix",
-        default="interpretable",
-        help="Prefix for feature names (default: interpretable)",
+        help="Field name containing context (default: context)",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=1000,
-        help="Batch size for processing (default: 1000)",
-    )
-
-    # Feature type flags
-    parser.add_argument(
-        "--no-lexicons", action="store_true", help="Disable lexicon features"
+        default=10000,
+        help="Batch size for processing (default: 10000)",
     )
     parser.add_argument(
-        "--no-sequence", action="store_true", help="Disable sequence features"
+        "--include-lexicons",
+        action="store_true",
+        default=True,
+        help="Include lexicon features (default: True)",
     )
     parser.add_argument(
-        "--no-linguistic", action="store_true", help="Disable linguistic features"
+        "--include-sequence",
+        action="store_true",
+        default=True,
+        help="Include sequence features (default: True)",
     )
     parser.add_argument(
-        "--no-structural", action="store_true", help="Disable structural features"
+        "--include-linguistic",
+        action="store_true",
+        default=True,
+        help="Include linguistic features (default: True)",
     )
-
-    # Processing options
     parser.add_argument(
-        "--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+        "--include-structural",
+        action="store_true",
+        default=True,
+        help="Include structural features (default: True)",
     )
 
     args = parser.parse_args()
 
-    # Configure logging
-    logger.remove()
+    # Setup logging
+    logger.remove()  # Remove default handler
     logger.add(
         sys.stderr,
-        level=args.log_level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        level="INFO",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {name}:{function}:{line} - {message}",
     )
 
-    # Validate paths
-    input_path = Path(args.input)
+    logger.info("Starting interpretable feature extraction")
+    logger.info(f"Input: {args.input}")
+    logger.info(f"Output: {args.output}")
+    logger.info(f"Text field: {args.text_field}")
+    logger.info(f"Context field: {args.context_field}")
+    logger.info(f"Batch size: {args.batch_size}")
+
+    # Create output directory if needed
     output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if not input_path.exists():
-        logger.error(f"Input file does not exist: {input_path}")
-        sys.exit(1)
-
-    # Initialize processor
-    processor = FeatureProcessor(
-        text_field=args.text_field,
-        context_field=args.context_field,
-        feature_prefix=args.feature_prefix,
-        batch_size=args.batch_size,
-        include_lexicons=not args.no_lexicons,
-        include_sequence=not args.no_sequence,
-        include_linguistic=not args.no_linguistic,
-        include_structural=not args.no_structural,
+    # Initialize feature extractor with all features enabled
+    extractor = InterpretableFeatureExtractor(
+        include_lexicons=args.include_lexicons,
+        include_sequence=args.include_sequence,
+        include_linguistic=args.include_linguistic,
+        include_structural=args.include_structural,
     )
 
-    # Process file
-    try:
-        processor.process_file(input_path, output_path)
-        logger.success("Feature extraction completed successfully!")
+    logger.info("Feature extractor initialized with all feature types enabled")
 
-    except Exception as e:
-        logger.error(f"Feature extraction failed: {e}")
-        sys.exit(1)
+    # Load data
+    logger.info("Loading data...")
+    records = load_jsonl_data(args.input)
+
+    if not records:
+        logger.error("No records loaded!")
+        return 1
+
+    # Process in batches to manage memory
+    all_enhanced_records = []
+
+    for i in range(0, len(records), args.batch_size):
+        batch_end = min(i + args.batch_size, len(records))
+        batch = records[i:batch_end]
+
+        logger.info(
+            f"Processing batch {i//args.batch_size + 1}: records {i+1} to {batch_end}"
+        )
+
+        # Extract features for batch
+        enhanced_batch = extract_features_batch(
+            batch, extractor, args.text_field, args.context_field
+        )
+
+        all_enhanced_records.extend(enhanced_batch)
+
+    # Report feature extraction statistics
+    if all_enhanced_records:
+        sample_record = all_enhanced_records[0]
+        feature_names = [k for k in sample_record.keys() if k.startswith("feat_")]
+        logger.info(f"Extracted {len(feature_names)} features per record")
+        logger.info(f"Feature categories:")
+
+        # Count features by category
+        categories = {}
+        for fname in feature_names:
+            category = fname.split("_")[1] if len(fname.split("_")) > 1 else "unknown"
+            categories[category] = categories.get(category, 0) + 1
+
+        for category, count in sorted(categories.items()):
+            logger.info(f"  {category}: {count} features")
+
+    # Save enhanced data
+    logger.info("Saving enhanced dataset...")
+    save_jsonl_data(all_enhanced_records, args.output)
+
+    logger.success(f"Feature extraction complete!")
+    logger.info(f"Enhanced dataset saved to: {args.output}")
+    logger.info(f"Total records processed: {len(all_enhanced_records)}")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

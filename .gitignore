@@ -197,6 +197,9 @@ docs/diagrams/
 # --- Exclude CourtListener chunks ---
 data/raw/courtlistener/**/chunk_*/
 
+# --- Project-specific ignores ---
+src/corp_speech_risk_dataset/disso_prompt/
+
 # --- Keep structure for empty folders ---
 !logs/.gitkeep
 !data/raw/.gitkeep

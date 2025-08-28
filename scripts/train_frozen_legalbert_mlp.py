@@ -1472,12 +1472,35 @@ class PyTorchMLPEvaluator:
             probs.append(p)
         return np.concatenate(probs, axis=0)
 
-    def infer_full_dataset(self, variant: str, write_format: str = "jsonl"):
+    def infer_full_dataset(
+        self,
+        variant: str,
+        write_format: str = "jsonl",
+        keep_minimal_columns: bool = True,
+    ):
         """Mirror the dataset with predictions from the best model of the given variant.
         - Uses the train-fitted scalers for that variant.
         - Uses stored thresholds: mcc, recall-target (from dev-suppressed), and computes top-k% on the full set if requested.
         Output is written to output_dir/"mirror_with_predictions" preserving relative paths.
         """
+        # Normalize variant directory name for parsing (E -> "E", E+3 -> "E_3")
+        variant_dir = "E_3" if variant in ("E+3", "Eplus3", "E_3") else "E"
+
+        # Minimal set of columns to keep in the mirror (plus inferred columns below)
+        minimal_keep_cols = [
+            "case_id",
+            "case_id_clean",
+            "outcome_bin",
+            # Preferred ordering/position features
+            "docket_number",
+            "docket_token_start",
+            "global_token_start",
+            "global_char_start",
+            "docket_char_start",
+            "num_tokens",
+            # Court (if already present; we won't compute it here)
+            "court_id",
+        ]
         if variant not in self._best_artifacts:
             raise RuntimeError(
                 f"No trained artifacts cached for variant {variant}. Run evaluation first."
@@ -1498,9 +1521,7 @@ class PyTorchMLPEvaluator:
         thr_recall = float(thr_pack.get("recall_target", 0.5))
         topk_percent = self.topk_percent
 
-        out_root = (
-            self.output_dir / "mirror_with_predictions" / variant.replace("+", "plus")
-        )
+        out_root = self.output_dir / "mirror_with_predictions" / variant_dir
         out_root.mkdir(parents=True, exist_ok=True)
 
         files = self._list_all_jsonl_files()
@@ -1561,6 +1582,25 @@ class PyTorchMLPEvaluator:
                 df["mlp_pred_topk"] = pred_topk
                 df["mlp_threshold_topk"] = thr_topk
 
+            # Optionally drop all other columns and keep only the minimal set + inferred columns
+            if keep_minimal_columns:
+                inferred_cols = [
+                    "mlp_feature_config",
+                    "mlp_probability",
+                    "mlp_pred_strict",
+                    "mlp_threshold_strict",
+                    "mlp_pred_recallT",
+                    "mlp_threshold_recallT",
+                ]
+                if pred_topk is not None:
+                    inferred_cols.extend(["mlp_pred_topk", "mlp_threshold_topk"])
+
+                # Build final keep list by intersecting with available columns
+                keep_cols = [
+                    c for c in minimal_keep_cols if c in df.columns
+                ] + inferred_cols
+                df = df.loc[:, keep_cols]
+
             # Write mirror file preserving relative structure
             rel = path.relative_to(self.data_dir)
             out_path = out_root / rel
@@ -1579,8 +1619,7 @@ class PyTorchMLPEvaluator:
                     out_path = out_path.with_suffix(".csv")
                     df.to_csv(out_path, index=False)
             else:
-                # Default: JSONL
-                out_path = out_path.with_suffix("")  # keep .jsonl
+                # Default: JSONL (preserve .jsonl suffix)
                 with open(out_path, "w") as f:
                     for rec in df.to_dict(orient="records"):
                         if ORJSON_AVAILABLE:

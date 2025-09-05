@@ -100,6 +100,103 @@ def _sort_case_naturally(g: pd.DataFrame) -> pd.DataFrame:
     return g  # fallback: original order
 
 
+# --------------- Early cutoff filtering helper --------------------
+def _filter_early(df: pd.DataFrame, mode: str) -> pd.DataFrame:
+    """
+    Return a per-case prefix subset according to `mode`:
+      - 'first_doc': keep only quotes from the earliest docket_number per case; if missing, fall back to earliest global_token_start, else first row.
+      - 'p10'/'p30'/'p50': keep quotes whose token-range end is within the first {10,30,50}% of the case by tokens.
+    """
+    if df.empty:
+        return df
+
+    def _first_doc(group: pd.DataFrame) -> pd.DataFrame:
+        g = group.copy()
+        if "docket_number" in g.columns and g["docket_number"].notna().any():
+            mn = pd.to_numeric(g["docket_number"], errors="coerce").min()
+            sub = g[pd.to_numeric(g["docket_number"], errors="coerce") == mn]
+            if len(sub) > 0:
+                return sub
+        # fallback: earliest global_token_start, else docket/global_char_start
+        for col in [
+            "global_token_start",
+            "docket_token_start",
+            "global_char_start",
+            "docket_char_start",
+        ]:
+            if col in g.columns and g[col].notna().any():
+                mn = pd.to_numeric(g[col], errors="coerce").min()
+                sub = g[pd.to_numeric(g[col], errors="coerce") == mn]
+                if len(sub) > 0:
+                    return sub
+        # final fallback: first row only
+        return g.iloc[:1]
+
+    def _prefix_by_percent(group: pd.DataFrame, frac: float) -> pd.DataFrame:
+        g = group.copy()
+        n = len(g)
+        if n == 0:
+            return g
+
+        # Choose token-based range if available; fallback to char, then index
+        if "global_token_start" in g.columns:
+            start = (
+                pd.to_numeric(g["global_token_start"], errors="coerce")
+                .fillna(0.0)
+                .to_numpy(dtype=float)
+            )
+            # try to use end position with num_tokens if available
+            if "num_tokens" in g.columns:
+                toks = (
+                    pd.to_numeric(g["num_tokens"], errors="coerce")
+                    .fillna(1.0)
+                    .clip(lower=1.0)
+                    .to_numpy(dtype=float)
+                )
+            else:
+                toks = np.ones_like(start)
+            end = start + toks
+        elif "global_char_start" in g.columns:
+            start = (
+                pd.to_numeric(g["global_char_start"], errors="coerce")
+                .fillna(0.0)
+                .to_numpy(dtype=float)
+            )
+            end = start + 1.0
+        else:
+            # fallback: normalized index
+            idx = np.arange(n, dtype=float)
+            start = idx
+            end = idx + 1.0
+
+        s0 = np.nanmin(start) if np.isfinite(start).any() else 0.0
+        e1 = np.nanmax(end) if np.isfinite(end).any() else float(n)
+        span = max(e1 - s0, 1.0)
+        cutoff = s0 + frac * span
+        mask = end <= cutoff
+        if not mask.any():
+            # ensure at least one row (earliest)
+            mask = end <= (s0 + 0.01 * span)
+        return g.iloc[np.where(mask)[0]]
+
+    mode = (mode or "").strip().lower()
+    if mode in ("first_doc", "first", "doc1"):
+        return (
+            df.groupby("case_id", sort=False, group_keys=False)
+            .apply(_first_doc)
+            .reset_index(drop=True)
+        )
+    elif mode in ("p10", "p30", "p50"):
+        frac = {"p10": 0.10, "p30": 0.30, "p50": 0.50}[mode]
+        return (
+            df.groupby("case_id", sort=False, group_keys=False)
+            .apply(lambda g: _prefix_by_percent(g, frac))
+            .reset_index(drop=True)
+        )
+    else:
+        return df
+
+
 def build_case_features(df: pd.DataFrame) -> pd.DataFrame:
     """df: quotes with mlp_probability, mlp_pred_strict, mlp_pred_recallT, case_id, case_id_clean, and a sortable order."""
     need_cols = [
@@ -364,6 +461,10 @@ def main(
     target_recall: float = 0.20,
     topk_percent: Optional[float] = None,
     fold: int = 4,
+    early: Optional[str] = None,
+    refit_on_train_plus_dev: bool = False,
+    try_elasticnet: bool = False,
+    bagging_n: int = 0,
 ):
     mirror = Path(mirror_root)
     outdir = Path(output_dir)
@@ -432,7 +533,16 @@ def main(
 
     # 4) Train LR (tiny grid), select by dev-suppressed MCC
     gridC = [0.01, 0.1, 1.0]
-    best = {"mcc": -1, "C": None, "clf": None, "cal": None, "cal_name": None}
+    best = {
+        "mcc": -1,
+        "C": None,
+        "penalty": None,
+        "l1_ratio": None,
+        "solver": None,
+        "clf": None,
+        "cal": None,
+        "cal_name": None,
+    }
 
     def metrics(y, p) -> Dict[str, float]:
         return {
@@ -442,6 +552,7 @@ def main(
             "ece": ece_score(y, p),
         }
 
+    # Try L2 LR grid as before
     for C in gridC:
         base = LogisticRegression(
             penalty="l2",
@@ -474,6 +585,9 @@ def main(
                 {
                     "mcc": mcc_dev,
                     "C": C,
+                    "penalty": "l2",
+                    "l1_ratio": None,
+                    "solver": "lbfgs",
                     "clf": base,
                     "cal": cal_used,
                     "cal_name": cal_name,
@@ -481,9 +595,64 @@ def main(
                 }
             )
 
+    # Optionally try Elastic-Net LR if requested
+    if try_elasticnet:
+        from sklearn.exceptions import ConvergenceWarning
+        import warnings
+
+        gridC_en = [0.1, 1.0]
+        grid_l1 = [0.1, 0.5]
+        for C in gridC_en:
+            for l1r in grid_l1:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=ConvergenceWarning)
+                    base = LogisticRegression(
+                        penalty="elasticnet",
+                        solver="saga",
+                        class_weight="balanced",
+                        C=C,
+                        l1_ratio=l1r,
+                        max_iter=2000,
+                        n_jobs=None,
+                    )
+                    try:
+                        base.fit(Xtr, ytr)
+                    except Exception as e:
+                        log.warning(
+                            f"ElasticNet LR failed for C={C}, l1_ratio={l1r}: {e}"
+                        )
+                        continue
+                cal_sig = CalibratedClassifierCV(base, method="sigmoid", cv=3)
+                cal_iso = CalibratedClassifierCV(base, method="isotonic", cv=3)
+                cal_sig.fit(Xtr, ytr)
+                cal_iso.fit(Xtr, ytr)
+                ps_sig = cal_sig.predict_proba(Xdv_sup)[:, 1]
+                ps_iso = cal_iso.predict_proba(Xdv_sup)[:, 1]
+                ece_sig = ece_score(ydv, ps_sig)
+                ece_iso = ece_score(ydv, ps_iso)
+                if ece_iso <= ece_sig:
+                    ps, cal_used, cal_name = ps_iso, cal_iso, "isotonic"
+                else:
+                    ps, cal_used, cal_name = ps_sig, cal_sig, "sigmoid"
+                thr_mcc, mcc_dev = mcc_opt_threshold(ydv, ps)
+                if mcc_dev > best["mcc"]:
+                    best.update(
+                        {
+                            "mcc": mcc_dev,
+                            "C": C,
+                            "penalty": "elasticnet",
+                            "l1_ratio": l1r,
+                            "solver": "saga",
+                            "clf": base,
+                            "cal": cal_used,
+                            "cal_name": cal_name,
+                            "thr_mcc": thr_mcc,
+                        }
+                    )
+
     # 5) Refit best base on train (already fit), calibrator already fit; compute metrics
     log.info(
-        f"Best C={best['C']} | calibrator={best['cal_name']} | dev_suppr_MCC={best['mcc']:.4f}"
+        f"Best model: penalty={best['penalty']}, solver={best['solver']}, C={best['C']}, l1_ratio={best.get('l1_ratio', None)} | calibrator={best['cal_name']} | dev_suppr_MCC={best['mcc']:.4f}"
     )
 
     # DEV RAW & SUPPRESSED metrics (using chosen cal)
@@ -521,6 +690,67 @@ def main(
     thr_recall = dev_thr_recall
     thr_topk = dev_thr_topk
 
+    # --------- Optional refit on train+dev ---------
+    if refit_on_train_plus_dev:
+        # Refit scaler on TRAIN+DEV case features
+        F = pd.concat([trF, dvF], ignore_index=True)
+        ytrdv = np.concatenate([ytr, ydv])
+        courts_trdv = F["court_id"].to_numpy()
+
+        scaler = StandardScaler()
+        Xtrdv = scaler.fit_transform(F[feat_cols].to_numpy(dtype=np.float32))
+
+        # Recompute suppression means on TRAIN+DEV (in scaled space)
+        means = fit_suppression_means(Xtrdv, courts_trdv)
+
+        # Refit base LR with same hyperparameters on TRAIN+DEV
+        lr_kwargs = {
+            "penalty": best["penalty"],
+            "solver": best["solver"],
+            "class_weight": "balanced",
+            "C": best["C"],
+            "max_iter": 2000,
+            "n_jobs": None,
+        }
+        if best["penalty"] == "elasticnet" and best.get("l1_ratio") is not None:
+            lr_kwargs["l1_ratio"] = best["l1_ratio"]
+        base = LogisticRegression(**lr_kwargs)
+        base.fit(Xtrdv, ytrdv)
+
+        # Refit calibrator (same method) on TRAIN+DEV
+        cal = CalibratedClassifierCV(base, method=best["cal_name"], cv=3)
+        cal.fit(Xtrdv, ytrdv)
+
+        # Update best references
+        best["clf"] = base
+        best["cal"] = cal
+
+        # Recompute dev/test features under the NEW scaler and NEW means
+        Xdv = scaler.transform(dvF[feat_cols].to_numpy(dtype=np.float32))
+        Xts = scaler.transform(tsF[feat_cols].to_numpy(dtype=np.float32))
+        dev_raw_prob = cal.predict_proba(Xdv)[:, 1]
+        Xdv_sup = apply_suppression(Xdv, dvF["court_id"].to_numpy(), means)
+        dev_sup_prob = cal.predict_proba(Xdv_sup)[:, 1]
+        ts_raw_prob = cal.predict_proba(Xts)[:, 1]
+        Xts_sup = apply_suppression(Xts, tsF["court_id"].to_numpy(), means)
+        ts_sup_prob = cal.predict_proba(Xts_sup)[:, 1]
+
+        # Re-derive thresholds on DEV (suppressed)
+        dev_thr_mcc, _ = mcc_opt_threshold(ydv, dev_sup_prob)
+        dev_thr_recall = threshold_for_recall(ydv, dev_sup_prob, target=target_recall)
+        dev_thr_topk = None
+        if topk_percent is not None:
+            q = 1.0 - float(topk_percent)
+            dev_thr_topk = float(np.quantile(dev_sup_prob, q))
+
+        thr_mcc = dev_thr_mcc
+        thr_recall = dev_thr_recall
+        thr_topk = dev_thr_topk
+
+        log.info(
+            "Refit on train+dev enabled: re-fitted scaler, suppression means, LR, and calibrator; re-derived dev thresholds."
+        )
+
     test = {
         "raw": {
             **metrics(yts, ts_raw_prob),
@@ -534,6 +764,219 @@ def main(
     test["supp"]["ops_recallT"] = op_metrics(yts, ts_sup_prob, thr_recall)
     if thr_topk is not None:
         test["supp"]["ops_topk"] = op_metrics(yts, ts_sup_prob, thr_topk)
+
+    # ----- Early-cutoff evaluation (optional) -----
+    early_results = {}
+
+    def _eval_early(tag: str, df_dev: pd.DataFrame, df_test: pd.DataFrame):
+        # 1) rebuild case features on the early subset
+        dvE = build_case_features(df_dev)
+        tsE = build_case_features(df_test)
+        # attach labels
+        dvE = attach_y(dv, dvE)
+        tsE = attach_y(ts, tsE)
+        # scale with the SAME scaler; suppress with SAME means
+        XdvE = scaler.transform(dvE[feat_cols].to_numpy(dtype=np.float32))
+        XtsE = scaler.transform(tsE[feat_cols].to_numpy(dtype=np.float32))
+        XdvE_sup = apply_suppression(XdvE, dvE["court_id"].to_numpy(), means)
+        XtsE_sup = apply_suppression(XtsE, tsE["court_id"].to_numpy(), means)
+        ydvE, ytsE = dvE["y"].to_numpy(), tsE["y"].to_numpy()
+        # probabilities
+        ps_dv_raw = best["cal"].predict_proba(XdvE)[:, 1]
+        ps_dv_sup = best["cal"].predict_proba(XdvE_sup)[:, 1]
+        ps_ts_raw = best["cal"].predict_proba(XtsE)[:, 1]
+        ps_ts_sup = best["cal"].predict_proba(XtsE_sup)[:, 1]
+        # metrics
+        devE = {
+            "raw": {**metrics(ydvE, ps_dv_raw)},
+            "supp": {**metrics(ydvE, ps_dv_sup)},
+        }
+        testE = {
+            "raw": {**metrics(ytsE, ps_ts_raw)},
+            "supp": {**metrics(ytsE, ps_ts_sup)},
+        }
+        # operating points (use thresholds recomputed on early dev-suppressed)
+        thr_mcc_loc, mcc_dev_loc = mcc_opt_threshold(ydvE, ps_dv_sup)
+        thr_recall_loc = threshold_for_recall(ydvE, ps_dv_sup, target=target_recall)
+        devE["supp"]["ops_mcc"] = op_metrics(ydvE, ps_dv_sup, thr_mcc_loc)
+        devE["supp"]["ops_recallT"] = op_metrics(ydvE, ps_dv_sup, thr_recall_loc)
+        testE["supp"]["ops_mcc"] = op_metrics(ytsE, ps_ts_sup, thr_mcc_loc)
+        testE["supp"]["ops_recallT"] = op_metrics(ytsE, ps_ts_sup, thr_recall_loc)
+        # record local thresholds inside the objects (handy for inspection)
+        devE["supp"]["thr_mcc"] = float(thr_mcc_loc)
+        devE["supp"]["thr_recallT"] = float(thr_recall_loc)
+        testE["supp"]["thr_mcc"] = float(thr_mcc_loc)
+        testE["supp"]["thr_recallT"] = float(thr_recall_loc)
+        # positive rates
+        devE["supp"]["pos_rate_mcc"] = float((ps_dv_sup >= thr_mcc_loc).mean())
+        devE["supp"]["pos_rate_recallT"] = float((ps_dv_sup >= thr_recall_loc).mean())
+        testE["supp"]["pos_rate_mcc"] = float((ps_ts_sup >= thr_mcc_loc).mean())
+        testE["supp"]["pos_rate_recallT"] = float((ps_ts_sup >= thr_recall_loc).mean())
+        # Store local thresholds
+        early_results[tag] = {
+            "dev": devE,
+            "test": testE,
+            "supp_thresholds": {"mcc": thr_mcc_loc, "recallT": thr_recall_loc},
+        }
+
+        # Console summary (compact)
+        log.info(
+            f"[EARLY {tag}] τ_MCC={thr_mcc_loc:.3f} τ_rec={thr_recall_loc:.3f} | DEV supp: MCC@τ_MCC={devE['supp']['ops_mcc']['mcc']:.3f} | MCC@τ_rec={devE['supp']['ops_recallT']['mcc']:.3f} | Pos% (τ_MCC/τ_rec) = {devE['supp']['pos_rate_mcc']:.1%}/{devE['supp']['pos_rate_recallT']:.1%}"
+        )
+        log.info(
+            f"[EARLY {tag}] τ_MCC={thr_mcc_loc:.3f} τ_rec={thr_recall_loc:.3f} | TEST supp: MCC@τ_MCC={testE['supp']['ops_mcc']['mcc']:.3f} | MCC@τ_rec={testE['supp']['ops_recallT']['mcc']:.3f} | Pos% (τ_MCC/τ_rec) = {testE['supp']['pos_rate_mcc']:.1%}/{testE['supp']['pos_rate_recallT']:.1%}"
+        )
+
+    if early:
+        modes = []
+        if early.lower() == "all":
+            modes = ["first_doc", "p10", "p30", "p50"]
+        else:
+            modes = [m.strip() for m in early.split(",") if m.strip()]
+        for m in modes:
+            # filter dev/test quotes to early subset per case
+            dv_early = _filter_early(dv, m)
+            ts_early = _filter_early(ts, m)
+            _eval_early(m, dv_early, ts_early)
+
+    # ----------- Optional bagging step -----------
+    if bagging_n and bagging_n > 0:
+        bag_n = int(bagging_n)
+        # Use the same train set as the final model
+        if refit_on_train_plus_dev:
+            Xtrain = np.vstack([Xtr, Xdv])
+            ytrain = np.concatenate([ytr, ydv])
+            courts_train = np.concatenate(
+                [trF["court_id"].to_numpy(), dvF["court_id"].to_numpy()]
+            )
+        else:
+            Xtrain = Xtr
+            ytrain = ytr
+            courts_train = trF["court_id"].to_numpy()
+        # Use the same scaler (fit on TRAIN) and suppression means (fit on train+dev if refit)
+        dev_probs_raw = []
+        dev_probs_sup = []
+        ts_probs_raw = []
+        ts_probs_sup = []
+        # For early: keep per-replica dev/test early probabilities
+        early_probs = {}  # tag -> {dev_raw:[], dev_sup:[], ts_raw:[], ts_sup:[]}
+        for i in range(bag_n):
+            idx = np.random.choice(len(Xtrain), len(Xtrain), replace=True)
+            Xb = Xtrain[idx]
+            yb = ytrain[idx]
+            # Fit base LR
+            lr_kwargs = {
+                "penalty": best["penalty"],
+                "solver": best["solver"],
+                "class_weight": "balanced",
+                "C": best["C"],
+                "max_iter": 2000,
+                "n_jobs": None,
+            }
+            if best["penalty"] == "elasticnet":
+                lr_kwargs["l1_ratio"] = best["l1_ratio"]
+            base = LogisticRegression(**lr_kwargs)
+            base.fit(Xb, yb)
+            # Fit calibrator
+            cal = CalibratedClassifierCV(base, method=best["cal_name"], cv=3)
+            cal.fit(Xb, yb)
+            # Probabilities on dev/test
+            dev_probs_raw.append(cal.predict_proba(Xdv)[:, 1])
+            Xdv_sup_bag = apply_suppression(Xdv, dvF["court_id"].to_numpy(), means)
+            dev_probs_sup.append(cal.predict_proba(Xdv_sup_bag)[:, 1])
+            ts_probs_raw.append(cal.predict_proba(Xts)[:, 1])
+            Xts_sup_bag = apply_suppression(Xts, tsF["court_id"].to_numpy(), means)
+            ts_probs_sup.append(cal.predict_proba(Xts_sup_bag)[:, 1])
+            # For early
+            for tag in early_results.keys():
+                # Recompute early features for dev/test
+                # Use the same early subset as before
+                dv_early = _filter_early(dv, tag)
+                ts_early = _filter_early(ts, tag)
+                dvE = build_case_features(dv_early)
+                tsE = build_case_features(ts_early)
+                dvE = attach_y(dv, dvE)
+                tsE = attach_y(ts, tsE)
+                XdvE = scaler.transform(dvE[feat_cols].to_numpy(dtype=np.float32))
+                XtsE = scaler.transform(tsE[feat_cols].to_numpy(dtype=np.float32))
+                XdvE_sup = apply_suppression(XdvE, dvE["court_id"].to_numpy(), means)
+                XtsE_sup = apply_suppression(XtsE, tsE["court_id"].to_numpy(), means)
+                if tag not in early_probs:
+                    early_probs[tag] = {
+                        "dev_raw": [],
+                        "dev_sup": [],
+                        "ts_raw": [],
+                        "ts_sup": [],
+                        "ydvE": dvE["y"].to_numpy(),
+                        "ytsE": tsE["y"].to_numpy(),
+                    }
+                early_probs[tag]["dev_raw"].append(cal.predict_proba(XdvE)[:, 1])
+                early_probs[tag]["dev_sup"].append(cal.predict_proba(XdvE_sup)[:, 1])
+                early_probs[tag]["ts_raw"].append(cal.predict_proba(XtsE)[:, 1])
+                early_probs[tag]["ts_sup"].append(cal.predict_proba(XtsE_sup)[:, 1])
+        # Average probabilities
+        dev_raw_prob = np.mean(dev_probs_raw, axis=0)
+        dev_sup_prob = np.mean(dev_probs_sup, axis=0)
+        ts_raw_prob = np.mean(ts_probs_raw, axis=0)
+        ts_sup_prob = np.mean(ts_probs_sup, axis=0)
+        # Recompute dev thresholds on averaged dev-supp
+        dev_thr_mcc, _ = mcc_opt_threshold(ydv, dev_sup_prob)
+        dev_thr_recall = threshold_for_recall(ydv, dev_sup_prob, target=target_recall)
+        dev_thr_topk = None
+        if topk_percent is not None:
+            q = 1.0 - float(topk_percent)
+            dev_thr_topk = float(np.quantile(dev_sup_prob, q))
+        thr_mcc = dev_thr_mcc
+        thr_recall = dev_thr_recall
+        thr_topk = dev_thr_topk
+        log.info(
+            f"Bagging enabled (n={bag_n}): thresholds re-derived on averaged dev-suppressed scores."
+        )
+        log.info(f"Bagging: averaged probabilities from {bag_n} replicas")
+        # For early: recompute local thresholds and update early_results
+        for tag in early_results.keys():
+            ydvE = early_probs[tag]["ydvE"]
+            ytsE = early_probs[tag]["ytsE"]
+            ps_dv_raw = np.mean(early_probs[tag]["dev_raw"], axis=0)
+            ps_dv_sup = np.mean(early_probs[tag]["dev_sup"], axis=0)
+            ps_ts_raw = np.mean(early_probs[tag]["ts_raw"], axis=0)
+            ps_ts_sup = np.mean(early_probs[tag]["ts_sup"], axis=0)
+            # metrics
+            devE = {
+                "raw": {**metrics(ydvE, ps_dv_raw)},
+                "supp": {**metrics(ydvE, ps_dv_sup)},
+            }
+            testE = {
+                "raw": {**metrics(ytsE, ps_ts_raw)},
+                "supp": {**metrics(ytsE, ps_ts_sup)},
+            }
+            # local thresholds
+            thr_mcc_loc, mcc_dev_loc = mcc_opt_threshold(ydvE, ps_dv_sup)
+            thr_recall_loc = threshold_for_recall(ydvE, ps_dv_sup, target=target_recall)
+            devE["supp"]["ops_mcc"] = op_metrics(ydvE, ps_dv_sup, thr_mcc_loc)
+            devE["supp"]["ops_recallT"] = op_metrics(ydvE, ps_dv_sup, thr_recall_loc)
+            testE["supp"]["ops_mcc"] = op_metrics(ytsE, ps_ts_sup, thr_mcc_loc)
+            testE["supp"]["ops_recallT"] = op_metrics(ytsE, ps_ts_sup, thr_recall_loc)
+            devE["supp"]["pos_rate_mcc"] = float((ps_dv_sup >= thr_mcc_loc).mean())
+            devE["supp"]["pos_rate_recallT"] = float(
+                (ps_dv_sup >= thr_recall_loc).mean()
+            )
+            testE["supp"]["pos_rate_mcc"] = float((ps_ts_sup >= thr_mcc_loc).mean())
+            testE["supp"]["pos_rate_recallT"] = float(
+                (ps_ts_sup >= thr_recall_loc).mean()
+            )
+            early_results[tag] = {
+                "dev": devE,
+                "test": testE,
+                "supp_thresholds": {"mcc": thr_mcc_loc, "recallT": thr_recall_loc},
+            }
+            # Console summary
+            log.info(
+                f"[EARLY {tag}] τ_MCC={thr_mcc_loc:.3f} τ_rec={thr_recall_loc:.3f} | DEV supp: MCC@τ_MCC={devE['supp']['ops_mcc']['mcc']:.3f} | MCC@τ_rec={devE['supp']['ops_recallT']['mcc']:.3f} | Pos% (τ_MCC/τ_rec) = {devE['supp']['pos_rate_mcc']:.1%}/{devE['supp']['pos_rate_recallT']:.1%}"
+            )
+            log.info(
+                f"[EARLY {tag}] τ_MCC={thr_mcc_loc:.3f} τ_rec={thr_recall_loc:.3f} | TEST supp: MCC@τ_MCC={testE['supp']['ops_mcc']['mcc']:.3f} | MCC@τ_rec={testE['supp']['ops_recallT']['mcc']:.3f} | Pos% (τ_MCC/τ_rec) = {testE['supp']['pos_rate_mcc']:.1%}/{testE['supp']['pos_rate_recallT']:.1%}"
+            )
 
     # 6) Save predictions (test set case-level)
     pred_df = pd.DataFrame(
@@ -567,8 +1010,19 @@ def main(
         },
         "dev_metrics": dev,
         "test_metrics": test,
+        "early_evaluation": early_results,
         "coefficients": coef,
+        "selected_model": {
+            "penalty": best["penalty"],
+            "solver": best["solver"],
+            "C": best["C"],
+            "l1_ratio": best.get("l1_ratio", None),
+        },
     }
+    if refit_on_train_plus_dev:
+        model_card["refit_on_train_plus_dev"] = True
+    if bagging_n and bagging_n > 0:
+        model_card["bagging_n"] = bagging_n
     with open(outdir / "model_card.json", "wb") as f:
         f.write(_dumps(model_card))
 
@@ -583,11 +1037,33 @@ if __name__ == "__main__":
         description="Case-level LR on hero MLP mirror (fold_X/dev + oof_test/test)"
     )
     ap.add_argument("--mirror-root", required=True, help=".../mirror_with_predictions")
-    ap.add_argument("--feature-config", default="E+3", choices=["E", "E+3"])
+    ap.add_argument("--feature-config", default="E+3", choices=["E", "E+3", "E_3"])
     ap.add_argument("--output-dir", required=True)
     ap.add_argument("--target-recall", type=float, default=0.20)
     ap.add_argument("--topk-percent", type=float, default=None)
     ap.add_argument("--fold", type=int, default=4)
+    ap.add_argument(
+        "--early",
+        type=str,
+        default=None,
+        help="Early cutoff to evaluate: one of {first_doc,p10,p30,p50,all}. If 'all', evaluates all four.",
+    )
+    ap.add_argument(
+        "--refit-on-train-plus-dev",
+        action="store_true",
+        help="Refit final model and calibrator on train+dev, recompute suppression means.",
+    )
+    ap.add_argument(
+        "--try-elasticnet",
+        action="store_true",
+        help="Try ElasticNet LR grid in addition to standard L2 LR.",
+    )
+    ap.add_argument(
+        "--bagging-n",
+        type=int,
+        default=0,
+        help="Number of bagging replicas to train and average. If 0, no bagging.",
+    )
     args = ap.parse_args()
     main(
         args.mirror_root,
@@ -596,4 +1072,8 @@ if __name__ == "__main__":
         args.target_recall,
         args.topk_percent,
         args.fold,
+        args.early,
+        args.refit_on_train_plus_dev,
+        args.try_elasticnet,
+        args.bagging_n,
     )

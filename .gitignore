@@ -115,6 +115,9 @@ coverage.xml
 *.pdf
 *.docx
 *.pptx
+*.md
+*.txt
+*.tex
 *.zip
 *.tar
 *.tar.gz
@@ -135,11 +138,19 @@ coverage.xml
 
 # --- Data, Output, & Artifacts ---
 data/
+disso_prompt/
+docs/
+logs/
+notebooks/
+optimization_cache/
+plots/
+results/
+runs/
+scripts/
+test_binary_run/
 temp/
 artifacts/
-logs/*.log
 output/
-results/
 models/
 checkpoints/
 experiments/

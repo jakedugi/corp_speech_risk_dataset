@@ -5,7 +5,7 @@ from pathlib import Path
 from corp_speech_risk_dataset.api.ftc_client import FTCClient
 from corp_speech_risk_dataset.api.sec_client import SECClient
 from corp_speech_risk_dataset.api.courtlistener import CourtListenerClient
-from corp_speech_risk_dataset.extractors.quote_extractor import QuoteExtractor
+from corp_speech_risk_dataset.corpus_extractors import QuoteExtractor
 from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
 from corp_speech_risk_dataset.orchestrators.run_pipeline import PipelineOrchestrator
 from corp_speech_risk_dataset.shared.logging_utils import setup_logging

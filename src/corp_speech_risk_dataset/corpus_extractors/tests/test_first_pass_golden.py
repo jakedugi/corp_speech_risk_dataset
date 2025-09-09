@@ -1,6 +1,6 @@
 import pytest
-from corp_speech_risk_dataset.extractors.first_pass import FirstPassExtractor
-from corp_speech_risk_dataset.extractors.cleaner import TextCleaner
+from corp_speech_risk_dataset.corpus_extractors import FirstPassExtractor
+from corp_speech_risk_dataset.cleaner import TextCleaner
 
 # A minimal snippet of the exhibit text containing the "smoking-gun" quotes we must always capture.
 GOLDEN_DOC = """
@@ -13,9 +13,9 @@ Case 1:19-cv-02184-TJK Document 5-9 Filed 07/26/19 Page 2 of 28
 
 EXPECTED_QUOTES = [
     # Privacy-policy promise
-    '"We do not use your mobile phone number or other Personally Identifiable Information to send commercial or marketing messages without your consent."',
+    "We do not use your mobile phone number or other Personally Identifiable Information to send commercial or marketing messages without your consent.",
     # Clear data-sale denial
-    '"So first of all, let\'s set the record straight. We have not, we do not and we will not ever sell your personal information to anyone. Period. End of story."',
+    "So first of all, let's set the record straight. We have not, we do not and we will not ever sell your personal information to anyone. Period. End of story.",
 ]
 
 

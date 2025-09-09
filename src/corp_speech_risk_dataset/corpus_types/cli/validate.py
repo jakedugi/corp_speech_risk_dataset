@@ -40,9 +40,10 @@ MODEL_MAP = {
 }
 
 
-def _iter_jsonl(path: Path):
+def _iter_jsonl(path):
     """Iterate over JSONL file, yielding (line_num, data) tuples."""
-    with path.open("rb") as f:
+    path_obj = Path(path) if isinstance(path, str) else path
+    with path_obj.open("rb") as f:
         for i, line in enumerate(f, 1):
             if not line.strip():
                 continue

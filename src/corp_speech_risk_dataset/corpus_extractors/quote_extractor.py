@@ -13,7 +13,7 @@ from ..types.schemas.models import QuoteCandidate
 from .first_pass import FirstPassExtractor
 from .attribution import Attributor
 from .rerank import SemanticReranker
-from .cleaner import TextCleaner
+from ..cleaner import TextCleaner
 
 
 class QuoteExtractor(QuoteExtractorPort):

@@ -17,7 +17,7 @@ from collections import Counter
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
-from .extractors.final_pass_filter import filter_speakers, filter_heuristics
+from .corpus_extractors import filter_speakers, filter_heuristics
 
 # lock for stats accumulation
 STATS_LOCK = Lock()

@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, NamedTuple
 
-from corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 import (
+from .extract_cash_amounts_stage1 import (
     AMOUNT_REGEX,
     PROXIMITY_PATTERN,
     JUDGMENT_VERBS,

@@ -7,11 +7,9 @@ from loguru import logger
 from typing import Iterator, Optional
 from . import quote_extraction_config as config
 from ..extractors.loader import DocumentLoader
-from ..extractors.first_pass import FirstPassExtractor
-from ..extractors.attribution import Attributor
-from ..extractors.rerank import SemanticReranker
+from ..corpus_extractors import FirstPassExtractor, Attributor, SemanticReranker
 from ..types.schemas.models import QuoteCandidate
-from ..extractors.cleaner import TextCleaner
+from ..cleaner import TextCleaner
 from enum import Enum
 from ..shared.stage_writer import StageWriter
 from pathlib import Path

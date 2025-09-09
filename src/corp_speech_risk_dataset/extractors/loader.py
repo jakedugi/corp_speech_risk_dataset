@@ -8,7 +8,7 @@ from pathlib import Path
 import logging
 
 from corp_speech_risk_dataset.orchestrators import quote_extraction_config as config
-from corp_speech_risk_dataset.extractors.rss_loader import RSSLoader
+from .rss_loader import RSSLoader
 
 logger = logging.getLogger(__name__)
 

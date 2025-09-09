@@ -6,7 +6,7 @@ import pytest
 from datetime import datetime
 from pydantic import ValidationError
 
-from corp_speech_risk_dataset.types.schemas.models import (
+from corp_speech_risk_dataset.corpus_types.schemas.models import (
     Doc,
     Quote,
     Outcome,
@@ -40,26 +40,68 @@ class TestDoc:
 
     def test_doc_basic(self):
         """Test basic Doc creation."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import (
+            RequestProv,
+            ResponseProv,
+            AdapterProv,
+            Provenance,
+        )
+
+        retrieved_at = datetime.now()
         doc = Doc(
-            doc_id="doc:abc123",
+            doc_id="doc_abc123",
             source_uri="https://example.com/doc.pdf",
             raw_text="This is document text",
+            provenance=Provenance(
+                source="courtlistener",
+                source_uri="https://example.com/doc.pdf",
+                retrieved_at=retrieved_at,
+                request=RequestProv(endpoint="/api/opinions", params_hash="hash123"),
+                response=ResponseProv(
+                    http_status=200,
+                    sha256="a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+                ),
+                adapter=AdapterProv(name="corpus-hydrator", version="1.0.0"),
+            ),
         )
-        assert doc.doc_id == "doc:abc123"
+        assert doc.doc_id == "doc_abc123"
         assert doc.source_uri == "https://example.com/doc.pdf"
         assert doc.raw_text == "This is document text"
         assert isinstance(doc.retrieved_at, datetime)
+        assert doc.provenance.source == "courtlistener"
 
     def test_doc_with_meta(self):
         """Test Doc with metadata."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import (
+            RequestProv,
+            ResponseProv,
+            AdapterProv,
+            Provenance,
+        )
+
         meta = {"court": "scotus", "docket": "123-456"}
+        retrieved_at = datetime.now()
         doc = Doc(
-            doc_id="doc:abc123",
+            doc_id="doc_abc123",
             source_uri="https://example.com/doc.pdf",
             raw_text="This is document text",
             meta=meta,
+            provenance=Provenance(
+                source="courtlistener",
+                source_uri="https://example.com/doc.pdf",
+                retrieved_at=retrieved_at,
+                request=RequestProv(endpoint="/api/opinions", params_hash="hash123"),
+                response=ResponseProv(
+                    http_status=200,
+                    sha256="a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+                ),
+                adapter=AdapterProv(name="corpus-hydrator", version="1.0.0"),
+            ),
         )
-        assert doc.meta == meta
+        assert doc.meta.court == "scotus"
+        assert doc.meta.docket == "123-456"
+        assert doc.meta.source is None
+        assert doc.meta.party is None
 
     def test_doc_empty_doc_id(self):
         """Test Doc with empty doc_id raises error."""
@@ -85,23 +127,28 @@ class TestQuote:
 
     def test_quote_basic(self):
         """Test basic Quote creation."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import Span
+
         quote = Quote(
-            quote_id="quote:abc123",
-            doc_id="doc:def456",
-            span=(100, 150),
+            quote_id="q_abc123",
+            doc_id="doc_def456",
+            span=Span(start=100, end=150),
             text="This is a quote",
         )
-        assert quote.quote_id == "quote:abc123"
-        assert quote.doc_id == "doc:def456"
-        assert quote.span == (100, 150)
+        assert quote.quote_id == "q_abc123"
+        assert quote.doc_id == "doc_def456"
+        assert quote.span.start == 100
+        assert quote.span.end == 150
         assert quote.text == "This is a quote"
 
     def test_quote_with_speaker(self):
         """Test Quote with speaker."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import Span
+
         quote = Quote(
-            quote_id="quote:abc123",
-            doc_id="doc:def456",
-            span=(100, 150),
+            quote_id="q_abc123",
+            doc_id="doc_def456",
+            span=Span(start=100, end=150),
             text="This is a quote",
             speaker="John Doe",
         )
@@ -162,18 +209,16 @@ class TestOutcome:
 
     def test_outcome_basic(self):
         """Test basic Outcome creation."""
-        outcome = Outcome(
-            case_id="case:abc123", label="won", label_source="manual_review"
-        )
-        assert outcome.case_id == "case:abc123"
-        assert outcome.label == "won"
-        assert outcome.label_source == "manual_review"
+        outcome = Outcome(case_id="case_abc123", label="win", label_source="manual")
+        assert outcome.case_id == "case_abc123"
+        assert outcome.label == "win"
+        assert outcome.label_source == "manual"
 
     def test_outcome_with_date(self):
         """Test Outcome with date."""
         date = datetime(2024, 1, 1)
         outcome = Outcome(
-            case_id="case:abc123", label="won", label_source="manual_review", date=date
+            case_id="case_abc123", label="win", label_source="manual", date=date
         )
         assert outcome.date == date
 
@@ -193,21 +238,30 @@ class TestQuoteFeatures:
 
     def test_quote_features_basic(self):
         """Test basic QuoteFeatures creation."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import Producer
+
         features = QuoteFeatures(
-            quote_id="quote:abc123", feature_version="1.0.0", vector=[0.1, 0.2, 0.3]
+            quote_id="q_abc123",
+            feature_version="1.0.0",
+            vector=[0.1, 0.2, 0.3],
+            producer=Producer(name="corpus-features", version="1.0.0"),
         )
-        assert features.quote_id == "quote:abc123"
+        assert features.quote_id == "q_abc123"
         assert features.feature_version == "1.0.0"
         assert features.vector == [0.1, 0.2, 0.3]
+        assert features.producer.name == "corpus-features"
 
     def test_quote_features_with_interpretable(self):
         """Test QuoteFeatures with interpretable features."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import Producer
+
         interpretable = {"sentiment": 0.8, "confidence": 0.9}
         features = QuoteFeatures(
-            quote_id="quote:abc123",
+            quote_id="q_abc123",
             feature_version="1.0.0",
             vector=[0.1, 0.2, 0.3],
             interpretable=interpretable,
+            producer=Producer(name="corpus-features", version="1.0.0"),
         )
         assert features.interpretable == interpretable
 
@@ -227,12 +281,18 @@ class TestCaseVector:
 
     def test_case_vector_basic(self):
         """Test basic CaseVector creation."""
+        from corp_speech_risk_dataset.corpus_types.schemas.models import Producer
+
         case_vector = CaseVector(
-            case_id="case:abc123", agg_version="1.0.0", stats={"mean": 0.5, "q90": 0.8}
+            case_id="case_abc123",
+            agg_version="1.0.0",
+            stats={"mean": 0.5, "q90": 0.8},
+            producer=Producer(name="corpus-aggregator", version="1.0.0"),
         )
-        assert case_vector.case_id == "case:abc123"
+        assert case_vector.case_id == "case_abc123"
         assert case_vector.agg_version == "1.0.0"
         assert case_vector.stats == {"mean": 0.5, "q90": 0.8}
+        assert case_vector.producer.name == "corpus-aggregator"
 
     def test_case_vector_empty_case_id(self):
         """Test CaseVector with empty case_id raises error."""

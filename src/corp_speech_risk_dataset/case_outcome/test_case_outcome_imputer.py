@@ -30,12 +30,12 @@ from skopt.space import Real, Integer
 from concurrent.futures import ProcessPoolExecutor
 
 # Import your imputation functions
-from corp_speech_risk_dataset.case_outcome.case_outcome_imputer import (
+from corp_speech_risk_dataset.corpus_extractors.case_outcome_imputer import (
     scan_stage1,
     AmountSelector,
     DEFAULT_VOTING_WEIGHTS,
 )
-from corp_speech_risk_dataset.case_outcome.extract_cash_amounts_stage1 import (
+from corp_speech_risk_dataset.corpus_extractors.extract_cash_amounts_stage1 import (
     VotingWeights,
     is_case_dismissed,
     is_case_definitively_dismissed,

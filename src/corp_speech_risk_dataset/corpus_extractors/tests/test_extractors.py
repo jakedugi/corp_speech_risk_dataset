@@ -1,8 +1,10 @@
 """Tests for extractor functionality."""
 
-from corp_speech_risk_dataset.extractors.first_pass import FirstPassExtractor
-from corp_speech_risk_dataset.extractors.rerank import SemanticReranker
-from corp_speech_risk_dataset.extractors.cleaner import TextCleaner
+from corp_speech_risk_dataset.corpus_extractors import (
+    FirstPassExtractor,
+    SemanticReranker,
+)
+from corp_speech_risk_dataset.cleaner import TextCleaner
 
 
 def test_first_pass_hits_bullet():

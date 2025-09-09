@@ -7,9 +7,9 @@ Almost everything is inherited; we only need to plug in the new loader.
 
 from __future__ import annotations
 
-from corp_speech_risk_dataset.extractors.loader import DocumentLoader  # unchanged
-from corp_speech_risk_dataset.extractors.rss_loader import RSSLoader
-from corp_speech_risk_dataset.extractors.base_extractor import BaseExtractor
+from .loader import DocumentLoader  # unchanged
+from .rss_loader import RSSLoader
+from .base_extractor import BaseExtractor
 
 
 class RSSExtractor(BaseExtractor):

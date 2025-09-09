@@ -1,0 +1,6 @@
+# Cache
+__pycache__/
+*.pyc
+
+# Schemas
+*.schema.json

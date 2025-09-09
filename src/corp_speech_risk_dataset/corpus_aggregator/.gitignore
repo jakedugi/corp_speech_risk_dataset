@@ -1,0 +1,12 @@
+# Model artifacts
+models/
+*.pkl
+*.joblib
+
+# Data
+data/
+*.jsonl
+*.parquet
+
+# Cache
+__pycache__/

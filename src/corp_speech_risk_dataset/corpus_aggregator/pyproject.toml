@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corpus-aggregator"
+version = "1.0.0"
+description = "Case-level aggregation module for corpus dataset"
+authors = [
+    {name = "Corpus Team", email = "corpus@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "typer>=0.4.0",
+    "loguru>=0.5.0",
+    "pydantic>=1.8.0",
+    "pyyaml>=5.4.0",
+    "numpy>=1.21.0",
+    "pandas>=1.3.0",
+    "scikit-learn>=1.0.0",
+    "polars>=0.15.0",
+]
+
+[project.scripts]
+corpus-aggregate-cases = "corpus_aggregator.cli.aggregate:cases"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["corpus_aggregator*"]

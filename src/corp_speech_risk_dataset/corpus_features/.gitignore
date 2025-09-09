@@ -1,0 +1,22 @@
+# Model artifacts
+models/
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.bin
+
+# Cache
+.cache/
+__pycache__/
+*.pyc
+
+# Data
+data/
+*.jsonl
+*.parquet
+*.npy
+
+# GPU cache
+*.pycache
+__pycache__

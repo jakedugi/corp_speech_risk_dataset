@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corpus-types"
+version = "1.0.0"
+description = "Data contracts and schemas module for corpus dataset"
+authors = [
+    {name = "Corpus Team", email = "corpus@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "typer>=0.4.0",
+    "loguru>=0.5.0",
+    "pydantic>=1.8.0",
+    "pyyaml>=5.4.0",
+    "orjson>=3.8.0",
+]
+
+[project.scripts]
+corpus-validate = "corpus_types.cli.validate:validate"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["corpus_types*"]

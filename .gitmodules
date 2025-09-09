@@ -1,0 +1,32 @@
+[submodule "modules/corpus_types"]
+	path = modules/corpus_types
+	url = git@github.com:jakedugi/corpus-types.git
+	branch = main
+[submodule "modules/corpus_cleaner"]
+	path = modules/corpus_cleaner
+	url = git@github.com:jakedugi/corpus-cleaner.git
+	branch = main
+[submodule "modules/corpus_extractors"]
+	path = modules/corpus_extractors
+	url = git@github.com:jakedugi/corpus-extractors.git
+	branch = main
+[submodule "modules/corpus_features"]
+	path = modules/corpus_features
+	url = git@github.com:jakedugi/corpus-features.git
+	branch = main
+[submodule "modules/corpus_aggregator"]
+	path = modules/corpus_aggregator
+	url = git@github.com:jakedugi/corpus-aggregator.git
+	branch = main
+[submodule "modules/corpus_temporal_cv"]
+	path = modules/corpus_temporal_cv
+	url = git@github.com:jakedugi/corpus-temporal-cv.git
+	branch = main
+[submodule "modules/corpus_api"]
+	path = modules/corpus_api
+	url = git@github.com:jakedugi/corpus-api.git
+	branch = main
+[submodule "modules/corpus_orchestrator"]
+	path = modules/corpus_orchestrator
+	url = git@github.com:jakedugi/corpus-orchestrator.git
+	branch = main

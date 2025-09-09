@@ -1,0 +1,12 @@
+# Results
+results/
+*.json
+*.md
+*.png
+
+# Logs
+logs/
+*.log
+
+# Cache
+__pycache__/

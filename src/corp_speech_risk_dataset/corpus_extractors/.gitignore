@@ -1,0 +1,20 @@
+# Data files
+data/
+*.jsonl
+*.parquet
+*.csv
+
+# Model artifacts
+models/
+*.pkl
+*.joblib
+*.h5
+
+# Test artifacts
+test_output/
+*.test
+
+# Cache
+__pycache__/
+*.pyc
+.cache/

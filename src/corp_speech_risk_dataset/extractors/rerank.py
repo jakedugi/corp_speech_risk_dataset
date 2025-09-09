@@ -5,7 +5,7 @@ similarity to a set of seed quotes.
 
 from sentence_transformers import SentenceTransformer, util
 from typing import List, Iterator
-from ..models.quote_candidate import QuoteCandidate
+from ..types.schemas.models import QuoteCandidate
 from ..domain.ports import QuoteReranker
 
 

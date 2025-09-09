@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from corp_speech_risk_dataset.api.base_api_client import BaseAPIClient
+from corp_speech_risk_dataset.api.client.base_api_client import BaseAPIClient
 from corp_speech_risk_dataset.extractors.base_extractor import BaseExtractor
 from corp_speech_risk_dataset.orchestrators.run_pipeline import PipelineOrchestrator
 

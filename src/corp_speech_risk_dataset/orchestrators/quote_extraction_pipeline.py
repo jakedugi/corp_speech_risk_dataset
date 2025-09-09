@@ -10,7 +10,7 @@ from ..extractors.loader import DocumentLoader
 from ..extractors.first_pass import FirstPassExtractor
 from ..extractors.attribution import Attributor
 from ..extractors.rerank import SemanticReranker
-from ..models.quote_candidate import QuoteCandidate
+from ..types.schemas.models import QuoteCandidate
 from ..extractors.cleaner import TextCleaner
 from enum import Enum
 from ..shared.stage_writer import StageWriter
@@ -196,7 +196,7 @@ class QuoteExtractionPipeline:
             #             parts.append(s)
             #     whole = " ".join(parts).strip()
             #     if whole:
-            #         from ..models.quote_candidate import QuoteCandidate
+            #         from ..types.schemas.models import QuoteCandidate
             #         # build a dummy QuoteCandidate
             #         qc = QuoteCandidate(
             #             doc_id=doc.doc_id,

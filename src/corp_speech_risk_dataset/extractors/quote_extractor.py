@@ -9,7 +9,7 @@ from typing import Iterator, List, Optional, Set
 from loguru import logger
 
 from ..domain.ports import QuoteExtractor as QuoteExtractorPort
-from ..models.quote_candidate import QuoteCandidate
+from ..types.schemas.models import QuoteCandidate
 from .first_pass import FirstPassExtractor
 from .attribution import Attributor
 from .rerank import SemanticReranker

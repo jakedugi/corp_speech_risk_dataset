@@ -12,7 +12,7 @@ import re
 from spacy.pipeline import EntityRuler
 
 from ..infrastructure.nlp import get_nlp
-from ..models.quote_candidate import QuoteCandidate
+from ..types.schemas.models import QuoteCandidate
 from ..domain.ports import QuoteAttributor
 from ..orchestrators.quote_extraction_config import ROLE_KEYWORDS
 

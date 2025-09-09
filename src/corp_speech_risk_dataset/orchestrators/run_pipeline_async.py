@@ -16,7 +16,7 @@ from corp_speech_risk_dataset.extractors.quote_extractor import QuoteExtractor
 from corp_speech_risk_dataset.extractors.law_labeler import LawLabeler
 from corp_speech_risk_dataset.shared.logging_utils import setup_logging
 from corp_speech_risk_dataset.infrastructure.file_io import ensure_dir
-from corp_speech_risk_dataset.api.base_api_client import BaseAPIClient
+from corp_speech_risk_dataset.api.client.base_api_client import BaseAPIClient
 from corp_speech_risk_dataset.extractors.base_extractor import BaseExtractor
 
 

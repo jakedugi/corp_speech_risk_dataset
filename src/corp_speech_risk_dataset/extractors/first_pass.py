@@ -10,7 +10,7 @@ from typing import List, Iterator, Set
 
 import nltk
 from loguru import logger
-from ..models.quote_candidate import QuoteCandidate
+from ..types.schemas.models import QuoteCandidate
 from ..domain.ports import QuoteExtractor
 
 # optional spaCy sentence splitter
